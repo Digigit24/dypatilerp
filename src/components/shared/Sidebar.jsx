@@ -2,11 +2,11 @@ import { NavLink } from 'react-router-dom'
 export default function Sidebar({ sections, footer, width = 260, role, collapsed = false, mobileOpen = false, onClose }) {
   return (
     <aside
-      className={`sidebar-shell fixed bottom-5 left-5 top-5 z-40 rounded-[30px] p-4 transition-all duration-300 max-[900px]:bottom-3 max-[900px]:top-3 ${mobileOpen ? 'max-[900px]:translate-x-0' : 'max-[900px]:-translate-x-[115%]'}`}
+      className={`sidebar-shell fixed bottom-5 left-5 top-5 z-40 flex flex-col rounded-[30px] p-4 transition-all duration-300 max-[900px]:bottom-3 max-[900px]:top-3 ${mobileOpen ? 'max-[900px]:translate-x-0' : 'max-[900px]:-translate-x-[115%]'}`}
       style={{ width: collapsed ? 88 : width }}
       aria-label="Sidebar navigation"
     >
-      <div className={`mb-8 px-2 pt-1 ${collapsed ? 'px-0' : ''}`}>
+      <div className={`mb-8 shrink-0 px-2 pt-1 ${collapsed ? 'px-0' : ''}`}>
         {collapsed ? (
           <img src="/logo-new.jpg" alt="DYPERF" className="mx-auto h-12 w-12 rounded-2xl object-cover object-left" />
         ) : (
@@ -17,7 +17,7 @@ export default function Sidebar({ sections, footer, width = 260, role, collapsed
         )}
       </div>
 
-      <nav className="max-h-[calc(100vh-230px)] space-y-3 overflow-auto overscroll-contain pb-8 pr-1">
+      <nav className="min-h-0 flex-1 space-y-3 overflow-auto overscroll-contain pr-1">
         {sections.map((section) => (
           <div key={section.title}>
             {section.title !== 'HOME' && !collapsed && <p className="mb-1 px-4 text-[10px] font-bold tracking-[0.16em] text-[color:var(--muted)]">{section.title}</p>}
@@ -42,7 +42,7 @@ export default function Sidebar({ sections, footer, width = 260, role, collapsed
         ))}
       </nav>
 
-      {!collapsed && <div className="absolute bottom-4 left-4 right-4">{footer}</div>}
+      {!collapsed && <div className="mt-3 shrink-0">{footer}</div>}
     </aside>
   )
 }

@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, ClipboardCheck, FileText, Home, IndianRupee, Layers, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, Sun, UserCog, Users } from 'lucide-react'
+import { Bell, CalendarDays, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, Sun, UserCog, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -30,7 +30,7 @@ export default function AdminLayout() {
     <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
       {mobileOpen && <button className="sidebar-backdrop" aria-label="Close sidebar" onClick={() => setMobileOpen(false)} />}
       <Sidebar
-        sections={[{ title: 'HOME', items: [{ to: '/admin', label: 'Dashboard', icon: Home }] }, ...sections]}
+        sections={[{ title: 'HOME', items: [{ to: '/', label: 'Landing Page', icon: Globe }, { to: '/admin', label: 'Dashboard', icon: Home }] }, ...sections]}
         role={roleLabel(role)}
         collapsed={collapsed}
         mobileOpen={mobileOpen}

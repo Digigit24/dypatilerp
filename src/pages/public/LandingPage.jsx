@@ -62,7 +62,7 @@ export default function LandingPage() {
     <section className="relative px-4 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
       <div className="absolute inset-x-0 top-0 -z-10 h-[720px] bg-[linear-gradient(180deg,var(--card),transparent_78%),radial-gradient(circle_at_16%_8%,var(--accent-tint),transparent_30rem)]" />
       <div className="mx-auto grid max-w-7xl overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--card)] shadow-[0_30px_90px_rgba(15,23,42,.10)] lg:grid-cols-[.95fr_1.05fr]">
-        <div className="flex min-h-[560px] flex-col justify-center p-6 sm:p-10 lg:p-12">
+        <div className="flex flex-col justify-start p-6 pb-10 sm:p-10 lg:min-h-[560px] lg:justify-center lg:p-12">
           <div className="mb-5 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-[var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[var(--accent)]">July 2026 Batch</span>
             <span className="rounded-full border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-medium text-[var(--secondary)]">Two-year applied research fellowship</span>
