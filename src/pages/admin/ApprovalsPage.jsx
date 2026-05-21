@@ -122,7 +122,7 @@ export default function ApprovalsPage() {
       {selected && (
         <div className="fixed inset-0 z-50 bg-black/25 backdrop-blur-sm" onClick={() => setSelected(null)}>
           <aside className="drawer-panel lg:!w-[min(1040px,calc(100vw-32px))]" onClick={(e) => e.stopPropagation()}>
-            <div className="safe-row border-b border-[color:var(--border)] p-6">
+            <div className="safe-row shrink-0 border-b border-[color:var(--border)] p-6">
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Submission Detail</p>
                 <h2 className="mt-2 line-clamp-2 text-xl font-semibold text-[color:var(--text)]">{selected.submission?.title}</h2>
@@ -130,7 +130,7 @@ export default function ApprovalsPage() {
               </div>
               <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setSelected(null)}><XCircle size={18} /></button>
             </div>
-            <div className="grid max-h-[calc(100%-96px)] gap-5 overflow-auto overscroll-contain p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid flex-1 gap-5 overflow-auto overscroll-contain p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="space-y-5">
                 <MediaPreview submission={selected.submission} />
                 <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
