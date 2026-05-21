@@ -1,6 +1,8 @@
-import { Download, FileText, Filter, XCircle } from 'lucide-react'
+import { Download, ExternalLink, FileText, Filter, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getApprovals } from '../../api/services/approvalService.js'
+import { getProgressReportByStudent } from '../../api/services/progressReportService.js'
 import { getSubmissionsByStudent } from '../../api/services/submissionService.js'
 import { getStudents } from '../../api/services/studentService.js'
 import { getUsers } from '../../api/services/userService.js'
@@ -17,6 +19,7 @@ export default function StudentsPage() {
   const [users, setUsers] = useState([])
   const [selected, setSelected] = useState(null)
   const [studentSubs, setStudentSubs] = useState([])
+  const [studentReports, setStudentReports] = useState([])
   const [selectedSub, setSelectedSub] = useState(null)
   const [subApprovals, setSubApprovals] = useState([])
   const [statusFilter, setStatusFilter] = useState('all')
@@ -41,8 +44,13 @@ export default function StudentsPage() {
   const openStudent = async (student) => {
     setSelected(student)
     setSelectedSub(null)
-    const subs = await getSubmissionsByStudent(student.id)
+    setStudentReports([])
+    const [subs, reports] = await Promise.all([
+      getSubmissionsByStudent(student.id),
+      getProgressReportByStudent(student.id),
+    ])
     setStudentSubs(subs.data)
+    setStudentReports(reports.data)
   }
 
   const openSubmission = async (sub) => {
@@ -164,6 +172,40 @@ export default function StudentsPage() {
                   </div>
                 }
               </div>
+
+              <div>
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Progress Reports</p>
+                {studentReports.length === 0
+                  ? <p className="text-sm text-[color:var(--secondary)]">No progress reports yet.</p>
+                  : <div className="space-y-2">
+                    {studentReports.map((r) => (
+                      <div key={r.id} className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+                        <div className="safe-row items-start">
+                          <div>
+                            <p className="text-sm font-semibold text-[color:var(--text)]">{r.period_label}</p>
+                            <p className="mt-0.5 text-xs text-[color:var(--secondary)]">{r.total_submissions} submissions · {r.approved_count} approved</p>
+                          </div>
+                          <StatusBadge status={r.status} />
+                        </div>
+                        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-[color:var(--border)]">
+                          <div
+                            className={`h-full rounded-full ${r.status === 'overdue' ? 'bg-orange-500' : r.status === 'completed' ? 'bg-emerald-500' : 'bg-[color:var(--accent)]'}`}
+                            style={{ width: `${r.completion_percentage}%` }}
+                          />
+                        </div>
+                        <p className="mt-1.5 text-right text-xs font-semibold text-[color:var(--secondary)]">{r.completion_percentage}%</p>
+                      </div>
+                    ))}
+                  </div>
+                }
+              </div>
+
+              <Link
+                to={`/admin/students/${selected.id}`}
+                className="flex w-full items-center justify-center gap-2 rounded-3xl border border-[color:var(--accent)] bg-[color:var(--accent-tint)] py-3 text-sm font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white"
+              >
+                <ExternalLink size={15} /> View Full Profile
+              </Link>
             </div>
           </div>
         </div>

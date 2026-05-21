@@ -12,7 +12,9 @@ import BatchesPage from './pages/admin/BatchesPage.jsx'
 import BatchStudentsPage from './pages/admin/BatchStudentsPage.jsx'
 import FeesPage from './pages/admin/FeesPage.jsx'
 import AdminNotificationsPage from './pages/admin/NotificationsPage.jsx'
+import AdminProgressReportsPage from './pages/admin/ProgressReportsPage.jsx'
 import SettingsPage from './pages/admin/SettingsPage.jsx'
+import StudentProfilePage from './pages/admin/StudentProfilePage.jsx'
 import StudentsPage from './pages/admin/StudentsPage.jsx'
 import TestBuilderPage from './pages/admin/TestBuilderPage.jsx'
 import UserManagementPage from './pages/admin/UserManagementPage.jsx'
@@ -68,7 +70,9 @@ export default function App() {
           <Route index element={<AdminDashboard />} />
           <Route path="applicants" element={<ApplicantsPage />} />
           <Route path="students" element={<StudentsPage />} />
+          <Route path="students/:id" element={<StudentProfilePage />} />
           <Route path="students/:id/progress" element={<ProgressPage />} />
+          <Route path="progress" element={<AdminProgressReportsPage />} />
           <Route path="batches" element={<BatchesPage />} />
           <Route path="batches/students" element={<BatchStudentsPage />} />
           <Route path="batches/:batchId/students" element={<BatchStudentsPage />} />
