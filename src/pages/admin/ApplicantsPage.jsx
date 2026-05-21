@@ -152,29 +152,66 @@ export default function ApplicantsPage() {
       {selected && (
         <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm" onClick={() => setSelected(null)}>
           <div className="drawer-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between border-b border-[color:var(--border)] p-5 sm:p-7">
-              <div>
+            <div className="shrink-0 flex items-start justify-between border-b border-[color:var(--border)] p-5 sm:p-7">
+              <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Applicant Profile</p>
                 <h2 className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{selected.personal.full_name}</h2>
-                <p className="mt-1 text-sm text-[color:var(--secondary)]">{selected.personal.email} · {selected.personal.phone}</p>
+                <p className="mt-1 text-sm text-[color:var(--secondary)]">{selected.temp_id} · <StatusBadge status={selected.status} /></p>
               </div>
-              <button className="grid h-10 w-10 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setSelected(null)}><XCircle size={18} /></button>
+              <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setSelected(null)}><XCircle size={18} /></button>
             </div>
-            <div className="h-[calc(100%-170px)] overflow-auto p-5 sm:p-7">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Info label="Temporary ID" value={selected.temp_id} />
-                <Info label="Application Status" value={<StatusBadge status={selected.status} />} />
-                <Info label="Specialization" value={selected.academic.specialization} />
-                <Info label="University" value={selected.academic.university} />
-                <Info label="Test Score" value={`${selected.test_score ?? '-'} / ${selected.test_max_score}`} />
-                <Info label="Submitted" value={formatDate(selected.test_submitted_at)} />
-              </div>
-              <div className="mt-6 rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
-                <p className="text-sm font-semibold text-[color:var(--text)]">Research Statement</p>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]">{selected.research_statement}</p>
-              </div>
+
+            <div className="flex-1 overflow-auto overscroll-contain p-5 sm:p-7 space-y-6">
+              <Section title="Personal Information">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Info label="Email" value={selected.personal.email} />
+                  <Info label="Mobile" value={selected.personal.mobile ?? selected.personal.phone} />
+                  <Info label="State & Country" value={selected.personal.state_country ?? `${selected.personal.state}, ${selected.personal.country}`} />
+                  <Info label="Applied On" value={formatDate(selected.applied_at)} />
+                </div>
+              </Section>
+
+              <Section title="PhD Details">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Info label="Year of PhD Completion" value={selected.academic.phd_completion_year ?? selected.academic.graduation_year} />
+                  <Info label="Discipline / Field" value={selected.academic.phd_discipline ?? selected.academic.specialization} />
+                </div>
+                <div className="mt-3">
+                  <Info label="Title of PhD Research" value={selected.academic.phd_research_title ?? '—'} />
+                </div>
+              </Section>
+
+              <Section title="Research Profile">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Info label="Scopus Publications" value={selected.academic.scopus_publications ?? '—'} />
+                  <Info label="University" value={selected.academic.university} />
+                </div>
+                <div className="mt-3 rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Research Statement</p>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]">{selected.research_statement}</p>
+                </div>
+              </Section>
+
+              <Section title="Test Result">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Info label="Test Score" value={selected.test_score != null ? `${selected.test_score} / ${selected.test_max_score}` : 'Not attempted'} />
+                  <Info label="Test Submitted" value={selected.test_submitted_at ? formatDate(selected.test_submitted_at) : '—'} />
+                </div>
+                {selected.test_score != null && (
+                  <div className="mt-3 rounded-3xl bg-[color:var(--surface)] p-4">
+                    <div className="flex items-center justify-between text-sm font-semibold">
+                      <span className="text-[color:var(--secondary)]">Score</span>
+                      <span className="text-[color:var(--text)]">{selected.test_score}%</span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-[color:var(--border)]">
+                      <div className="h-full rounded-full bg-[color:var(--accent)] transition-all" style={{ width: `${selected.test_score}%` }} />
+                    </div>
+                  </div>
+                )}
+              </Section>
             </div>
-            <div className="absolute bottom-0 left-0 right-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
+
+            <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
               <button className="btn-primary inline-flex flex-1 items-center justify-center gap-2" onClick={() => act(selected, 'shortlisted')}><UserCheck size={17} /> Shortlist</button>
               <button className="mobile-compact-button h-11 flex-1 rounded-[14px] bg-red-50 px-4 font-semibold text-red-600" onClick={() => act(selected, 'rejected')}>Reject</button>
               <button className="mobile-compact-button h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]">Waitlist</button>
@@ -182,6 +219,15 @@ export default function ApplicantsPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function Section({ title, children }) {
+  return (
+    <div>
+      <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">{title}</p>
+      {children}
     </div>
   )
 }
