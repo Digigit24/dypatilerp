@@ -1,7 +1,7 @@
 const STORAGE_KEY = 'dyp_theme_config'
 
 export const DEFAULT_THEME_CONFIG = {
-  primaryColor: '#E54873',
+  primaryColor: '#4F46E5',
 }
 
 const clamp = (value) => Math.max(0, Math.min(255, value))
@@ -47,7 +47,12 @@ export const getThemeConfig = () => {
   try {
     if (typeof localStorage === 'undefined') return DEFAULT_THEME_CONFIG
     const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? { ...DEFAULT_THEME_CONFIG, ...JSON.parse(stored) } : DEFAULT_THEME_CONFIG
+    if (!stored) return DEFAULT_THEME_CONFIG
+    const parsed = JSON.parse(stored)
+    const normalized = parsed.primaryColor?.toLowerCase() === '#e54873'
+      ? { ...parsed, primaryColor: DEFAULT_THEME_CONFIG.primaryColor }
+      : parsed
+    return { ...DEFAULT_THEME_CONFIG, ...normalized }
   } catch {
     return DEFAULT_THEME_CONFIG
   }

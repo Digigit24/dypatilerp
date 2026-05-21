@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, ClipboardCheck, FileText, Home, Layers, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, Sun, UserCog, Users } from 'lucide-react'
+import { Bell, CalendarDays, ClipboardCheck, FileText, Home, IndianRupee, Layers, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, Sun, UserCog, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -20,7 +20,7 @@ export default function AdminLayout() {
   }, [theme])
   const sections = [
     { title: 'STUDENTS', items: [{ to: '/admin/applicants', label: 'Applicants', icon: Users }, { to: '/admin/students', label: 'Students', icon: UserCog }, { to: '/admin/batches', label: 'Batches', icon: Layers }] },
-    { title: 'ACADEMIC', items: [{ to: '/admin/approvals', label: 'Approvals', icon: ClipboardCheck }] },
+    { title: 'ACADEMIC', items: [{ to: '/admin/approvals', label: 'Approvals', icon: ClipboardCheck }, { to: '/admin/fees', label: 'Fees', icon: IndianRupee }] },
     { title: 'TOOLS', items: [{ to: '/admin/test-builder', label: 'Test Builder', icon: FileText }, { to: '/admin/notifications', label: 'Notifications', icon: Bell }] },
     ...(role === 'admin' ? [{ title: 'SYSTEM', items: [{ to: '/admin/users', label: 'User Management', icon: Users }, { to: '/admin/settings', label: 'Settings', icon: Settings }] }] : []),
   ]

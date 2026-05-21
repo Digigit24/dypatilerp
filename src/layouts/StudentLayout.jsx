@@ -1,4 +1,4 @@
-import { Bell, BookOpen, FileText, GraduationCap, Home, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PenLine, Settings } from 'lucide-react'
+import { Bell, BookOpen, FileText, GraduationCap, Home, IndianRupee, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PenLine, Settings } from 'lucide-react'
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -16,6 +16,7 @@ export default function StudentLayout() {
       { to: '/student/submit', label: 'Submit Title', icon: PenLine },
       { to: '/student/submissions', label: 'My Submissions', icon: FileText },
       { to: '/student/progress', label: 'Progress Reports', icon: BookOpen },
+      { to: '/student/fees', label: 'Fees', icon: IndianRupee },
       { to: '/student/profile/research', label: 'Research Profile', icon: GraduationCap },
       { to: '/student/notifications', label: 'Notifications', icon: Bell },
     ],

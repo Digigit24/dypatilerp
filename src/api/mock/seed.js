@@ -72,6 +72,43 @@ export const PROGRESS_REPORTS = STUDENTS.flatMap((s, i) => [1, 2].map((period) =
 
 export const NOTIFICATIONS = Array.from({ length: 15 }, (_, i) => ({ id: `notif_${String(i + 1).padStart(3, '0')}`, recipient_id: i % 4 === 0 ? null : STUDENTS[i % STUDENTS.length].user_id, recipient_batch_id: i % 4 === 0 ? 'batch_2024_A' : null, recipient_type: i % 4 === 0 ? 'batch' : 'individual', sender_id: 'usr_002', type: ['approval', 'revision', 'zoom_link', 'announcement', 'report_due'][i % 5], title: ['Submission approved', 'Revision requested', 'Zoom link shared', 'Program announcement', 'Report due soon'][i % 5], message: ['Your submission has moved forward in the approval chain.', 'Please revise your title before resubmitting.', 'Join the monthly research clinic using the shared link.', 'A new academic calendar update is available.', 'Report 2 is due on Jan 31.'][i % 5], zoom_link: i % 5 === 2 ? 'https://zoom.us/j/mock-link' : null, is_read: i % 3 === 0, created_at: `2024-11-${String(20 - (i % 10)).padStart(2, '0')}T11:05:00Z`, related_submission_id: SUBMISSIONS[i % SUBMISSIONS.length].id }))
 
+export const FEES = STUDENTS.flatMap((student, i) => {
+  const paidFirst = i !== 4
+  const paidSecond = i % 3 === 0
+  return [
+    {
+      id: `fee_${student.id}_1`,
+      student_id: student.id,
+      batch_id: student.batch_id,
+      fee_type: 'Semester 1 Program Fee',
+      installment: 1,
+      amount: 75000,
+      due_date: '2024-09-15',
+      status: paidFirst ? 'paid' : 'overdue',
+      paid_at: paidFirst ? `2024-09-${10 + i}T10:15:00Z` : null,
+      transaction_id: paidFirst ? `TXN-DYP-${String(i + 1).padStart(4, '0')}` : null,
+      payment_mode: paidFirst ? ['upi', 'bank_transfer', 'card'][i % 3] : null,
+      receipt_url: paidFirst ? `https://mock-storage.com/receipts/${student.id}-sem1.pdf` : null,
+      remarks: paidFirst ? 'Payment received and reconciled.' : 'Payment is overdue.',
+    },
+    {
+      id: `fee_${student.id}_2`,
+      student_id: student.id,
+      batch_id: student.batch_id,
+      fee_type: 'Semester 2 Program Fee',
+      installment: 2,
+      amount: 75000,
+      due_date: '2025-02-15',
+      status: paidSecond ? 'paid' : 'pending',
+      paid_at: paidSecond ? `2025-02-${8 + i}T11:30:00Z` : null,
+      transaction_id: paidSecond ? `TXN-DYP-${String(i + 21).padStart(4, '0')}` : null,
+      payment_mode: paidSecond ? ['upi', 'bank_transfer', 'card'][i % 3] : null,
+      receipt_url: paidSecond ? `https://mock-storage.com/receipts/${student.id}-sem2.pdf` : null,
+      remarks: paidSecond ? 'Payment received and reconciled.' : 'Awaiting payment.',
+    },
+  ]
+})
+
 export const RESEARCH_PROFILES = STUDENTS.map((s, i) => {
   const user = USERS.find((u) => u.id === s.user_id)
   return { id: `rp_${String(i + 1).padStart(3, '0')}`, student_id: s.id, is_public: i !== 4, public_slug: `${user.first_name.toLowerCase()}-${user.last_name.toLowerCase()}-dyp2024${String(i + 1).padStart(3, '0')}`, last_updated: '2024-11-01T10:00:00Z', research_papers: [{ id: `rpi_${i}_001`, title: 'Deep Learning for Protein Structure Prediction', journal: 'Nature Computational Science', year: 2023, doi: '10.1038/s43588-023-00001-1', url: 'https://doi.org/10.1038/s43588-023-00001-1', file_url: null, is_verified: true, verified_at: '2024-10-15T10:00:00Z' }], patents: [{ id: `rpi_${i}_010`, title: 'Method for Rapid DNA Sequencing Using Microfluidics', patent_number: 'IN202321045678', year: 2023, status: 'granted', country: 'India', is_verified: true, verified_at: '2024-10-16T10:00:00Z' }], workshops_seminars: [{ id: `rpi_${i}_020`, name: 'International Conference on Bioinformatics 2023', organizer: 'ISCB', type: 'conference', date: '2023-07-15', location: 'Berlin, Germany', certificate_url: null, is_verified: false, verified_at: null }], publications: [{ id: `rpi_${i}_030`, title: 'Cancer Biomarkers: A Comprehensive Review', type: 'book_chapter', publisher: 'Springer', year: 2024, isbn: '978-3-031-00000-0', url: null, is_verified: true, verified_at: '2024-11-01T10:00:00Z' }], skills: ['Machine Learning', 'Bioinformatics', 'Python', 'R', 'CRISPR'], research_areas: ['Molecular Biology', 'Cancer Research', 'Computational Biology'] }

@@ -30,8 +30,8 @@ export default function SettingsPage() {
 
   const reset = () => {
     resetThemeConfig()
-    setPrimaryColor('#E54873')
-    addToast({ type: 'info', title: 'Theme reset to default rose' })
+    setPrimaryColor('#4F46E5')
+    addToast({ type: 'info', title: 'Theme reset to default indigo' })
   }
 
   return (
