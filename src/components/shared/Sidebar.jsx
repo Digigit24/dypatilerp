@@ -17,7 +17,7 @@ export default function Sidebar({ sections, footer, width = 260, role, collapsed
         )}
       </div>
 
-      <nav className="max-h-[calc(100vh-230px)] space-y-3 overflow-auto pb-8 pr-1">
+      <nav className="max-h-[calc(100vh-230px)] space-y-3 overflow-auto overscroll-contain pb-8 pr-1">
         {sections.map((section) => (
           <div key={section.title}>
             {section.title !== 'HOME' && !collapsed && <p className="mb-1 px-4 text-[10px] font-bold tracking-[0.16em] text-[color:var(--muted)]">{section.title}</p>}

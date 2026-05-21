@@ -8,6 +8,7 @@ import Sidebar from '../components/shared/Sidebar.jsx'
 import { roleLabel } from '../lib/utils.js'
 import { useAuthStore } from '../store/authStore.js'
 import { useUiStore } from '../store/uiStore.js'
+import useScrollLock from '../hooks/useScrollLock.js'
 
 export default function AdminLayout() {
   const role = useAuthStore((s) => s.role)
@@ -15,6 +16,7 @@ export default function AdminLayout() {
   const toggleTheme = useUiStore((s) => s.toggleTheme)
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  useScrollLock(mobileOpen)
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])

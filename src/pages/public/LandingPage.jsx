@@ -58,7 +58,7 @@ function Section({ title, icon: Icon, children }) {
 export default function LandingPage() {
   const totalInr = fees.reduce((sum, fee) => sum + Number(fee[2].replaceAll(',', '')), 0)
 
-  return <div className="overflow-hidden">
+  return <div className="public-page overflow-hidden">
     <section className="relative mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.05fr_.95fr] lg:px-8 lg:py-20">
       <div className="absolute inset-x-0 top-0 -z-10 h-[520px] bg-[radial-gradient(circle_at_20%_0%,var(--accent-tint),transparent_32rem),linear-gradient(180deg,var(--card),transparent)]" />
       <div className="flex flex-col justify-center">

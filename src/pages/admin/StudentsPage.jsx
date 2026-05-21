@@ -6,6 +6,7 @@ import { getUsers } from '../../api/services/userService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
+import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
 
 export default function StudentsPage() {
@@ -13,6 +14,7 @@ export default function StudentsPage() {
   const [users, setUsers] = useState([])
   const [selected, setSelected] = useState(null)
   const [studentSubs, setStudentSubs] = useState([])
+  useScrollLock(Boolean(selected))
 
   useEffect(() => {
     Promise.all([getStudents(), getUsers()]).then(([students, userRes]) => {
@@ -46,9 +48,9 @@ export default function StudentsPage() {
           </thead>
           <tbody>
             {items.map((s) => (
-              <tr className="table-row border-b border-[color:var(--border)]" key={s.id}>
+              <tr className="table-row cursor-pointer border-b border-[color:var(--border)]" key={s.id} onClick={() => openStudent(s)}>
                 <td className="px-6 py-5">
-                  <button className="text-left font-semibold text-[color:var(--text)] hover:text-[color:var(--accent)]" onClick={() => openStudent(s)}>
+                  <button className="text-left font-semibold text-[color:var(--text)] hover:text-[color:var(--accent)]" onClick={(e) => { e.stopPropagation(); openStudent(s) }}>
                     {nameOf(s)}
                     <span className="block text-xs font-normal text-[color:var(--secondary)]">{emailOf(s)}</span>
                   </button>
@@ -75,7 +77,7 @@ export default function StudentsPage() {
               </div>
               <button className="grid h-10 w-10 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setSelected(null)}><XCircle size={18} /></button>
             </div>
-            <div className="max-h-[calc(100%-96px)] overflow-auto p-6">
+            <div className="max-h-[calc(100%-96px)] overflow-auto overscroll-contain p-6">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Info label="Batch" value={selected.batch_id} />
                 <Info label="Status" value={<StatusBadge status={selected.status} />} />

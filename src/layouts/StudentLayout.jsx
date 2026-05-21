@@ -5,10 +5,12 @@ import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
 import DevRoleSwitcher from '../components/shared/DevRoleSwitcher.jsx'
 import NotificationBell from '../components/shared/NotificationBell.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
+import useScrollLock from '../hooks/useScrollLock.js'
 
 export default function StudentLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  useScrollLock(mobileOpen)
   const sections = [{
     title: 'STUDENT',
     items: [

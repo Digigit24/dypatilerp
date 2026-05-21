@@ -342,6 +342,7 @@ table { border-collapse: collapse; }
   top: 16px;
   width: min(540px, calc(100vw - 32px));
   overflow: hidden;
+  overscroll-behavior: contain;
   border-radius: 32px;
   background: var(--card);
   box-shadow: 0 10px 40px rgba(0,0,0,0.08);
@@ -410,6 +411,27 @@ table { border-collapse: collapse; }
     max-height: 88vh;
     border-radius: 28px 28px 0 0;
   }
+
+  .sidebar-shell {
+    max-width: calc(100vw - 24px);
+    overflow: hidden;
+    overscroll-behavior: contain;
+  }
+
+  main {
+    max-width: 100vw;
+    overflow-x: clip;
+  }
+}
+
+.public-page {
+  overflow-x: clip;
+}
+
+.public-page section,
+.public-page div,
+.public-page article {
+  min-width: 0;
 }
 
 @media (max-width: 640px) {
