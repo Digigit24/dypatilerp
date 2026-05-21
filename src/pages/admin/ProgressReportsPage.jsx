@@ -122,15 +122,16 @@ export default function AdminProgressReportsPage() {
                       <p className="mt-3 text-xs italic text-[color:var(--secondary)]">"{report.coordinator_remarks}"</p>
                     )}
 
-                    <div className="mt-4 flex items-center justify-between">
+                    <div className="mt-4 flex items-center justify-between gap-3">
                       <p className="text-xs text-[color:var(--muted)]">
-                        {report.total_submissions} submissions · {report.approved_count} approved · {report.pending_count} pending
+                        {report.total_submissions} sub · {report.approved_count} approved · {report.pending_count} pending
                       </p>
                       <button
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-[color:var(--accent-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--accent)]"
+                        title="Download PDF"
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[color:var(--accent-tint)] text-[color:var(--accent)]"
                         onClick={() => handleDownload(report)}
                       >
-                        <Download size={13} /> PDF
+                        <Download size={14} />
                       </button>
                     </div>
                   </div>

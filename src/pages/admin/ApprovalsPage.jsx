@@ -96,12 +96,15 @@ export default function ApprovalsPage() {
       <div className="card overflow-x-auto">
         <table className="min-w-[900px] w-full text-left text-sm">
           <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
-            <tr>{['Student', 'Title', 'Stage', 'Approver', 'Status', 'Actions'].map((h) => <th className="px-6 py-4" key={h}>{h}</th>)}</tr>
+            <tr>
+              <th className="w-44 px-6 py-4">Student</th>
+              {['Title', 'Stage', 'Approver', 'Status', 'Actions'].map((h) => <th className="px-6 py-4" key={h}>{h}</th>)}
+            </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="table-row cursor-pointer border-b border-[color:var(--border)]" onClick={() => setSelected(r)}>
-                <td className="px-6 py-5 font-semibold text-[color:var(--text)]">{studentName(r.submission?.student_id)}</td>
+                <td className="w-44 px-6 py-5 font-semibold whitespace-nowrap text-[color:var(--text)]">{studentName(r.submission?.student_id)}</td>
                 <td className="max-w-md truncate">{r.submission?.title}</td>
                 <td className="capitalize">{r.stage?.replaceAll('_', ' ')}</td>
                 <td>{userName(r.approver_id)}</td>
