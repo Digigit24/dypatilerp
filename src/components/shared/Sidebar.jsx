@@ -6,13 +6,15 @@ export default function Sidebar({ sections, footer, width = 260, role, collapsed
       style={{ width: collapsed ? 88 : width }}
       aria-label="Sidebar navigation"
     >
-      <div className={`mb-8 flex items-start gap-3 px-2 pt-1 ${collapsed ? 'justify-center px-0' : ''}`}>
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[#171717] font-semibold text-white">D</div>
-        <div className={`min-w-0 ${collapsed ? 'hidden' : ''}`}>
-          <div className="text-lg font-bold leading-tight tracking-tight text-[color:var(--text)]">DY PERF</div>
-          <div className="mt-1 text-[11px] leading-snug text-[color:var(--secondary)]">PD Patil Education &<br />Research Foundation</div>
-          {role && <div className="mt-3 inline-flex rounded-full bg-[color:var(--accent-tint)] px-3 py-1 text-[11px] font-semibold text-[color:var(--accent)]">{role}</div>}
-        </div>
+      <div className={`mb-8 px-2 pt-1 ${collapsed ? 'px-0' : ''}`}>
+        {collapsed ? (
+          <img src="/logo-new.jpg" alt="DYPERF" className="mx-auto h-12 w-12 rounded-2xl object-cover object-left" />
+        ) : (
+          <div>
+            <img src="/logo-new.jpg" alt="DYPERF - DY Patil Education And Research Foundation" className="h-auto w-full rounded-2xl object-contain" />
+            {role && <div className="mt-3 inline-flex rounded-full bg-[color:var(--accent-tint)] px-3 py-1 text-[11px] font-semibold text-[color:var(--accent)]">{role}</div>}
+          </div>
+        )}
       </div>
 
       <nav className="max-h-[calc(100vh-230px)] space-y-3 overflow-auto pb-8 pr-1">
