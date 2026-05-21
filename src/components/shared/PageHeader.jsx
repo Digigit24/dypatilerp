@@ -1,0 +1,3 @@
+export default function PageHeader({ title, subtitle, action }) {
+  return <div className="mb-6 flex flex-wrap items-start justify-between gap-4"><div className="min-w-0 flex-1"><h1 className="text-[32px] font-semibold tracking-normal text-[color:var(--text)]">{title}</h1>{subtitle && <p className="mt-1 max-w-3xl text-sm text-[color:var(--secondary)]">{subtitle}</p>}</div>{action && <div className="shrink-0 max-[520px]:w-full max-[520px]:[&>button]:h-10 max-[520px]:[&>button]:w-full max-[520px]:[&>button]:justify-center max-[520px]:[&>button]:px-3 max-[520px]:[&>button]:text-sm">{action}</div>}</div>
+}

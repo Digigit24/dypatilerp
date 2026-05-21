@@ -1,0 +1,1 @@
+export default function ConfirmationPage(){return <div className="card mx-auto max-w-xl p-10 text-center"><h1 className="text-3xl font-semibold">Confirmed</h1><p className="mt-2 text-muted">Your application is ready for the next step.</p></div>}
