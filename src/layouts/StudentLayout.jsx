@@ -1,16 +1,34 @@
 import { Bell, BookOpen, FileText, Home, IndianRupee, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PenLine, Settings, UserCircle } from 'lucide-react'
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
 import DevRoleSwitcher from '../components/shared/DevRoleSwitcher.jsx'
 import NotificationBell from '../components/shared/NotificationBell.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
 import useScrollLock from '../hooks/useScrollLock.js'
+import { useAuthStore } from '../store/authStore.js'
+import { logout } from '../api/services/userService.js'
 
 export default function StudentLayout() {
+  const currentUser = useAuthStore((s) => s.currentUser)
+  const clearAuth = useAuthStore((s) => s.clearAuth)
+  const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   useScrollLock(mobileOpen)
+
+  const handleLogout = async () => {
+    await logout()
+    clearAuth()
+    navigate('/login', { replace: true })
+  }
+
+  const displayName = currentUser
+    ? `${currentUser.first_name ?? ''} ${currentUser.last_name ?? ''}`.trim()
+    : 'Student'
+
+  const enrollmentNumber = currentUser?.enrollment_number ?? ''
+
   const sections = [{
     title: 'STUDENT',
     items: [
@@ -35,8 +53,8 @@ export default function StudentLayout() {
         onClose={() => setMobileOpen(false)}
         footer={
           <div className="space-y-2 text-sm">
-            <a className="flex gap-2 rounded-2xl p-3 text-[color:var(--secondary)] hover:bg-[color:var(--surface)]"><Settings size={16} />Settings</a>
-            <button className="flex gap-2 rounded-2xl p-3 text-[color:var(--secondary)]"><LogOut size={16} />Logout</button>
+            <a className="flex gap-2 rounded-2xl p-3 text-[color:var(--secondary)] hover:bg-[color:var(--surface)]" href="/student/profile"><Settings size={16} />Settings</a>
+            <button className="flex gap-2 rounded-2xl p-3 text-[color:var(--secondary)] w-full hover:bg-[color:var(--surface)]" onClick={handleLogout}><LogOut size={16} />Logout</button>
           </div>
         }
       />
@@ -46,13 +64,15 @@ export default function StudentLayout() {
           <button className="sidebar-toggle desktop-sidebar-trigger" aria-label="Collapse sidebar" onClick={() => setCollapsed((v) => !v)}>{collapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}</button>
           <div className="min-w-0 flex-1">
             <Breadcrumbs />
-            <p className="truncate text-sm text-[color:var(--secondary)]">Priya Sharma · DYP-PDF-2024-001</p>
+            <p className="truncate text-sm text-[color:var(--secondary)]">
+              {displayName}{enrollmentNumber ? ` · ${enrollmentNumber}` : ''}
+            </p>
           </div>
           <NotificationBell />
         </div>
         <Outlet />
       </main>
-      <DevRoleSwitcher />
+      {import.meta.env.DEV && <DevRoleSwitcher />}
     </div>
   )
 }

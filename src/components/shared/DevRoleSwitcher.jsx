@@ -55,8 +55,8 @@ export default function DevRoleSwitcher() {
         onClick={() => setOpen((v) => !v)}
       >
         <span className="grid h-7 w-7 place-items-center rounded-full bg-[color:var(--accent)] text-white">D</span>
-        <span className="hidden sm:inline">Switch Role: {roleLabel(role)}</span>
-        <span className="sm:hidden">{roleLabel(role)}</span>
+        <span className="hidden sm:inline">Switch Role: {roleLabel(role ?? '')}</span>
+        <span className="sm:hidden">{roleLabel(role ?? '')}</span>
         <ChevronUp size={16} className={`transition ${open ? 'rotate-180' : ''}`} />
       </button>
     </div>

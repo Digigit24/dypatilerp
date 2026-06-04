@@ -23,6 +23,6 @@ export default function PublicLayout() {
       </div>
     </header>
     <Outlet />
-    <DevRoleSwitcher />
+    {import.meta.env.DEV && <DevRoleSwitcher />}
   </main>
 }
