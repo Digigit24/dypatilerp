@@ -61,26 +61,71 @@ export const submitForReview = async (id, studentId) => {
   const client = await getClient();
   try {
     await client.query('BEGIN');
+
+    // 1. Mark submission as submitted
     const { rows: [sub] } = await client.query(
       `UPDATE submissions SET status='submitted', submitted_at=NOW(), updated_at=NOW()
        WHERE id=$1 AND student_user_id=$2 AND status IN ('draft','needs_revision') RETURNING *`,
       [id, studentId]
     );
-    if (!sub) throw Object.assign(new Error('Cannot submit'), { status: 400 });
+    if (!sub) throw Object.assign(new Error('Cannot submit — not found or wrong status'), { status: 400 });
 
-    // Create approval chain
-    const stages = [
-      { stage: 'coordinator', order_index: 1 },
-      { stage: 'academic_guide', order_index: 2 },
-      { stage: 'industry_mentor', order_index: 3 },
+    // 2. Load the batch's approval_config
+    const { rows: [batch] } = await client.query(
+      'SELECT approval_config FROM batches WHERE id=$1', [sub.batch_id]
+    );
+    const configStages = batch?.approval_config?.stages || [];
+
+    // 3. Fall back to the classic three-stage chain if no config is set
+    const stages = configStages.length > 0 ? configStages : [
+      { name: 'coordinator',    type: 'role', role: 'coordinator',    order_index: 1 },
+      { name: 'academic_guide', type: 'student_guide', guide_type: 'academic', order_index: 2 },
+      { name: 'industry_mentor',type: 'student_guide', guide_type: 'industry', order_index: 3 },
     ];
+
+    // 4. Delete any previous pending approvals for this submission (e.g. resubmission)
+    await client.query(
+      `DELETE FROM approvals WHERE submission_id=$1 AND status='pending'`, [id]
+    );
+
+    // 5. Resolve reviewer IDs and insert approval rows
     for (const s of stages) {
+      let resolvedReviewerId = null;
+      const roleName = s.role || null;
+
+      if (s.type === 'student_guide') {
+        // Resolve to the specific guide assigned to this student
+        const { rows: [guide] } = await client.query(
+          `SELECT guide_user_id FROM student_guides
+           WHERE student_user_id=$1 AND guide_type=$2 AND is_active=true LIMIT 1`,
+          [studentId, s.guide_type]
+        );
+        resolvedReviewerId = guide?.guide_user_id || null;
+      } else if (s.type === 'specific_user') {
+        resolvedReviewerId = s.user_id || null;
+      } else if (s.type === 'role') {
+        // Leave reviewer_user_id null; anyone with that role can claim it.
+        // Optionally auto-assign to the batch's coordinator if one exists.
+        if (s.role) {
+          const { rows: [coord] } = await client.query(
+            `SELECT ur.user_id FROM user_roles ur
+             JOIN roles r ON r.id=ur.role_id
+             WHERE r.name=$1
+               AND (ur.batch_id=$2 OR ur.batch_id IS NULL)
+             LIMIT 1`,
+            [s.role, sub.batch_id]
+          );
+          resolvedReviewerId = coord?.user_id || null;
+        }
+      }
+
       await client.query(
-        `INSERT INTO approvals (submission_id, stage, status, order_index) VALUES ($1,$2,'pending',$3)
-         ON CONFLICT DO NOTHING`,
-        [id, s.stage, s.order_index]
+        `INSERT INTO approvals (submission_id, stage, status, order_index, reviewer_user_id, reviewer_role)
+         VALUES ($1, $2, 'pending', $3, $4, $5)`,
+        [id, s.name, s.order_index, resolvedReviewerId, roleName]
       );
     }
+
     await client.query('COMMIT');
     return sub;
   } catch (err) {

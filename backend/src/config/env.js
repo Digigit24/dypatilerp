@@ -17,6 +17,12 @@ export const env = {
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
   RATE_LIMIT_MAX: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
+  // Zata S3-compatible storage (optional — stub mode if not set)
+  ZATA_ACCESS_KEY: process.env.ZATA_ACCESS_KEY || '',
+  ZATA_SECRET_KEY: process.env.ZATA_SECRET_KEY || '',
+  ZATA_ENDPOINT: process.env.ZATA_ENDPOINT || 'https://idr01.zata.ai',
+  ZATA_VIDEOS_BUCKET: process.env.ZATA_VIDEOS_BUCKET || process.env.ZATA_BUCKETS || '',
+  VIDEO_SESSION_TTL: parseInt(process.env.VIDEO_SESSION_TTL || '14400', 10),
   isDev: process.env.NODE_ENV === 'development',
   isProd: process.env.NODE_ENV === 'production',
 };

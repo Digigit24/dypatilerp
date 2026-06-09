@@ -14,6 +14,7 @@ const ALL_MODULES = [
   { key: 'progress',      label: 'Progress Reports',    desc: 'Semester-wise progress tracking per student' },
   { key: 'approvals',     label: 'Approvals',           desc: 'Multi-stage submission approval workflow' },
   { key: 'fees',          label: 'Fees',                desc: 'Fee records and payment tracking' },
+  { key: 'lectures',      label: 'Lectures',            desc: 'Secure video lecture gallery for students' },
   { key: 'test-builder',  label: 'Test Builder',        desc: 'Create and publish entrance and assessment tests' },
   { key: 'notifications', label: 'Notifications',       desc: 'System and manual notification center' },
   { key: 'users',         label: 'User Management',     desc: 'Admin-only: manage system users' },

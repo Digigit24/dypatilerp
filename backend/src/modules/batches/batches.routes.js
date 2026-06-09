@@ -120,4 +120,35 @@ router.put('/:id', requirePermission('batches', 'update'), validate(updateBatchS
  */
 router.delete('/:id', requirePermission('batches', 'delete'), ctrl.remove);
 
+/**
+ * @swagger
+ * /batches/{id}/approval-config:
+ *   put:
+ *     tags: [Batches]
+ *     summary: Save the dynamic approval workflow configuration for a batch
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [stages]
+ *             properties:
+ *               stages:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     name: { type: string }
+ *                     type: { type: string, enum: [student_guide, specific_user, role] }
+ *                     guide_type: { type: string, enum: [academic, industry] }
+ *                     user_id: { type: string, format: uuid }
+ *                     role: { type: string }
+ *                     order_index: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Config saved
+ */
+router.put('/:id/approval-config', requirePermission('batches', 'update'), ctrl.updateApprovalConfig);
+
 export default router;

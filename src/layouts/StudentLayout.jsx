@@ -1,4 +1,4 @@
-import { Bell, BookOpen, FileText, Home, IndianRupee, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PenLine, Settings, UserCircle } from 'lucide-react'
+import { Bell, BookOpen, FileText, Home, IndianRupee, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PenLine, PlayCircle, Settings, UserCircle } from 'lucide-react'
 import { useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -38,6 +38,7 @@ export default function StudentLayout() {
       { to: '/student/progress', label: 'Progress Reports', icon: BookOpen },
       { to: '/student/fees', label: 'Fees', icon: IndianRupee },
       { to: '/student/profile', label: 'My Profile', icon: UserCircle },
+      { to: '/student/lectures',      label: 'Lectures',      icon: PlayCircle },
       { to: '/student/notifications', label: 'Notifications', icon: Bell },
     ],
   }]

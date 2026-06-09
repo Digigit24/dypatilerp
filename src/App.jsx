@@ -23,6 +23,10 @@ import StudentsPage from './pages/admin/StudentsPage.jsx'
 import TestBuilderPage from './pages/admin/TestBuilderPage.jsx'
 import UserManagementPage from './pages/admin/UserManagementPage.jsx'
 import LoginPage from './pages/auth/LoginPage.jsx'
+import LecturesGalleryPage from './pages/student/LecturesGalleryPage.jsx'
+import LecturePlayerPage from './pages/student/LecturePlayerPage.jsx'
+import LecturesManagePage from './pages/admin/LecturesManagePage.jsx'
+import AuditLogsPage from './pages/admin/AuditLogsPage.jsx'
 import ApplyPage from './pages/public/ApplyPage.jsx'
 import ConfirmationPage from './pages/public/ConfirmationPage.jsx'
 import LandingPage from './pages/public/LandingPage.jsx'
@@ -83,6 +87,8 @@ export default function App() {
           <Route path="profile" element={<ProfilePage />} />
           <Route path="profile/research" element={<ResearchProfilePage />} />
           <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="lectures" element={<LecturesGalleryPage />} />
+          <Route path="lectures/:id" element={<LecturePlayerPage />} />
         </Route>
 
         {/* Admin routes */}
@@ -107,10 +113,12 @@ export default function App() {
           <Route path="fees" element={<FeesPage />} />
           <Route path="test-builder" element={<TestBuilderPage />} />
           <Route path="notifications" element={<AdminNotificationsPage />} />
+          <Route path="lectures" element={<LecturesManagePage />} />
           <Route path="courses" element={<CoursesPage />} />
           <Route path="courses/:id/settings" element={<CourseSettingsPage />} />
           <Route path="users" element={<UserManagementPage />} />
           <Route path="roles" element={<RolesPage />} />
+          <Route path="audit-logs" element={<AuditLogsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>

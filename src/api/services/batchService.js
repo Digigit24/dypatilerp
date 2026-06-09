@@ -27,6 +27,12 @@ export const updateBatch = async (id, payload) => {
   return ok(res.data)
 }
 
+export const deleteBatch = async (id) => {
+  if (USE_MOCK) { await delay(); return ok(null) }
+  await http.delete(`/batches/${id}`)
+  return ok(null)
+}
+
 export const getBatchStudents = async (batchId, filters = {}) => {
   if (USE_MOCK) { return ok([]) }
   const { data: res } = await http.get(`/batches/${batchId}/students`, { params: filters })
@@ -36,5 +42,11 @@ export const getBatchStudents = async (batchId, filters = {}) => {
 export const getBatchStats = async (batchId) => {
   if (USE_MOCK) { return ok({}) }
   const { data: res } = await http.get(`/batches/${batchId}/stats`)
+  return ok(res.data)
+}
+
+export const updateApprovalConfig = async (batchId, stages) => {
+  if (USE_MOCK) { return ok({ stages }) }
+  const { data: res } = await http.put(`/batches/${batchId}/approval-config`, { stages })
   return ok(res.data)
 }

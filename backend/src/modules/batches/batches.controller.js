@@ -41,3 +41,13 @@ export const stats = asyncHandler(async (req, res) => {
   const data = await svc.getBatchStats(req.params.id);
   ok(res, data);
 });
+
+export const updateApprovalConfig = asyncHandler(async (req, res) => {
+  const { stages } = req.body;
+  if (!Array.isArray(stages)) {
+    return res.status(400).json({ success: false, message: 'stages must be an array' });
+  }
+  const batch = await svc.updateApprovalConfig(req.params.id, stages);
+  if (!batch) return notFound(res, 'Batch not found');
+  ok(res, batch, 'Approval workflow saved');
+});

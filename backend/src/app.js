@@ -24,6 +24,8 @@ import feeRoutes from './modules/fees/fees.routes.js';
 import notificationRoutes from './modules/notifications/notifications.routes.js';
 import researchProfileRoutes from './modules/research-profiles/research-profiles.routes.js';
 import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
+import videoRoutes from './modules/videos/videos.routes.js';
+import auditLogRoutes from './modules/audit-logs/audit-logs.routes.js';
 
 const app = express();
 
@@ -71,6 +73,8 @@ app.use('/api/fees', feeRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/research-profiles', researchProfileRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/videos', videoRoutes);
+app.use('/api/audit-logs', auditLogRoutes);
 
 // 404 + global error handler
 app.use(notFoundHandler);

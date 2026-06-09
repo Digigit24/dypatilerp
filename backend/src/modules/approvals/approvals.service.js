@@ -1,10 +1,8 @@
 import { query } from '../../config/database.js';
+import { writeAuditLog } from '../../utils/auditLog.js';
 
 export const listPendingForUser = async (userId, roles) => {
-  const stageMap = { coordinator: 'coordinator', academic_guide: 'academic_guide', industry_mentor: 'industry_mentor' };
-  const userStages = roles.filter(r => stageMap[r]).map(r => stageMap[r]);
-  if (!userStages.length) return [];
-
+  // Dynamic workflow: match by direct reviewer assignment OR by open role slot
   const { rows } = await query(
     `SELECT a.*, s.title, s.submission_type, s.semester, s.batch_id,
             u.first_name, u.last_name, u.email, b.name as batch_name
@@ -12,9 +10,14 @@ export const listPendingForUser = async (userId, roles) => {
      JOIN submissions s ON s.id=a.submission_id
      JOIN users u ON u.id=s.student_user_id
      JOIN batches b ON b.id=s.batch_id
-     WHERE a.stage = ANY($1::text[]) AND a.status='pending'
+     WHERE a.status='pending'
+       AND (
+         a.reviewer_user_id = $1
+         OR (a.reviewer_user_id IS NULL AND a.reviewer_role = ANY($2::text[]))
+         OR (a.reviewer_user_id IS NULL AND a.stage = ANY($2::text[]))
+       )
      ORDER BY a.created_at ASC`,
-    [userStages]
+    [userId, roles]
   );
   return rows;
 };
@@ -53,6 +56,12 @@ export const takeAction = async (approvalId, action, reviewerId, comments) => {
   } else if (newStatus === 'needs_revision') {
     await query(`UPDATE submissions SET status='needs_revision', updated_at=NOW() WHERE id=$1`, [approval.submission_id]);
   }
+
+  writeAuditLog({
+    userId: reviewerId, action: `APPROVAL_${action.toUpperCase()}`,
+    resourceType: 'approval', resourceId: approvalId,
+    changes: { submission_id: approval.submission_id, stage: approval.stage, status: newStatus, comments },
+  });
 
   return approval;
 };

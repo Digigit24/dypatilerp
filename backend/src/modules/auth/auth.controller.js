@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import * as authService from './auth.service.js';
 import { ok, created, unauthorized, conflict } from '../../utils/response.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
+import { writeAuditLog } from '../../utils/auditLog.js';
 
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
@@ -15,6 +16,12 @@ export const login = asyncHandler(async (req, res) => {
   const { accessToken, refreshToken } = authService.generateTokens(user, roles);
   await authService.storeRefreshToken(user.id, refreshToken);
   await authService.updateLastLogin(user.id);
+  writeAuditLog({
+    userId: user.id, action: 'LOGIN',
+    resourceType: 'user', resourceId: user.id,
+    changes: { email: user.email },
+    ipAddress: req.headers['x-forwarded-for']?.split(',')[0] || req.socket?.remoteAddress,
+  });
 
   const { password_hash, ...safeUser } = user;
   ok(res, { user: safeUser, access_token: accessToken, refresh_token: refreshToken });

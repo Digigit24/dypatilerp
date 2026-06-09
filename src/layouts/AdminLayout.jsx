@@ -1,4 +1,4 @@
-import { Bell, BookOpen, ClipboardCheck, FileText, Globe, GraduationCap, Home, IndianRupee, Layers, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Settings, Shield, Sun, UserCog, Users } from 'lucide-react'
+import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, GraduationCap, Home, IndianRupee, Layers, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, Search, Settings, Shield, Sun, UserCog, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -72,6 +72,7 @@ export default function AdminLayout() {
     {
       title: 'TOOLS',
       items: [
+        show('lectures')     && { to: '/admin/lectures',      label: 'Lectures',      icon: PlayCircle },
         show('test-builder') && { to: '/admin/test-builder',  label: 'Test Builder',  icon: FileText },
         show('notifications')&& { to: '/admin/notifications', label: 'Notifications', icon: Bell },
       ].filter(Boolean),
@@ -79,10 +80,11 @@ export default function AdminLayout() {
     ...(role === 'admin' ? [{
       title: 'SYSTEM',
       items: [
-        show('courses') && { to: '/admin/courses', label: 'Courses', icon: GraduationCap },
-        show('users')   && { to: '/admin/users',   label: 'Users',   icon: Users },
-        show('roles')   && { to: '/admin/roles',   label: 'Roles & Permissions', icon: Shield },
-        show('settings')&& { to: '/admin/settings',label: 'Settings',icon: Settings },
+        show('courses')    && { to: '/admin/courses',    label: 'Courses',           icon: GraduationCap },
+        show('users')      && { to: '/admin/users',      label: 'Users',             icon: Users },
+        show('roles')      && { to: '/admin/roles',      label: 'Roles & Permissions', icon: Shield },
+        { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity },
+        show('settings')   && { to: '/admin/settings',   label: 'Settings',          icon: Settings },
       ].filter(Boolean),
     }] : []),
   ].filter((s) => s.items.length > 0)

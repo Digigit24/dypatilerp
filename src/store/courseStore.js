@@ -3,7 +3,7 @@ import { create } from 'zustand'
 const DEFAULT_MODULES = {
   applicants: true, students: true, batches: true, progress: true,
   approvals: true, fees: true, 'test-builder': true, notifications: true,
-  users: true, settings: true, courses: true, roles: true,
+  lectures: true, users: true, settings: true, courses: true, roles: true, 'audit-logs': true,
 }
 
 const load = () => {

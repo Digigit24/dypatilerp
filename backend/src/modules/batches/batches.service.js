@@ -52,11 +52,22 @@ export const updateBatch = async (id, payload) => {
   for (const key of allowed) {
     if (payload[key] !== undefined) { params.push(payload[key]); fields.push(`${key}=$${params.length}`); }
   }
+  if (payload.approval_config !== undefined) {
+    params.push(JSON.stringify(payload.approval_config)); fields.push(`approval_config=$${params.length}`);
+  }
   if (!fields.length) return getBatchById(id);
   params.push(id);
   const { rows } = await query(
     `UPDATE batches SET ${fields.join(',')}, updated_at=NOW() WHERE id=$${params.length} RETURNING *`,
     params
+  );
+  return rows[0] || null;
+};
+
+export const updateApprovalConfig = async (id, stages) => {
+  const { rows } = await query(
+    `UPDATE batches SET approval_config=$1::jsonb, updated_at=NOW() WHERE id=$2 RETURNING id, approval_config`,
+    [JSON.stringify({ stages }), id]
   );
   return rows[0] || null;
 };
