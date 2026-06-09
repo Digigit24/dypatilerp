@@ -31,7 +31,7 @@ const app = express();
 
 // Security
 app.use(helmet());
-app.use(cors({ origin: env.FRONTEND_URL, credentials: true }));
+app.use(cors({ origin: [env.FRONTEND_URL, 'https://dyperf.netlify.app'], credentials: true }));
 
 // Rate limiting
 app.use(rateLimit({
