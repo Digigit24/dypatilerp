@@ -29,7 +29,7 @@ import auditLogRoutes from './modules/audit-logs/audit-logs.routes.js';
 import settingsRoutes from './modules/settings/settings.routes.js';
 
 const app = express();
-
+app.set('trust proxy', 1);
 // CORS must be registered first so preflight OPTIONS responses always carry
 // the Allow-Origin header — before helmet, rate-limiter, or any middleware
 // that could short-circuit the request.
