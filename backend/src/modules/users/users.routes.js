@@ -29,6 +29,30 @@ const updateUserSchema = z.object({
   is_active: z.boolean().optional(),
 });
 
+// ─── GET /users/me/preferences ───────────────────────────────────────────────
+// Must come before /:id to avoid route shadowing
+router.get('/me/preferences', asyncHandler(async (req, res) => {
+  const { rows: [user] } = await query(
+    `SELECT COALESCE(preferences, '{}') AS preferences FROM users WHERE id=$1`,
+    [req.user.id]
+  );
+  ok(res, user?.preferences || {});
+}));
+
+// ─── PATCH /users/me/preferences ─────────────────────────────────────────────
+router.patch('/me/preferences', asyncHandler(async (req, res) => {
+  const patch = req.body; // e.g. { theme: 'dark', primaryColor: '#...' }
+  const { rows: [user] } = await query(
+    `UPDATE users
+     SET preferences = COALESCE(preferences, '{}') || $1::jsonb,
+         updated_at  = NOW()
+     WHERE id=$2
+     RETURNING COALESCE(preferences, '{}') AS preferences`,
+    [JSON.stringify(patch), req.user.id]
+  );
+  ok(res, user?.preferences || {}, 'Preferences saved');
+}));
+
 /**
  * @swagger
  * /users:

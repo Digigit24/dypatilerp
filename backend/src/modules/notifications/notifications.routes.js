@@ -7,6 +7,7 @@ import { query } from '../../config/database.js';
 import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate.js';
+import { sendNotificationEmail } from '../email/email.service.js';
 
 const router = Router();
 router.use(authenticate);
@@ -21,26 +22,27 @@ const sendSchema = z.object({
   data: z.record(z.any()).optional().default({}),
 });
 
-/**
- * @swagger
- * /notifications:
- *   get:
- *     tags: [Notifications]
- *     summary: Get notifications for the current user
- *     parameters:
- *       - in: query
- *         name: is_read
- *         schema: { type: boolean }
- *     responses:
- *       200:
- *         description: Paginated notifications
- */
+// Map notification type → email event key
+const TYPE_TO_EVENT = {
+  announcement:   'announcement',
+  zoom_link:      'zoom_link',
+  report_due:     'deadline_overdue',
+  fee_due:        'fee_due',
+  approval:       'approval_stage_opened',
+  revision:       'submission_needs_revision',
+  test_scheduled: 'announcement',
+};
+
+// ─── GET /notifications ───────────────────────────────────────────────────────
 router.get('/', requirePermission('notifications', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   const isRead = req.query.is_read;
   const params = [req.user.id];
   let extra = '';
-  if (isRead !== undefined) { params.push(isRead === 'true'); extra = `AND nr.is_read=$${params.length}`; }
+  if (isRead !== undefined) {
+    params.push(isRead === 'true');
+    extra = `AND nr.is_read=$${params.length}`;
+  }
   const { rows: data } = await query(
     `SELECT n.*, nr.is_read, nr.read_at FROM notifications n
      JOIN notification_recipients nr ON nr.notification_id=n.id
@@ -53,31 +55,11 @@ router.get('/', requirePermission('notifications', 'read'), asyncHandler(async (
   res.json({ success: true, data, pagination: buildPaginationMeta(parseInt(total), page, limit) });
 }));
 
-/**
- * @swagger
- * /notifications:
- *   post:
- *     tags: [Notifications]
- *     summary: Send a notification to specific users
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [type, title, message, recipient_ids]
- *             properties:
- *               type: { type: string }
- *               title: { type: string }
- *               message: { type: string }
- *               recipient_ids: { type: array, items: { type: string, format: uuid } }
- *               batch_id: { type: string, format: uuid }
- *     responses:
- *       201:
- *         description: Notification sent
- */
+// ─── POST /notifications ──────────────────────────────────────────────────────
 router.post('/', requirePermission('notifications', 'create'), validate(sendSchema), asyncHandler(async (req, res) => {
   const { type, title, message, recipient_ids, course_id, batch_id, data } = req.body;
+
+  // 1. Persist in-app notification
   const { rows: [notif] } = await query(
     `INSERT INTO notifications (type,title,message,course_id,batch_id,data,created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
@@ -89,19 +71,45 @@ router.post('/', requirePermission('notifications', 'create'), validate(sendSche
       [notif.id, userId]
     );
   }
+
+  // 2. Fire transactional emails (non-blocking — failures don't break the response)
+  const eventKey = TYPE_TO_EVENT[type] || 'announcement';
+  setImmediate(async () => {
+    try {
+      // Fetch recipient user details for email
+      if (recipient_ids.length === 0) return;
+      const placeholders = recipient_ids.map((_, i) => `$${i + 1}`).join(', ');
+      const { rows: users } = await query(
+        `SELECT id, email, first_name, last_name FROM users WHERE id IN (${placeholders}) AND email IS NOT NULL`,
+        recipient_ids
+      );
+      for (const user of users) {
+        await sendNotificationEmail(eventKey, user, {
+          title,
+          message,
+          zoomLink: data?.zoom_link,
+          ...data,
+        }, course_id || null);
+      }
+    } catch (err) {
+      console.error('[notifications] Email dispatch error:', err.message);
+    }
+  });
+
   created(res, { ...notif, recipient_count: recipient_ids.length }, 'Notification sent');
 }));
 
-/**
- * @swagger
- * /notifications/{id}/read:
- *   put:
- *     tags: [Notifications]
- *     summary: Mark a notification as read
- *     responses:
- *       200:
- *         description: Marked as read
- */
+// ─── PUT /notifications/mark-all-read ─────────────────────────────────────────
+// IMPORTANT: must be declared BEFORE /:id to avoid route shadowing
+router.put('/mark-all-read', requirePermission('notifications', 'read'), asyncHandler(async (req, res) => {
+  await query(
+    `UPDATE notification_recipients SET is_read=true, read_at=NOW() WHERE user_id=$1 AND is_read=false`,
+    [req.user.id]
+  );
+  ok(res, null, 'All marked as read');
+}));
+
+// ─── PUT /notifications/:id/read ──────────────────────────────────────────────
 router.put('/:id/read', requirePermission('notifications', 'read'), asyncHandler(async (req, res) => {
   await query(
     `UPDATE notification_recipients SET is_read=true, read_at=NOW()
@@ -109,24 +117,6 @@ router.put('/:id/read', requirePermission('notifications', 'read'), asyncHandler
     [req.params.id, req.user.id]
   );
   ok(res, null, 'Marked as read');
-}));
-
-/**
- * @swagger
- * /notifications/mark-all-read:
- *   put:
- *     tags: [Notifications]
- *     summary: Mark all notifications as read for the current user
- *     responses:
- *       200:
- *         description: All marked as read
- */
-router.put('/mark-all-read', requirePermission('notifications', 'read'), asyncHandler(async (req, res) => {
-  await query(
-    `UPDATE notification_recipients SET is_read=true, read_at=NOW() WHERE user_id=$1 AND is_read=false`,
-    [req.user.id]
-  );
-  ok(res, null, 'All marked as read');
 }));
 
 export default router;

@@ -126,6 +126,32 @@ const run = async () => {
     `);
     console.log('✓  lectures module added to all course preferences');
 
+    // 11. Add preferences JSONB column to users (theme, dark mode, font, etc.)
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS preferences JSONB DEFAULT '{}'
+    `);
+    console.log('✓  users.preferences column added (or already exists)');
+
+    // 12. Global app_settings key-value store (Brevo config, etc.)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key        VARCHAR(100) PRIMARY KEY,
+        value      JSONB        NOT NULL DEFAULT '{}',
+        updated_at TIMESTAMP    DEFAULT NOW(),
+        updated_by UUID         REFERENCES users(id)
+      )
+    `);
+    console.log('✓  app_settings table created (or already exists)');
+
+    // 13. Seed default Brevo settings row (noop if already present)
+    await client.query(`
+      INSERT INTO app_settings (key, value)
+      VALUES ('brevo', '{"apiKey":"","senderName":"DY Patil ERP","senderEmail":"noreply@example.com","enabled":false}')
+      ON CONFLICT (key) DO NOTHING
+    `);
+    console.log('✓  brevo app_settings seed (or already exists)');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

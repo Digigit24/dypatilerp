@@ -17,6 +17,10 @@ export const env = {
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
   RATE_LIMIT_MAX: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
+  // Brevo (Sendinblue) transactional email (optional — disabled if not set)
+  BREVO_API_KEY:      process.env.BREVO_API_KEY || '',
+  BREVO_SENDER_NAME:  process.env.BREVO_SENDER_NAME  || 'DY Patil ERP',
+  BREVO_SENDER_EMAIL: process.env.BREVO_SENDER_EMAIL || 'noreply@example.com',
   // Zata S3-compatible storage (optional — stub mode if not set)
   ZATA_ACCESS_KEY: process.env.ZATA_ACCESS_KEY || '',
   ZATA_SECRET_KEY: process.env.ZATA_SECRET_KEY || '',

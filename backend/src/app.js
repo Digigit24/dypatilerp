@@ -26,6 +26,7 @@ import researchProfileRoutes from './modules/research-profiles/research-profiles
 import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
 import videoRoutes from './modules/videos/videos.routes.js';
 import auditLogRoutes from './modules/audit-logs/audit-logs.routes.js';
+import settingsRoutes from './modules/settings/settings.routes.js';
 
 const app = express();
 
@@ -83,6 +84,7 @@ app.use('/api/research-profiles', researchProfileRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/videos', videoRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/settings',   settingsRoutes);
 
 // 404 + global error handler
 app.use(notFoundHandler);

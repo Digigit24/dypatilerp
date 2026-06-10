@@ -1,11 +1,19 @@
-import { AlertTriangle, CheckCircle2, ClipboardCheck, FileText, GraduationCap, Mail, MessageSquare, RotateCcw, Send, Settings2 } from 'lucide-react'
+import {
+  AlertTriangle, CheckCircle2, ClipboardCheck, FileText,
+  GraduationCap, Loader2, Mail, MessageSquare, RotateCcw, Save,
+  Send, Settings2,
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { getBatches } from '../../api/services/batchService.js'
+import { getCourseById, updateCourse } from '../../api/services/courseService.js'
 import { sendNotification } from '../../api/services/notificationService.js'
 import { getStudents } from '../../api/services/studentService.js'
 import { getUsers } from '../../api/services/userService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
+import { useCourseStore } from '../../store/courseStore.js'
 import { useUiStore } from '../../store/uiStore.js'
+
+// ─── Static metadata ──────────────────────────────────────────────────────────
 
 const EVENT_RULES = [
   {
@@ -51,15 +59,23 @@ const EVENT_RULES = [
     to: [{ label: 'Student', color: 'accent' }, { label: 'Teacher', color: 'orange' }],
     warning: true,
   },
+  {
+    key: 'fee_due',
+    icon: FileText,
+    label: 'Fee Due Reminder',
+    description: 'Sent when a semester fee payment becomes due.',
+    to: [{ label: 'Student', color: 'accent' }],
+  },
 ]
 
 const DEFAULT_RULES = {
-  application_submitted:   { email: true,  whatsapp: false },
-  test_completed:          { email: true,  whatsapp: true  },
-  approval_stage_opened:   { email: true,  whatsapp: false },
-  submission_approved:     { email: true,  whatsapp: true  },
-  submission_needs_revision: { email: true, whatsapp: false },
-  deadline_overdue:        { email: true,  whatsapp: true  },
+  application_submitted:    { email: true,  whatsapp: false },
+  test_completed:           { email: true,  whatsapp: true  },
+  approval_stage_opened:    { email: true,  whatsapp: false },
+  submission_approved:      { email: true,  whatsapp: true  },
+  submission_needs_revision:{ email: true,  whatsapp: false },
+  deadline_overdue:         { email: true,  whatsapp: true  },
+  fee_due:                  { email: true,  whatsapp: false },
 }
 
 const RECIPIENT_COLORS = {
@@ -68,16 +84,23 @@ const RECIPIENT_COLORS = {
   orange: 'bg-orange-50 text-orange-700',
 }
 
-export default function AdminNotificationsPage() {
-  const [tab, setTab]           = useState('send')
-  const [type, setType]         = useState('announcement')
-  const [recipient, setRecipient] = useState('all')
-  const [batches, setBatches]   = useState([])
-  const [students, setStudents] = useState([])
-  const [users, setUsers]       = useState([])
-  const [rules, setRules]       = useState(DEFAULT_RULES)
-  const addToast = useUiStore((s) => s.addToast)
+// ─── Component ────────────────────────────────────────────────────────────────
 
+export default function AdminNotificationsPage() {
+  const [tab,       setTab]       = useState('send')
+  const [type,      setType]      = useState('announcement')
+  const [recipient, setRecipient] = useState('all')
+  const [batches,   setBatches]   = useState([])
+  const [students,  setStudents]  = useState([])
+  const [users,     setUsers]     = useState([])
+  const [rules,     setRules]     = useState(DEFAULT_RULES)
+  const [rulesLoading, setRulesLoading] = useState(true)
+  const [rulesSaving,  setRulesSaving]  = useState(false)
+
+  const addToast      = useUiStore((s) => s.addToast)
+  const { patchCurrentCourse, currentCourse } = useCourseStore()
+
+  // ── Load data ──────────────────────────────────────────────────────────────
   useEffect(() => {
     Promise.all([getBatches(), getStudents(), getUsers()]).then(([b, s, u]) => {
       setBatches(b.data)
@@ -86,29 +109,73 @@ export default function AdminNotificationsPage() {
     })
   }, [])
 
+  // Load rules from course preferences when tab becomes active
+  useEffect(() => {
+    if (tab !== 'rules') return
+    const courseId = currentCourse?.id
+    if (!courseId) { setRulesLoading(false); return }
+
+    getCourseById(courseId)
+      .then((r) => {
+        const savedRules = r.data?.preferences?.email?.notificationRules
+        if (savedRules) {
+          setRules((prev) => ({ ...prev, ...savedRules }))
+        }
+      })
+      .catch(() => {})
+      .finally(() => setRulesLoading(false))
+  }, [tab, currentCourse?.id])
+
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users])
 
+  // ── Send notification ──────────────────────────────────────────────────────
   const submit = async (e) => {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     await sendNotification({
-      recipient_type: recipient,
-      recipient_batch_id: recipient === 'batch' ? fd.get('batch_id') : null,
-      recipient_id: recipient === 'individual' ? fd.get('student_user_id') : null,
+      recipient_type:     recipient,
+      recipient_batch_id: recipient === 'batch'      ? fd.get('batch_id')       : null,
+      recipient_id:       recipient === 'individual' ? fd.get('student_user_id') : null,
       type,
-      title: fd.get('title'),
+      title:   fd.get('title'),
       message: fd.get('message'),
       zoom_link: fd.get('zoom'),
     })
     addToast({ type: 'success', title: 'Notification sent' })
+    e.currentTarget.reset()
+    setType('announcement')
+    setRecipient('all')
   }
 
+  // ── Toggle rule channel ────────────────────────────────────────────────────
   const toggleChannel = (key, channel) => {
     setRules((prev) => ({ ...prev, [key]: { ...prev[key], [channel]: !prev[key][channel] } }))
   }
 
-  const saveRules = () => {
-    addToast({ type: 'success', title: 'Notification rules saved' })
+  // ── Save rules to course preferences ──────────────────────────────────────
+  const saveRules = async () => {
+    const courseId = currentCourse?.id
+    if (!courseId) {
+      addToast({ type: 'error', title: 'No active course selected.' })
+      return
+    }
+    setRulesSaving(true)
+    try {
+      const existing = await getCourseById(courseId)
+      const prefs = existing.data?.preferences || {}
+      const updatedPrefs = {
+        ...prefs,
+        email: {
+          ...(prefs.email || {}),
+          notificationRules: rules,
+        },
+      }
+      const res = await updateCourse(courseId, { preferences: updatedPrefs })
+      patchCurrentCourse(res.data)
+      addToast({ type: 'success', title: 'Notification rules saved.' })
+    } catch {
+      addToast({ type: 'error', title: 'Failed to save rules.' })
+    } finally { setRulesSaving(false) }
   }
 
   return (
@@ -116,10 +183,11 @@ export default function AdminNotificationsPage() {
       <PageHeader title="Notifications" subtitle="Send manual messages and configure automatic event-based alerts." />
 
       <div className="mb-6 flex gap-2">
-        <TabButton active={tab === 'send'} icon={Send} label="Send Notification" onClick={() => setTab('send')} />
+        <TabButton active={tab === 'send'}  icon={Send}     label="Send Notification"  onClick={() => setTab('send')}  />
         <TabButton active={tab === 'rules'} icon={Settings2} label="Notification Rules" onClick={() => setTab('rules')} />
       </div>
 
+      {/* ── Send tab ── */}
       {tab === 'send' && (
         <div className="responsive-two">
           <form onSubmit={submit} className="card space-y-4 p-6">
@@ -132,16 +200,16 @@ export default function AdminNotificationsPage() {
             {recipient === 'batch' && (
               <select name="batch_id" className="input w-full" required>
                 <option value="">Choose batch</option>
-                {batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}
+                {batches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             )}
 
             {recipient === 'individual' && (
               <select name="student_user_id" className="input w-full" required>
                 <option value="">Search or choose student</option>
-                {students.map((student) => {
-                  const user = userMap[student.user_id]
-                  return <option key={student.id} value={student.user_id}>{user ? `${user.first_name} ${user.last_name}` : student.id} · {student.permanent_id}</option>
+                {students.map((s) => {
+                  const u = userMap[s.user_id]
+                  return <option key={s.id} value={s.user_id}>{u ? `${u.first_name} ${u.last_name}` : s.id} · {s.permanent_id}</option>
                 })}
               </select>
             )}
@@ -151,76 +219,91 @@ export default function AdminNotificationsPage() {
               <option value="zoom_link">Zoom Link</option>
               <option value="report_due">Reminder</option>
             </select>
-            <input name="title" className="input w-full" placeholder="Title" required />
+            <input name="title"   className="input w-full"    placeholder="Title"   required />
             <textarea name="message" className="textarea h-36 w-full" placeholder="Message" required />
             {type === 'zoom_link' && <input name="zoom" className="input w-full" placeholder="Zoom Link URL" required />}
             <button className="btn-primary">Send</button>
           </form>
           <div className="card p-6">
             <h2 className="text-xl font-semibold">Sent History</h2>
-            <p className="mt-4 text-sm text-[color:var(--secondary)]">Sent notifications will appear here in the production API.</p>
+            <p className="mt-4 text-sm text-[color:var(--secondary)]">Recent notifications will appear here.</p>
           </div>
         </div>
       )}
 
+      {/* ── Rules tab ── */}
       {tab === 'rules' && (
         <div>
           <div className="mb-4 rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
             <p className="text-sm leading-6 text-[color:var(--secondary)]">
-              Configure which events trigger automatic notifications and through which channels. Toggles apply globally — individual recipients are shown as tags on each rule.
+              Configure which events trigger automatic email notifications for the current course.
+              Rules are saved per-course in Course Settings.
             </p>
           </div>
 
-          <div className="space-y-3">
-            {EVENT_RULES.map(({ key, icon: Icon, label, description, to, warning }) => (
-              <div key={key} className="card p-5">
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-start gap-4">
-                    <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${warning ? 'bg-orange-50 text-orange-600' : 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]'}`}>
-                      <Icon size={19} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-[color:var(--text)]">{label}</p>
-                      <p className="mt-1 text-sm leading-6 text-[color:var(--secondary)]">{description}</p>
-                      <div className="mt-2.5 flex flex-wrap gap-1.5">
-                        {to.map(({ label: rLabel, color }) => (
-                          <span key={rLabel} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${RECIPIENT_COLORS[color]}`}>
-                            → {rLabel}
-                          </span>
-                        ))}
+          {rulesLoading ? (
+            <div className="flex items-center gap-3 text-sm text-[color:var(--secondary)] p-6">
+              <Loader2 size={16} className="animate-spin" /> Loading notification rules…
+            </div>
+          ) : (
+            <>
+              <div className="space-y-3">
+                {EVENT_RULES.map(({ key, icon: Icon, label, description, to, warning }) => (
+                  <div key={key} className="card p-5">
+                    <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-4">
+                        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${warning ? 'bg-orange-50 text-orange-600' : 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]'}`}>
+                          <Icon size={19} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-[color:var(--text)]">{label}</p>
+                          <p className="mt-1 text-sm leading-6 text-[color:var(--secondary)]">{description}</p>
+                          <div className="mt-2.5 flex flex-wrap gap-1.5">
+                            {to.map(({ label: rLabel, color }) => (
+                              <span key={rLabel} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${RECIPIENT_COLORS[color]}`}>
+                                → {rLabel}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-6 pl-[60px] sm:pl-0">
+                        <ChannelToggle
+                          label="Email"
+                          icon={Mail}
+                          active={rules[key]?.email ?? true}
+                          onToggle={() => toggleChannel(key, 'email')}
+                          activeColor="accent"
+                        />
+                        <ChannelToggle
+                          label="WhatsApp"
+                          icon={MessageSquare}
+                          active={rules[key]?.whatsapp ?? false}
+                          onToggle={() => toggleChannel(key, 'whatsapp')}
+                          activeColor="green"
+                        />
                       </div>
                     </div>
                   </div>
-
-                  <div className="flex shrink-0 items-center gap-6 pl-[60px] sm:pl-0">
-                    <ChannelToggle
-                      label="Email"
-                      icon={Mail}
-                      active={rules[key].email}
-                      onToggle={() => toggleChannel(key, 'email')}
-                      activeColor="accent"
-                    />
-                    <ChannelToggle
-                      label="WhatsApp"
-                      icon={MessageSquare}
-                      active={rules[key].whatsapp}
-                      onToggle={() => toggleChannel(key, 'whatsapp')}
-                      activeColor="green"
-                    />
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          <div className="mt-5 flex justify-end">
-            <button className="btn-primary" onClick={saveRules}>Save Rules</button>
-          </div>
+              <div className="mt-5 flex justify-end">
+                <button className="btn-primary inline-flex items-center gap-2" onClick={saveRules} disabled={rulesSaving}>
+                  {rulesSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                  {rulesSaving ? 'Saving…' : 'Save Rules'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
   )
 }
+
+// ─── Sub-components ────────────────────────────────────────────────────────────
 
 function TabButton({ active, icon: Icon, label, onClick }) {
   return (
@@ -229,8 +312,7 @@ function TabButton({ active, icon: Icon, label, onClick }) {
       onClick={onClick}
       className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition-colors ${active ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--surface)] text-[color:var(--secondary)] hover:text-[color:var(--text)]'}`}
     >
-      <Icon size={15} />
-      {label}
+      <Icon size={15} /> {label}
     </button>
   )
 }
@@ -246,13 +328,8 @@ function ChannelToggle({ label, icon: Icon, active, onToggle, activeColor }) {
   return (
     <div className="flex flex-col items-center gap-1.5">
       <span className="text-xs font-semibold text-[color:var(--secondary)]">{label}</span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={active}
-        onClick={onToggle}
-        className={`relative h-6 w-11 rounded-full transition-colors ${trackColor}`}
-      >
+      <button type="button" role="switch" aria-checked={active} onClick={onToggle}
+        className={`relative h-6 w-11 rounded-full transition-colors ${trackColor}`}>
         <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${active ? 'translate-x-5' : 'translate-x-0.5'}`} />
       </button>
       <Icon size={13} className={`transition-colors ${iconColor}`} />

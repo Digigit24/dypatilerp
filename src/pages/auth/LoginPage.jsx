@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { login } from '../../api/services/userService.js'
+import { getUserPreferences } from '../../api/services/settingsService.js'
 import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
@@ -17,6 +18,7 @@ export default function LoginPage() {
   const location = useLocation()
   const setAuth = useAuthStore((s) => s.setAuth)
   const addToast = useUiStore((s) => s.addToast)
+  const applyUserPreferences = useUiStore((s) => s.applyUserPreferences)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -37,6 +39,8 @@ export default function LoginPage() {
       }
       const { user, access_token, refresh_token } = result.data
       setAuth(user, access_token, refresh_token)
+      // Load and apply saved user preferences (dark mode, accent colour)
+      getUserPreferences().then((r) => applyUserPreferences(r.data)).catch(() => {})
       const role = user?.roles?.[0]
       const dest = from && from !== '/login' ? from : redirectForRole(role)
       navigate(dest, { replace: true })

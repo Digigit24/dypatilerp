@@ -1,4 +1,4 @@
-import { ArrowLeft, Save } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Mail, Save } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getCourseById, updateCourse } from '../../api/services/courseService.js'
@@ -26,10 +26,23 @@ const ALL_MODULES = [
 export default function CourseSettingsPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [course, setCourse] = useState(null)
-  const [modules, setModules] = useState({})
-  const [feeStr, setFeeStr] = useState('{}')
+  const [course,      setCourse]      = useState(null)
+  const [modules,     setModules]     = useState({})
+  const [feeStr,      setFeeStr]      = useState('{}')
   const [displayName, setDisplayName] = useState('')
+  const [emailPrefs,  setEmailPrefs]  = useState({
+    senderName:        '',
+    senderEmail:       '',
+    notificationRules: {
+      application_submitted:    { email: true  },
+      test_completed:           { email: true  },
+      approval_stage_opened:    { email: true  },
+      submission_approved:      { email: true  },
+      submission_needs_revision:{ email: true  },
+      deadline_overdue:         { email: true  },
+      fee_due:                  { email: true  },
+    },
+  })
   const [saving, setSaving] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
   const { patchCurrentCourse, currentCourse } = useCourseStore()
@@ -45,6 +58,14 @@ export default function CourseSettingsPage() {
       setModules(mods)
       setDisplayName(prefs.display?.program_name || r.data.name)
       setFeeStr(JSON.stringify(r.data.fee_structure || {}, null, 2))
+      // Load email preferences from course.preferences.email
+      if (prefs.email) {
+        setEmailPrefs((prev) => ({
+          ...prev,
+          ...prefs.email,
+          notificationRules: { ...prev.notificationRules, ...(prefs.email.notificationRules || {}) },
+        }))
+      }
     })
   }, [id, currentCourse?.id])
 
@@ -54,7 +75,7 @@ export default function CourseSettingsPage() {
     try {
       let fee_structure = {}
       try { fee_structure = JSON.parse(feeStr) } catch { fee_structure = course.fee_structure }
-      const preferences = { modules, display: { program_name: displayName } }
+      const preferences = { modules, display: { program_name: displayName }, email: emailPrefs }
       const r = await updateCourse(course.id, { fee_structure, preferences })
       setCourse(r.data)
       patchCurrentCourse(r.data)
@@ -146,6 +167,91 @@ export default function CourseSettingsPage() {
                   <p className="text-xs text-[color:var(--muted)]">Active Students</p>
                   <p className="mt-1 font-semibold text-[color:var(--text)]">{course.student_count || 0}</p>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Email Notification Settings ── */}
+          <div className="card p-6">
+            <div className="flex items-start gap-3 mb-5">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[color:var(--accent-tint)] text-[color:var(--accent)]">
+                <Mail size={18} />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-[color:var(--text)]">Email Notifications</h2>
+                <p className="mt-0.5 text-sm text-[color:var(--secondary)]">
+                  Per-course sender override and event-level email toggles. Leave sender blank to use global settings.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Sender override */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="text-sm font-semibold text-[color:var(--text)]">Sender Name Override</label>
+                  <input
+                    className="input mt-1.5 w-full"
+                    value={emailPrefs.senderName}
+                    onChange={(e) => setEmailPrefs((p) => ({ ...p, senderName: e.target.value }))}
+                    placeholder="DY Patil ERP"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-[color:var(--text)]">Sender Email Override</label>
+                  <input
+                    className="input mt-1.5 w-full"
+                    type="email"
+                    value={emailPrefs.senderEmail}
+                    onChange={(e) => setEmailPrefs((p) => ({ ...p, senderEmail: e.target.value }))}
+                    placeholder="phd@yourdomain.com"
+                  />
+                </div>
+              </div>
+
+              {/* Per-event toggles */}
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)] mb-3">Notification Rules</p>
+                <div className="space-y-2">
+                  {[
+                    { key: 'application_submitted',     label: 'Application Submitted' },
+                    { key: 'test_completed',             label: 'Test Completed' },
+                    { key: 'approval_stage_opened',      label: 'Approval Stage Opened' },
+                    { key: 'submission_approved',        label: 'Submission Approved' },
+                    { key: 'submission_needs_revision',  label: 'Revision Requested' },
+                    { key: 'deadline_overdue',           label: 'Deadline Overdue' },
+                    { key: 'fee_due',                    label: 'Fee Due Reminder' },
+                  ].map(({ key, label }) => {
+                    const enabled = emailPrefs.notificationRules?.[key]?.email !== false
+                    return (
+                      <div key={key} className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                        <span className="text-sm font-medium text-[color:var(--text)]">{label}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-semibold ${enabled ? 'text-emerald-600' : 'text-[color:var(--muted)]'}`}>
+                            {enabled ? 'On' : 'Off'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setEmailPrefs((p) => ({
+                              ...p,
+                              notificationRules: {
+                                ...p.notificationRules,
+                                [key]: { ...p.notificationRules?.[key], email: !enabled },
+                              },
+                            }))}
+                            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${enabled ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}
+                          >
+                            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-3xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                <AlertCircle size={14} /> Global Brevo API key is configured in <strong>Settings → Email Delivery</strong>.
               </div>
             </div>
           </div>
