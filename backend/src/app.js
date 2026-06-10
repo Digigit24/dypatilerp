@@ -30,17 +30,34 @@ import settingsRoutes from './modules/settings/settings.routes.js';
 
 const app = express();
 
+// CORS must be registered first so preflight OPTIONS responses always carry
+// the Allow-Origin header — before helmet, rate-limiter, or any middleware
+// that could short-circuit the request.
+const allowedOrigins = [
+  env.FRONTEND_URL,
+  'https://dyperf.netlify.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean)
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // allow server-to-server / curl (no Origin header)
+    if (!origin) return cb(null, true)
+    if (allowedOrigins.includes(origin)) return cb(null, true)
+    cb(new Error(`CORS: origin ${origin} not allowed`))
+  },
+  credentials: true,
+}))
+
+// Handle preflight for all routes explicitly
+app.options('*', cors({ origin: allowedOrigins, credentials: true }))
+
 // Security
-// crossOriginResourcePolicy must be 'cross-origin' so the browser can load
-// video streams and thumbnails from a different port (e.g. Vite :5173 → API :5000).
-// Without this, Helmet's default 'same-origin' CORP triggers
-// ERR_BLOCKED_BY_RESPONSE.NotSameOrigin on all media/image requests.
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   crossOriginOpenerPolicy:   { policy: 'same-origin-allow-popups' },
 }));
-const allowedOrigins = [env.FRONTEND_URL, 'https://dyperf.netlify.app', 'http://localhost:5173', 'http://localhost:3000'];
-app.use(cors({ origin: allowedOrigins, credentials: true }));
 
 // Rate limiting
 app.use(rateLimit({
