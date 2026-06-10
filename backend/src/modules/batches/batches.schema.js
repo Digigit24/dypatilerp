@@ -6,7 +6,7 @@ export const createBatchSchema = z.object({
   code: z.string().min(2).max(50),
   status: z.enum(['upcoming', 'active', 'completed']).optional().default('upcoming'),
   start_date: z.string().date(),
-  end_date: z.string().date(),
+  end_date: z.string().date().optional(),
   max_students: z.number().int().min(1).default(30),
   description: z.string().optional(),
 });

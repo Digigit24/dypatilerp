@@ -7,17 +7,20 @@ import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
+import { useAuthStore } from '../../store/authStore.js'
 
 export default function SubmissionsPage() {
   const [items, setItems] = useState(null)
   const [detail, setDetail] = useState(null)
   useScrollLock(Boolean(detail))
+  const currentUser = useAuthStore((s) => s.currentUser)
 
   useEffect(() => {
-    getSubmissionsByStudent('stu_001').then(async (r) => {
+    if (!currentUser?.id) return
+    getSubmissionsByStudent(currentUser.id).then(async (r) => {
       setItems(await Promise.all(r.data.map(async (s) => ({ ...s, approvals: (await getApprovalsBySubmission(s.id)).data }))))
     })
-  }, [])
+  }, [currentUser])
 
   if (!items) return <SkeletonCard rows={6} />
 

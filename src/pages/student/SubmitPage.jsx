@@ -6,6 +6,7 @@ import { useDropzone } from 'react-dropzone'
 import { createSubmission } from '../../api/services/submissionService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
+import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 const history = [
@@ -18,6 +19,7 @@ export default function SubmitPage() {
   const [confirm, setConfirm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
+  const currentUser = useAuthStore((s) => s.currentUser)
   const editor = useEditor({
     extensions: [StarterKit],
     content: '<p>CRISPR Screening for Biomarker Discovery</p>',
@@ -45,8 +47,8 @@ export default function SubmitPage() {
   const submit = async () => {
     setSubmitting(true)
     await createSubmission({
-      student_id: 'stu_001',
-      batch_id: 'batch_2024_A',
+      student_id: currentUser?.id,
+      batch_id: currentUser?.batch_id,
       report_period: 2,
       title,
       presentation_filename: file?.name,

@@ -30,8 +30,16 @@ import auditLogRoutes from './modules/audit-logs/audit-logs.routes.js';
 const app = express();
 
 // Security
-app.use(helmet());
-app.use(cors({ origin: [env.FRONTEND_URL, 'https://dyperf.netlify.app'], credentials: true }));
+// crossOriginResourcePolicy must be 'cross-origin' so the browser can load
+// video streams and thumbnails from a different port (e.g. Vite :5173 → API :5000).
+// Without this, Helmet's default 'same-origin' CORP triggers
+// ERR_BLOCKED_BY_RESPONSE.NotSameOrigin on all media/image requests.
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginOpenerPolicy:   { policy: 'same-origin-allow-popups' },
+}));
+const allowedOrigins = [env.FRONTEND_URL, 'https://dyperf.netlify.app', 'http://localhost:5173', 'http://localhost:3000'];
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 
 // Rate limiting
 app.use(rateLimit({

@@ -3,22 +3,30 @@ import { generateProgressReportPDF, getProgressReportByStudent } from '../../api
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
+import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 export default function ProgressPage() {
   const [reports, setReports] = useState(null)
   const [tab, setTab] = useState(0)
   const addToast = useUiStore((s) => s.addToast)
-  useEffect(() => { getProgressReportByStudent('stu_001').then((r) => setReports(r.data)) }, [])
+  const currentUser = useAuthStore((s) => s.currentUser)
+  useEffect(() => { if (currentUser?.id) getProgressReportByStudent(currentUser.id).then((r) => setReports(r.data)) }, [currentUser])
   if (!reports) return <SkeletonCard />
-  const r = reports[tab]
+  if (!reports.length) return (
+    <div className="fade-page">
+      <PageHeader title="Progress Reports" />
+      <div className="card p-6 text-center text-[color:var(--secondary)]">No progress reports available yet.</div>
+    </div>
+  )
+  const r = reports[Math.min(tab, reports.length - 1)]
 
   return (
     <div className="fade-page">
       <PageHeader title="Progress Reports" subtitle="Priya Sharma · Batch 2024-A · Overall completion 62%" />
       <div className="mobile-filter-scroll mb-5 flex gap-2">
-        {[1, 2, 3, 4].map((n, i) => (
-          <button className={`mobile-compact-button shrink-0 rounded-full px-4 py-2 ${tab === i ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)]'}`} onClick={() => setTab(Math.min(i, reports.length - 1))} key={n}>Report {n}</button>
+        {reports.map((_, i) => (
+          <button className={`mobile-compact-button shrink-0 rounded-full px-4 py-2 ${tab === i ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)]'}`} onClick={() => setTab(i)} key={i}>Report {i + 1}</button>
         ))}
       </div>
       <div className="card p-6">

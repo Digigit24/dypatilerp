@@ -5,6 +5,7 @@ import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { formatDate } from '../../lib/formatters.js'
+import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 const formatCurrency = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value)
@@ -13,8 +14,9 @@ export default function StudentFeesPage() {
   const [fees, setFees] = useState(null)
   const [paying, setPaying] = useState(null)
   const addToast = useUiStore((s) => s.addToast)
+  const currentUser = useAuthStore((s) => s.currentUser)
 
-  useEffect(() => { getFeesByStudent('stu_001').then((r) => setFees(r.data)) }, [])
+  useEffect(() => { if (currentUser?.id) getFeesByStudent(currentUser.id).then((r) => setFees(r.data)) }, [currentUser])
   if (!fees) return <SkeletonCard rows={6} />
 
   const paid = fees.filter((f) => f.status === 'paid').reduce((sum, f) => sum + f.amount, 0)

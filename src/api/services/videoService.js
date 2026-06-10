@@ -60,6 +60,10 @@ export const createSession = async (videoId) => {
 export const buildStreamUrl = (videoId, sessionToken) =>
   `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/videos/${videoId}/stream?sessionToken=${sessionToken}`
 
+/** Returns the thumbnail URL for a video (no auth required) */
+export const buildThumbnailUrl = (videoId) =>
+  `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/videos/${videoId}/thumbnail`
+
 // ─── Progress heartbeat ───────────────────────────────────────────────────────
 
 export const reportProgress = async (videoId, lastPosition, range, durationSec) => {

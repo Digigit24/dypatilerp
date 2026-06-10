@@ -5,8 +5,9 @@
  * If ZATA credentials are not set, every method returns a stub response
  * so the rest of the application can boot and the gallery UI still renders.
  */
-import { S3Client, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createReadStream } from 'fs';
 import { env } from '../config/env.js';
 
 const BUCKET = env.ZATA_VIDEOS_BUCKET || env.ZATA_BUCKETS || '';
@@ -24,6 +25,8 @@ const client = () => {
       region: 'us-east-1', // Zata requires a region value even though it's ignored
       credentials: { accessKeyId: env.ZATA_ACCESS_KEY, secretAccessKey: env.ZATA_SECRET_KEY },
       forcePathStyle: true, // required for S3-compatible services
+      requestChecksumCalculation: 'WHEN_REQUIRED',  // don't auto-add CRC32 to presigned URLs
+      responseChecksumValidation: 'WHEN_REQUIRED',  // don't validate checksums on responses
     });
   }
   return _client;
@@ -109,6 +112,26 @@ export const createCourseFolder = async (courseCode) => {
   const command = new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: '', ContentType: 'application/x-directory' });
   await client().send(command);
   return key;
+};
+
+/**
+ * Upload a file from local disk path directly to Zata (server-side).
+ * Used by the proxy upload endpoint so the browser never talks to Zata directly.
+ * @param {string} objectKey   - Destination key in the bucket
+ * @param {string} filePath    - Absolute path to the temp file on disk
+ * @param {string} contentType - MIME type
+ * @param {number} fileSize    - Byte length (for Content-Length header)
+ */
+export const uploadFile = async (objectKey, filePath, contentType = 'video/mp4', fileSize) => {
+  const body = createReadStream(filePath);
+  const command = new PutObjectCommand({
+    Bucket: BUCKET,
+    Key: objectKey,
+    Body: body,
+    ContentType: contentType,
+    ...(fileSize ? { ContentLength: fileSize } : {}),
+  });
+  return client().send(command);
 };
 
 /**

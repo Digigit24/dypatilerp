@@ -1,9 +1,11 @@
 import { BarChart2, BookOpen, CheckCircle2, Eye, FolderPlus, Loader, PenLine, Plus, Trash2, Upload, XCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   createVideo, deleteVideo, getVideoAnalytics, getVideos, initCourseFolder,
-  requestUploadUrl, updateVideo,
+  updateVideo,
 } from '../../api/services/videoService.js'
+import http from '../../api/http.js'
 import { getCourses } from '../../api/services/courseService.js'
 import { getBatches } from '../../api/services/batchService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
@@ -39,6 +41,7 @@ export default function LecturesManagePage() {
   const fileRef = useRef(null)
   const { currentCourse } = useCourseStore()
   const addToast = useUiStore((s) => s.addToast)
+  const navigate = useNavigate()
   useScrollLock(drawerOpen || !!analyticsId)
 
   const load = async () => {
@@ -84,28 +87,35 @@ export default function LecturesManagePage() {
         const course = courses.find((c) => c.id === form.course_id)
         if (!course) { addToast({ type: 'error', title: 'Select a course.' }); return }
 
-        // Get presigned URL
-        const urlRes = await requestUploadUrl({
-          filename: file.name,
-          course_code: course.code,
-          video_id: videoId,
-          content_type: file.type || 'video/mp4',
-        })
-        const { upload_url, object_key } = urlRes.data
-        objectKey = object_key
-        fileSize  = file.size
-
-        // Upload directly to Zata with progress tracking
+        // Proxy upload: POST multipart to our backend, which streams to Zata
         setUploading(true)
-        await new Promise((resolve, reject) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('filename', file.name)
+        formData.append('course_code', course.code)
+        formData.append('video_id', videoId)
+        formData.append('content_type', file.type || 'video/mp4')
+
+        const uploadRes = await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest()
           xhr.upload.onprogress = (e) => { if (e.lengthComputable) setUploadPct(Math.round(e.loaded / e.total * 100)) }
-          xhr.onload  = () => xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: ${xhr.status}`))
+          xhr.onload = () => {
+            if (xhr.status < 300) {
+              try { resolve(JSON.parse(xhr.responseText)) }
+              catch { resolve({}) }
+            } else {
+              reject(new Error(`Upload failed: ${xhr.status} ${xhr.responseText}`))
+            }
+          }
           xhr.onerror = () => reject(new Error('Upload network error'))
-          xhr.open('PUT', upload_url)
-          xhr.setRequestHeader('Content-Type', file.type || 'video/mp4')
-          xhr.send(file)
+          xhr.open('POST', `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/videos/upload`)
+          const token = localStorage.getItem('access_token')
+          if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+          xhr.send(formData)
         })
+
+        objectKey = uploadRes?.data?.object_key || ''
+        fileSize  = uploadRes?.data?.file_size  || file.size
         setUploading(false)
         setUploadPct(0)
       }
@@ -214,7 +224,11 @@ export default function LecturesManagePage() {
                 <tr><td colSpan={7} className="px-5 py-16 text-center text-[color:var(--secondary)]">No videos yet. Upload the first one.</td></tr>
               )}
               {videos.map((v) => (
-                <tr key={v.id} className="table-row border-b border-[color:var(--border)]">
+                <tr
+                  key={v.id}
+                  className="table-row border-b border-[color:var(--border)] cursor-pointer hover:bg-[color:var(--surface)] transition"
+                  onClick={() => navigate(`/admin/lectures/${v.id}`)}
+                >
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
                       <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[color:var(--accent-tint)] text-[color:var(--accent)]">
@@ -226,7 +240,7 @@ export default function LecturesManagePage() {
                   <td className="px-5 text-xs font-bold text-[color:var(--accent)]">{v.course_code}</td>
                   <td className="px-5 text-[color:var(--secondary)]">{fmtDuration(v.duration_sec)}</td>
                   <td className="px-5 text-[color:var(--secondary)]">{fmtBytes(v.file_size)}</td>
-                  <td className="px-5">
+                  <td className="px-5" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => togglePublish(v)}
                       className={`rounded-full px-3 py-1 text-xs font-semibold transition ${v.is_published ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-[color:var(--surface)] text-[color:var(--muted)] hover:bg-[color:var(--surface-strong)]'}`}
@@ -235,7 +249,7 @@ export default function LecturesManagePage() {
                     </button>
                   </td>
                   <td className="px-5 text-[color:var(--secondary)]">{formatDate(v.created_at)}</td>
-                  <td className="px-5">
+                  <td className="px-5" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1">
                       <button className="grid h-8 w-8 place-items-center rounded-full hover:bg-[color:var(--accent-tint)] text-[color:var(--secondary)] hover:text-[color:var(--accent)] transition" onClick={() => openAnalytics(v.id)} title="Analytics"><BarChart2 size={14} /></button>
                       <button className="grid h-8 w-8 place-items-center rounded-full hover:bg-[color:var(--surface)] text-[color:var(--secondary)] transition" onClick={() => openEdit(v)} title="Edit"><PenLine size={14} /></button>
@@ -296,7 +310,7 @@ export default function LecturesManagePage() {
                 {uploading && (
                   <div>
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-[color:var(--secondary)]">Uploading to Zata…</span>
+                      <span className="text-[color:var(--secondary)]">Uploading video…</span>
                       <span className="font-semibold">{uploadProgress}%</span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-[color:var(--surface-strong)]">

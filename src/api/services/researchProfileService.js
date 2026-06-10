@@ -3,10 +3,28 @@ import { USE_MOCK } from '../config.js'
 import { delay, notFound, ok } from './_mock.js'
 import http from '../http.js'
 
+/** Normalize the real API response shape to match what the UI expects. */
+const normalizeProfile = (raw) => {
+  const pubs = raw.publications ?? []
+  return {
+    ...raw,
+    // identity fields the UI references
+    student_id: raw.user_id,
+    public_slug: raw.slug,
+    // group flat publications by type
+    research_papers:      pubs.filter((p) => p.publication_type === 'journal'),
+    patents:              pubs.filter((p) => p.publication_type === 'patent'),
+    workshops_seminars:   pubs.filter((p) => p.publication_type === 'conference'),
+    publications:         pubs.filter((p) => ['book_chapter','other'].includes(p.publication_type)),
+    // research_interests doubles as skills
+    skills: Array.isArray(raw.research_interests) ? raw.research_interests : [],
+  }
+}
+
 export const getProfile = async (userId) => {
   if (USE_MOCK) { await delay(); const item = RESEARCH_PROFILES.find((p) => p.student_id === userId); return item ? ok(item) : notFound() }
   const { data: res } = await http.get(`/research-profiles/${userId}`)
-  return ok(res.data)
+  return ok(normalizeProfile(res.data))
 }
 
 export const getProfileBySlug = async (slug) => {

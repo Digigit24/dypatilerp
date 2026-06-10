@@ -106,6 +106,25 @@ router.get('/:id/analytics', authenticate, requireRole('admin', 'coordinator'), 
 
 /**
  * @swagger
+ * /videos/{id}/thumbnail:
+ *   get:
+ *     tags: [Videos]
+ *     summary: Serve a JPEG thumbnail (auto-generated via ffmpeg or SVG placeholder)
+ */
+router.get('/:id/thumbnail', ctrl.getThumbnail); // public — no auth needed for poster images
+
+/**
+ * @swagger
+ * /videos/upload:
+ *   post:
+ *     tags: [Videos]
+ *     summary: Proxy upload — browser posts file here, backend streams to Zata
+ *     description: Accepts multipart/form-data with fields file, filename, course_code, video_id
+ */
+router.post('/upload', authenticate, requireRole('admin', 'coordinator'), ctrl.proxyUpload);
+
+/**
+ * @swagger
  * /videos/upload/request-url:
  *   post:
  *     tags: [Videos]

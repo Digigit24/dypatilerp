@@ -82,6 +82,74 @@ const seed = async () => {
     );
   }
 
+  // Grant read-heavy permissions to student
+  const studentPerms = [
+    'fees:read',
+    'progress_reports:read',
+    'submissions:read', 'submissions:create',
+    'approvals:read',
+    'research_profiles:read', 'research_profiles:update',
+    'notifications:read',
+    'dashboard:read',
+  ];
+  for (const key of studentPerms) {
+    await query(
+      `INSERT INTO role_permissions (role_id, permission_id)
+       VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [roleIds['student'], permIds[key]]
+    );
+  }
+
+  // Grant permissions to academic_guide
+  const academicGuidePerms = [
+    'students:read',
+    'submissions:read', 'submissions:update',
+    'approvals:read', 'approvals:create', 'approvals:update',
+    'progress_reports:read',
+    'research_profiles:read',
+    'notifications:read', 'notifications:create',
+    'dashboard:read',
+  ];
+  for (const key of academicGuidePerms) {
+    await query(
+      `INSERT INTO role_permissions (role_id, permission_id)
+       VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [roleIds['academic_guide'], permIds[key]]
+    );
+  }
+
+  // Grant permissions to industry_mentor
+  const industryMentorPerms = [
+    'students:read',
+    'submissions:read',
+    'approvals:read', 'approvals:create', 'approvals:update',
+    'progress_reports:read',
+    'research_profiles:read',
+    'notifications:read',
+    'dashboard:read',
+  ];
+  for (const key of industryMentorPerms) {
+    await query(
+      `INSERT INTO role_permissions (role_id, permission_id)
+       VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [roleIds['industry_mentor'], permIds[key]]
+    );
+  }
+
+  // Grant minimal permissions to applicant
+  const applicantPerms = [
+    'tests:read',
+    'submissions:read',
+    'notifications:read',
+  ];
+  for (const key of applicantPerms) {
+    await query(
+      `INSERT INTO role_permissions (role_id, permission_id)
+       VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [roleIds['applicant'], permIds[key]]
+    );
+  }
+
   // Seed admin user
   const hash = await bcrypt.hash('Admin@1234', 12);
   const { rows: adminRows } = await query(

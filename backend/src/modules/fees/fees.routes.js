@@ -39,10 +39,16 @@ const paymentSchema = z.object({
  *       200:
  *         description: Paginated fee records
  */
+const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 router.get('/', requirePermission('fees', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   const filters = { ...req.query, limit, offset };
-  if (req.user.roles.includes('student')) filters.student_user_id = req.user.id;
+  if (req.user.roles.includes('student')) {
+    filters.student_user_id = req.user.id;
+  } else if (filters.student_user_id && !uuidRe.test(filters.student_user_id)) {
+    return res.status(400).json({ success: false, message: 'Invalid student_user_id — must be a UUID' });
+  }
   const { data, total } = await svc.listFees(filters);
   res.json({ success: true, data, pagination: buildPaginationMeta(total, page, limit) });
 }));

@@ -229,7 +229,7 @@ export default function BatchesPage() {
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <F label="Start Date" required><input className="input w-full" type="date" required {...ff('start_date')} /></F>
-                  <F label="End Date" required><input className="input w-full" type="date" required {...ff('end_date')} /></F>
+                  <F label="End Date"><input className="input w-full" type="date" {...ff('end_date')} /></F>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <F label="Max Students"><input className="input w-full" type="number" min={1} {...ff('max_students')} /></F>
