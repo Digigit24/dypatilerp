@@ -1,10 +1,13 @@
 import {
-  Award, CheckCircle2, Clock3, GraduationCap, RotateCcw,
-  Search, Send, UserCheck, UserMinus, UserPlus, XCircle,
+  Award, CheckCircle2, Clock3, GraduationCap, Pencil, RotateCcw,
+  Save, Search, Send, UserCheck, UserMinus, UserPlus, XCircle, ClipboardList,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { createApplicant, getApplicants, shortlistApplicant, updateApplicantStatus } from '../../api/services/applicantService.js'
+import { useNavigate } from 'react-router-dom'
+import { createApplicant, getApplicants, shortlistApplicant, updateApplicantDetails, updateApplicantStatus } from '../../api/services/applicantService.js'
 import { getBatches } from '../../api/services/batchService.js'
+import { getCourses } from '../../api/services/courseService.js'
+import { useCourseStore } from '../../store/courseStore.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
@@ -17,11 +20,12 @@ const statusTabs = ['all', 'submitted', 'test_pending', 'test_completed', 'short
 // Ordered stages for the pipeline indicator (rejected is a side-branch)
 const PIPELINE = ['submitted', 'test_pending', 'test_completed', 'shortlisted']
 
-const BLANK_FORM = {
+const makeBlankForm = (courseId = '') => ({
+  course_id: courseId,
   first_name: '', last_name: '', email: '', mobile: '',
   phd_completion_year: '', phd_discipline: '', phd_research_title: '',
-  scopus_publications: '', state_country: '', batch_id: 'batch_2024_A', status: 'submitted',
-}
+  scopus_publications: '', state_country: '', batch_id: '', status: 'submitted',
+})
 
 // ─── Status-specific drawer banner ────────────────────────────────────────────
 function StatusBanner({ status }) {
@@ -173,24 +177,46 @@ function DrawerActions({ item, onAct, onConvert, busy }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ApplicantsPage() {
+  const navigate = useNavigate()
+  const currentCourse = useCourseStore((s) => s.currentCourse)
+
   const [items,    setItems]    = useState(null)
-  const [batches,  setBatches]  = useState([])
+  const [courses,  setCourses]  = useState([])
+  const [batches,  setBatches]  = useState([])   // all batches cache
+  const [formBatches, setFormBatches] = useState([])  // batches for selected course in form
   const [selected, setSelected] = useState(null)
   const [addOpen,  setAddOpen]  = useState(false)
-  const [form,     setForm]     = useState(BLANK_FORM)
-  const [saving,   setSaving]   = useState(false)
-  const [acting,   setActing]   = useState(false)
-  const [query,    setQuery]    = useState('')
-  const [status,   setStatus]   = useState('all')
+  const [form,     setForm]     = useState(() => makeBlankForm(currentCourse?.id || ''))
+  const [saving,     setSaving]     = useState(false)
+  const [acting,     setActing]     = useState(false)
+  const [editing,    setEditing]    = useState(false)
+  const [editForm,   setEditForm]   = useState({})
+  const [editSaving, setEditSaving] = useState(false)
+  const [query,      setQuery]      = useState('')
+  const [status,     setStatus]     = useState('all')
   const addToast = useUiStore((s) => s.addToast)
   useScrollLock(Boolean(selected || addOpen))
 
+  // Re-fetch when active course changes; X-Course-Id header is added automatically
   useEffect(() => {
-    Promise.all([getApplicants(), getBatches()]).then(([r, b]) => {
+    setItems(null)
+    setSelected(null)
+    Promise.all([getApplicants(), getCourses()]).then(([r, c]) => {
       setItems(r.data)
-      setBatches(b.data)
+      setCourses(c.data || [])
     })
-  }, [])
+  }, [currentCourse?.id])
+
+  // When course in form changes, fetch batches for that course
+  useEffect(() => {
+    if (!form.course_id) { setFormBatches([]); return }
+    getBatches({ course_id: form.course_id }).then((r) => {
+      const list = r.data || []
+      setFormBatches(list)
+      // Auto-select first batch or clear if none
+      setForm((f) => ({ ...f, batch_id: list[0]?.id || '' }))
+    })
+  }, [form.course_id])
 
   const filtered = useMemo(() => {
     if (!items) return []
@@ -233,13 +259,70 @@ export default function ApplicantsPage() {
     setSelected(null)
   }
 
-  const openAdd = () => { setForm(BLANK_FORM); setAddOpen(true) }
+  const openAdd = () => { setForm(makeBlankForm(currentCourse?.id || '')); setAddOpen(true) }
+
+  const openEdit = (item) => {
+    setEditForm({
+      first_name:    item.personal?.first_name  || item.first_name  || '',
+      last_name:     item.personal?.last_name   || item.last_name   || '',
+      email:         item.personal?.email       || item.email       || '',
+      phone:         item.personal?.phone       || item.phone       || '',
+      state_country: item.personal?.state_country || '',
+      phd_discipline:      item.academic?.phd_discipline || '',
+      phd_research_title:  item.academic?.phd_research_title || '',
+      phd_completion_year: item.academic?.phd_completion_year || '',
+      scopus_publications: item.academic?.scopus_publications ?? '',
+      university:          item.academic?.university || '',
+    })
+    setEditing(true)
+  }
+
+  const handleEditSave = async (e) => {
+    e.preventDefault()
+    setEditSaving(true)
+    try {
+      // Build flat update payload
+      const phd_details = {
+        subject:      editForm.phd_discipline,
+        thesis_title: editForm.phd_research_title,
+        year_awarded: Number(editForm.phd_completion_year) || null,
+        university:   editForm.university,
+        scopus_publications: Number(editForm.scopus_publications) || 0,
+        highest_degree: selected.academic?.highest_degree || 'Ph.D.',
+      }
+      // Merge state_country into application_data.personal
+      const application_data = {
+        ...(selected.application_data || {}),
+        personal: {
+          ...(selected.application_data?.personal || {}),
+          state_country: editForm.state_country,
+        },
+      }
+      const res = await updateApplicantDetails(selected.id, {
+        first_name: editForm.first_name,
+        last_name:  editForm.last_name,
+        email:      editForm.email,
+        phone:      editForm.phone || null,
+        phd_details,
+        application_data,
+      })
+      setItems((xs) => xs.map((x) => (x.id === selected.id ? res.data : x)))
+      setSelected(res.data)
+      setEditing(false)
+      addToast({ type: 'success', title: 'Applicant details updated.' })
+    } catch (err) {
+      addToast({ type: 'error', title: err?.response?.data?.message || 'Save failed.' })
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   const handleAdd = async (e) => {
     e.preventDefault()
     setSaving(true)
     const res = await createApplicant({
-      batch_id: form.batch_id,
+      course_id: form.course_id || undefined,
+      batch_id: form.batch_id || undefined,
       personal: {
         full_name: `${form.first_name} ${form.last_name}`.trim(),
         first_name: form.first_name, last_name: form.last_name,
@@ -376,24 +459,80 @@ export default function ApplicantsPage() {
 
       {/* ── Detail drawer ── */}
       {selected && (
-        <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm" onClick={() => setSelected(null)}>
+        <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm" onClick={() => { setSelected(null); setEditing(false) }}>
           <div className="drawer-panel" onClick={(e) => e.stopPropagation()}>
 
             {/* Header */}
             <div className="shrink-0 flex items-start justify-between border-b border-[color:var(--border)] p-5 sm:p-7">
               <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Applicant Profile</p>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">
+                  {editing ? 'Edit Profile' : 'Applicant Profile'}
+                </p>
                 <h2 className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{selected.personal.full_name}</h2>
-                <p className="mt-1 text-sm text-[color:var(--secondary)]">{selected.temp_id} · <StatusBadge status={selected.status} /></p>
+                <p className="mt-1 text-sm text-[color:var(--secondary)]"><StatusBadge status={selected.status} /></p>
               </div>
-              <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setSelected(null)}>
-                <XCircle size={18} />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {!editing && (
+                  <button
+                    onClick={() => openEdit(selected)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition"
+                  >
+                    <Pencil size={13} /> Edit
+                  </button>
+                )}
+                <button className="grid h-10 w-10 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => { setSelected(null); setEditing(false) }}>
+                  <XCircle size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Body */}
             <div className="flex-1 overflow-auto overscroll-contain p-5 sm:p-7 space-y-6">
 
+              {editing ? (
+                /* ── Edit form ── */
+                <form id="edit-applicant-form" onSubmit={handleEditSave} className="space-y-5">
+                  <DrawerSection title="Personal Details">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <FormField label="First Name" required>
+                        <input className="input w-full" value={editForm.first_name} onChange={(e) => setEditForm((f) => ({ ...f, first_name: e.target.value }))} required />
+                      </FormField>
+                      <FormField label="Last Name" required>
+                        <input className="input w-full" value={editForm.last_name} onChange={(e) => setEditForm((f) => ({ ...f, last_name: e.target.value }))} required />
+                      </FormField>
+                      <FormField label="Email" required>
+                        <input className="input w-full" type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} required />
+                      </FormField>
+                      <FormField label="Phone">
+                        <input className="input w-full" value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} />
+                      </FormField>
+                      <FormField label="State & Country">
+                        <input className="input w-full" value={editForm.state_country} onChange={(e) => setEditForm((f) => ({ ...f, state_country: e.target.value }))} />
+                      </FormField>
+                    </div>
+                  </DrawerSection>
+                  <DrawerSection title="PhD Details">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <FormField label="Year of Completion">
+                        <input className="input w-full" type="number" value={editForm.phd_completion_year} onChange={(e) => setEditForm((f) => ({ ...f, phd_completion_year: e.target.value }))} />
+                      </FormField>
+                      <FormField label="Discipline / Field">
+                        <input className="input w-full" value={editForm.phd_discipline} onChange={(e) => setEditForm((f) => ({ ...f, phd_discipline: e.target.value }))} />
+                      </FormField>
+                      <FormField label="University">
+                        <input className="input w-full" value={editForm.university} onChange={(e) => setEditForm((f) => ({ ...f, university: e.target.value }))} />
+                      </FormField>
+                      <FormField label="Scopus Publications">
+                        <input className="input w-full" type="number" min="0" value={editForm.scopus_publications} onChange={(e) => setEditForm((f) => ({ ...f, scopus_publications: e.target.value }))} />
+                      </FormField>
+                    </div>
+                    <FormField label="PhD Research Title" className="mt-3">
+                      <input className="input w-full" value={editForm.phd_research_title} onChange={(e) => setEditForm((f) => ({ ...f, phd_research_title: e.target.value }))} />
+                    </FormField>
+                  </DrawerSection>
+                </form>
+              ) : (
+                <>
               {/* Status banner + pipeline */}
               <div className="space-y-4">
                 <StatusBanner status={selected.status} />
@@ -430,31 +569,91 @@ export default function ApplicantsPage() {
 
               <DrawerSection title="Test Result">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Info label="Test Score"      value={selected.test_score != null ? `${selected.test_score} / ${selected.test_max_score}` : 'Not attempted'} />
-                  <Info label="Test Submitted"  value={selected.test_submitted_at ? formatDate(selected.test_submitted_at) : '—'} />
+                  <Info
+                    label="Test Score"
+                    value={selected.test_score != null
+                      ? `${selected.test_score} / ${selected.test_max_score ?? '—'}`
+                      : 'Not attempted'}
+                  />
+                  <Info
+                    label="Test Submitted"
+                    value={selected.test_submitted_at
+                      ? new Date(selected.test_submitted_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })
+                      : '—'}
+                  />
+                  {selected.test_time_taken_secs != null && (
+                    <Info
+                      label="Time Taken"
+                      value={(() => {
+                        const m = Math.floor(selected.test_time_taken_secs / 60)
+                        const s = selected.test_time_taken_secs % 60
+                        return s > 0 ? `${m}m ${s}s` : `${m}m`
+                      })()}
+                    />
+                  )}
                 </div>
-                {selected.test_score != null && (
+                {selected.test_score != null && selected.test_max_score != null && (
                   <div className="mt-3 rounded-3xl bg-[color:var(--surface)] p-4">
                     <div className="flex items-center justify-between text-sm font-semibold">
                       <span className="text-[color:var(--secondary)]">Score</span>
-                      <span className="text-[color:var(--text)]">{selected.test_score}%</span>
+                      <span className="text-[color:var(--text)]">
+                        {selected.test_score} / {selected.test_max_score}
+                        {' '}
+                        <span className="text-[color:var(--secondary)]">
+                          ({Math.round((selected.test_score / selected.test_max_score) * 100)}%)
+                        </span>
+                      </span>
                     </div>
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-[color:var(--border)]">
-                      <div className="h-full rounded-full bg-[color:var(--accent)]" style={{ width: `${selected.test_score}%` }} />
+                      <div
+                        className="h-full rounded-full bg-[color:var(--accent)]"
+                        style={{ width: `${Math.round((selected.test_score / selected.test_max_score) * 100)}%` }}
+                      />
                     </div>
                   </div>
                 )}
+                {(selected.status === 'test_completed' || selected.test_score != null) && (
+                  <button
+                    onClick={() => navigate(`/admin/applicants/${selected.id}/test-results`)}
+                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-2.5 text-sm font-semibold text-[color:var(--text)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition"
+                  >
+                    <ClipboardList size={16} /> View Test Responses
+                  </button>
+                )}
               </DrawerSection>
+                </>
+              )}
             </div>
 
-            {/* ── Status-aware action footer ── */}
+            {/* ── Footer: edit save/cancel OR status actions ── */}
             <div className="shrink-0 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-              <DrawerActions
-                item={selected}
-                onAct={act}
-                onConvert={convertToStudent}
-                busy={acting}
-              />
+              {editing ? (
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    form="edit-applicant-form"
+                    disabled={editSaving}
+                    className="btn-primary flex flex-1 items-center justify-center gap-2 text-sm disabled:opacity-60"
+                  >
+                    {editSaving ? <span className="animate-spin">⟳</span> : <Save size={15} />}
+                    {editSaving ? 'Saving…' : 'Save Changes'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(false)}
+                    className="flex-1 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] py-3 text-sm font-semibold text-[color:var(--secondary)] hover:text-[color:var(--text)] transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <DrawerActions
+                  item={selected}
+                  onAct={act}
+                  onConvert={convertToStudent}
+                  busy={acting}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -499,9 +698,26 @@ export default function ApplicantsPage() {
                 <FormSection title="Research Profile">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <FormField label="Scopus Publications"><input className="input w-full" type="number" min="0" placeholder="0" {...field('scopus_publications')} /></FormField>
+                    <FormField label="Course" required>
+                      <select
+                        className="input w-full"
+                        value={form.course_id}
+                        onChange={(e) => setForm((f) => ({ ...f, course_id: e.target.value, batch_id: '' }))}
+                      >
+                        <option value="">Select course…</option>
+                        {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </FormField>
                     <FormField label="Batch">
-                      <select className="input w-full" {...field('batch_id')}>
-                        {batches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      <select
+                        className="input w-full"
+                        value={form.batch_id}
+                        onChange={(e) => setForm((f) => ({ ...f, batch_id: e.target.value }))}
+                        disabled={!form.course_id}
+                      >
+                        {!form.course_id && <option value="">Select a course first</option>}
+                        {form.course_id && formBatches.length === 0 && <option value="">No batches for this course</option>}
+                        {formBatches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                       </select>
                     </FormField>
                     <FormField label="Initial Status">

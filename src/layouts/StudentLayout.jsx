@@ -1,8 +1,7 @@
-import { Bell, BookOpen, FileText, Home, IndianRupee, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PenLine, PlayCircle, Settings, UserCircle } from 'lucide-react'
+import { Bell, BookOpen, FileText, FlaskConical, Home, IndianRupee, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PenLine, PlayCircle, Settings, UserCircle } from 'lucide-react'
 import { useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
-import DevRoleSwitcher from '../components/shared/DevRoleSwitcher.jsx'
 import NotificationBell from '../components/shared/NotificationBell.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
 import useScrollLock from '../hooks/useScrollLock.js'
@@ -37,9 +36,10 @@ export default function StudentLayout() {
       { to: '/student/submissions', label: 'My Submissions', icon: FileText },
       { to: '/student/progress', label: 'Progress Reports', icon: BookOpen },
       { to: '/student/fees', label: 'Fees', icon: IndianRupee },
-      { to: '/student/profile', label: 'My Profile', icon: UserCircle },
-      { to: '/student/lectures',      label: 'Lectures',      icon: PlayCircle },
-      { to: '/student/notifications', label: 'Notifications', icon: Bell },
+      { to: '/student/profile',           label: 'My Profile',       icon: UserCircle },
+      { to: '/student/profile/research',  label: 'Research Profile', icon: FlaskConical },
+      { to: '/student/lectures',          label: 'Lectures',         icon: PlayCircle },
+      { to: '/student/notifications',     label: 'Notifications',    icon: Bell },
     ],
   }]
 
@@ -73,7 +73,6 @@ export default function StudentLayout() {
         </div>
         <Outlet />
       </main>
-      {import.meta.env.DEV && <DevRoleSwitcher />}
     </div>
   )
 }

@@ -6,10 +6,12 @@ import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
 import { swaggerSpec } from './config/swagger.js';
-import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
+import { courseScope } from './middleware/courseScope.js';
 
 // Routes
 import authRoutes from './modules/auth/auth.routes.js';
+import testAuthRoutes from './modules/tests/test-auth.routes.js';
 import userRoutes from './modules/users/users.routes.js';
 import roleRoutes from './modules/roles/roles.routes.js';
 import courseRoutes from './modules/courses/courses.routes.js';
@@ -27,6 +29,7 @@ import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
 import videoRoutes from './modules/videos/videos.routes.js';
 import auditLogRoutes from './modules/audit-logs/audit-logs.routes.js';
 import settingsRoutes from './modules/settings/settings.routes.js';
+import emailRoutes from './modules/email/email.routes.js';
 
 const app = express();
 
@@ -74,6 +77,9 @@ if (env.isDev) app.use(morgan('dev'));
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Course-scope context: reads X-Course-Id header → req.courseId
+app.use(courseScope);
+
 // Health check (no auth)
 app.get('/health', (req, res) => res.json({ status: 'ok', env: env.NODE_ENV }));
 
@@ -85,6 +91,7 @@ app.get('/api-docs.json', (req, res) => res.json(swaggerSpec));
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/test-auth', testAuthRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/courses', courseRoutes);
@@ -102,6 +109,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/videos', videoRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/settings',   settingsRoutes);
+app.use('/api/email',      emailRoutes);
 
 // 404 + global error handler
 app.use(notFoundHandler);

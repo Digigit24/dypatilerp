@@ -9,6 +9,7 @@ import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { useCourseStore } from '../../store/courseStore.js'
 
 const formatCurrency = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value)
 
@@ -41,15 +42,18 @@ export default function FeesPage() {
   const [payForm, setPayForm] = useState(BLANK_PAY)
   const [saving, setSaving] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
+  const { currentCourse } = useCourseStore()
   useScrollLock(payOpen)
 
+  // Re-fetch when active course changes; X-Course-Id header is added automatically
   useEffect(() => {
+    setFees(null)
     Promise.all([getFees(), getStudents(), getUsers()]).then(([feeRes, studentRes, userRes]) => {
       setFees(feeRes.data)
       setStudents(studentRes.data)
       setUsers(userRes.data)
     })
-  }, [])
+  }, [currentCourse?.id])
 
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users])
   const studentMap = useMemo(() => Object.fromEntries(students.map((s) => [s.id, s])), [students])

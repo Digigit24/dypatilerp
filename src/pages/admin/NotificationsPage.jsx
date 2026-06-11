@@ -100,14 +100,16 @@ export default function AdminNotificationsPage() {
   const addToast      = useUiStore((s) => s.addToast)
   const { patchCurrentCourse, currentCourse } = useCourseStore()
 
-  // ── Load data ──────────────────────────────────────────────────────────────
+  // ── Load data (re-fetch when active course changes so dropdowns are course-scoped) ──
   useEffect(() => {
+    setBatches([])
+    setStudents([])
     Promise.all([getBatches(), getStudents(), getUsers()]).then(([b, s, u]) => {
       setBatches(b.data)
       setStudents(s.data)
       setUsers(u.data)
     })
-  }, [])
+  }, [currentCourse?.id])
 
   // Load rules from course preferences when tab becomes active
   useEffect(() => {

@@ -5,7 +5,9 @@ import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 
 export const list = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const { data, total } = await svc.listBatches({ ...req.query, limit, offset });
+  // X-Course-Id header takes precedence over query param
+  const course_id = req.courseId || req.query.course_id || undefined;
+  const { data, total } = await svc.listBatches({ ...req.query, course_id, limit, offset });
   res.json({ success: true, data, pagination: buildPaginationMeta(total, page, limit) });
 });
 

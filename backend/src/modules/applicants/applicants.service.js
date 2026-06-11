@@ -1,40 +1,153 @@
 import { query, getClient } from '../../config/database.js';
 
+/**
+ * Build a virtual `personal` and `academic` envelope from flat DB columns
+ * so the frontend can always access item.personal.full_name etc.
+ */
+const normalizeApplicant = (row) => {
+  const pd  = row.phd_details || {};
+  const appData = row.application_data || {};
+  const appAcademic = appData.academic || {};
+  return {
+    ...row,
+    personal: {
+      full_name:     `${row.first_name} ${row.last_name}`.trim(),
+      first_name:    row.first_name,
+      last_name:     row.last_name,
+      email:         row.email,
+      phone:         row.phone,
+      mobile:        row.phone,
+      state_country: appData.personal?.state_country || appData.state_country || '',
+    },
+    academic: {
+      // Map stored field names to the keys the frontend expects
+      phd_discipline:      pd.subject      || pd.phd_discipline      || appAcademic.phd_discipline      || appAcademic.specialization || null,
+      phd_research_title:  pd.thesis_title || pd.phd_research_title  || appAcademic.phd_research_title  || null,
+      phd_completion_year: pd.year_awarded || pd.phd_completion_year || appAcademic.phd_completion_year || appAcademic.graduation_year || null,
+      scopus_publications: pd.scopus_publications ?? appAcademic.scopus_publications ?? null,
+      university:          pd.university   || appAcademic.university   || '—',
+      highest_degree:      pd.highest_degree || appAcademic.highest_degree || 'Ph.D.',
+      specialization:      pd.subject      || appAcademic.specialization || null,
+      graduation_year:     pd.year_awarded || appAcademic.graduation_year || null,
+    },
+    research_statement: appData.research_statement || row.research_statement || null,
+  };
+};
+
 export const listApplicants = async ({ course_id, status, search, limit, offset }) => {
   const params = [];
   const conditions = [];
-  if (course_id) { params.push(course_id); conditions.push(`course_id=$${params.length}`); }
-  if (status) { params.push(status); conditions.push(`status=$${params.length}`); }
+  if (course_id) { params.push(course_id); conditions.push(`a.course_id=$${params.length}`); }
+  if (status)    { params.push(status);    conditions.push(`a.status=$${params.length}`); }
   if (search) {
     params.push(`%${search}%`);
-    conditions.push(`(first_name ILIKE $${params.length} OR last_name ILIKE $${params.length} OR email ILIKE $${params.length})`);
+    conditions.push(`(a.first_name ILIKE $${params.length} OR a.last_name ILIKE $${params.length} OR a.email ILIKE $${params.length})`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-  const { rows: data } = await query(
-    `SELECT a.*, b.name as batch_name, b.code as batch_code
-     FROM applicants a LEFT JOIN batches b ON b.id=a.batch_id
+  const { rows: rawData } = await query(
+    `SELECT a.*, b.name as batch_name, b.code as batch_code,
+            ta.score          AS test_score,
+            ta.submitted_at   AS test_submitted_at,
+            ta.time_taken_secs AS test_time_taken_secs,
+            t.total_marks     AS test_max_score
+     FROM applicants a
+     LEFT JOIN batches b ON b.id = a.batch_id
+     LEFT JOIN LATERAL (
+       SELECT score, submitted_at, time_taken_secs, test_id
+       FROM test_attempts
+       WHERE applicant_id = a.id AND status = 'submitted'
+       ORDER BY submitted_at DESC NULLS LAST LIMIT 1
+     ) ta ON true
+     LEFT JOIN tests t ON t.id = ta.test_id
      ${where} ORDER BY a.applied_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
     [...params, limit, offset]
   );
-  const { rows: [{ total }] } = await query(`SELECT COUNT(*) AS total FROM applicants ${where}`, params);
+  const { rows: [{ total }] } = await query(
+    `SELECT COUNT(*) AS total FROM applicants a ${where}`, params
+  );
+  const data = rawData.map(normalizeApplicant);
   return { data, total: parseInt(total) };
 };
 
 export const getApplicantById = async (id) => {
   const { rows } = await query(
-    `SELECT a.*, b.name as batch_name FROM applicants a LEFT JOIN batches b ON b.id=a.batch_id WHERE a.id=$1`, [id]
+    `SELECT a.*, b.name as batch_name,
+            ta.score          AS test_score,
+            ta.submitted_at   AS test_submitted_at,
+            ta.time_taken_secs AS test_time_taken_secs,
+            t.total_marks     AS test_max_score
+     FROM applicants a
+     LEFT JOIN batches b ON b.id = a.batch_id
+     LEFT JOIN LATERAL (
+       SELECT score, submitted_at, time_taken_secs, test_id
+       FROM test_attempts
+       WHERE applicant_id = a.id AND status = 'submitted'
+       ORDER BY submitted_at DESC NULLS LAST LIMIT 1
+     ) ta ON true
+     LEFT JOIN tests t ON t.id = ta.test_id
+     WHERE a.id=$1`, [id]
   );
-  return rows[0] || null;
+  return rows[0] ? normalizeApplicant(rows[0]) : null;
 };
 
 export const createApplicant = async (payload) => {
+  // Accept both flat fields and the frontend's nested personal/academic envelope
+  const p = payload.personal || {};
+  const a = payload.academic || {};
+  const first_name = payload.first_name || p.first_name || '';
+  const last_name  = payload.last_name  || p.last_name  || '';
+  const email      = payload.email      || p.email      || '';
+  const phone      = payload.phone      || p.phone      || p.mobile || null;
+  const phd_details = payload.phd_details || {
+    subject:      a.phd_discipline    || a.specialization || null,
+    thesis_title: a.phd_research_title || null,
+    year_awarded: a.phd_completion_year || a.graduation_year || null,
+    university:   a.university || null,
+    scopus_publications: a.scopus_publications ?? null,
+    highest_degree: a.highest_degree || null,
+  };
+  // Preserve the full nested structure in application_data for future reference
+  const application_data = {
+    ...(payload.application_data || {}),
+    personal: { ...p, state_country: p.state_country || null },
+    academic: a,
+    research_statement: payload.research_statement || null,
+  };
+
   const { rows } = await query(
     `INSERT INTO applicants (course_id,first_name,last_name,email,phone,phd_details,application_data)
      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [payload.course_id, payload.first_name, payload.last_name, payload.email,
-     payload.phone||null, JSON.stringify(payload.phd_details||{}), JSON.stringify(payload.application_data||{})]
+    [payload.course_id, first_name, last_name, email, phone,
+     JSON.stringify(phd_details), JSON.stringify(application_data)]
   );
-  return rows[0];
+  return normalizeApplicant(rows[0]);
+};
+
+export const updateApplicantDetails = async (id, payload) => {
+  const fields = [];
+  const params = [];
+  const allowed = ['first_name', 'last_name', 'email', 'phone'];
+  for (const key of allowed) {
+    if (payload[key] !== undefined) {
+      params.push(payload[key]);
+      fields.push(`${key}=$${params.length}`);
+    }
+  }
+  if (payload.phd_details !== undefined) {
+    params.push(JSON.stringify(payload.phd_details));
+    fields.push(`phd_details=$${params.length}::jsonb`);
+  }
+  if (payload.application_data !== undefined) {
+    params.push(JSON.stringify(payload.application_data));
+    fields.push(`application_data=$${params.length}::jsonb`);
+  }
+  if (!fields.length) return getApplicantById(id);
+  params.push(id);
+  const { rows } = await query(
+    `UPDATE applicants SET ${fields.join(',')}, updated_at=NOW() WHERE id=$${params.length} RETURNING *`,
+    params
+  );
+  return rows[0] ? normalizeApplicant(rows[0]) : null;
 };
 
 export const updateApplicantStatus = async (id, { status, batch_id }, reviewedBy) => {
@@ -43,7 +156,7 @@ export const updateApplicantStatus = async (id, { status, batch_id }, reviewedBy
      WHERE id=$4 RETURNING *`,
     [status, batch_id||null, reviewedBy, id]
   );
-  return rows[0] || null;
+  return rows[0] ? normalizeApplicant(rows[0]) : null;
 };
 
 export const convertToStudent = async (applicantId, { batch_id, enrollment_number }, enrolledBy) => {

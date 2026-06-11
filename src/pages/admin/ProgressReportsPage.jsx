@@ -6,6 +6,7 @@ import { getUsers } from '../../api/services/userService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
+import { useCourseStore } from '../../store/courseStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 export default function AdminProgressReportsPage() {
@@ -14,14 +15,16 @@ export default function AdminProgressReportsPage() {
   const [users, setUsers] = useState([])
   const [period, setPeriod] = useState(1)
   const addToast = useUiStore((s) => s.addToast)
+  const { currentCourse } = useCourseStore()
 
   useEffect(() => {
+    setReports(null)
     Promise.all([getProgressReports(), getStudents(), getUsers()]).then(([r, s, u]) => {
       setReports(r.data)
       setStudents(s.data)
       setUsers(u.data)
     })
-  }, [])
+  }, [currentCourse?.id])
 
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users])
   const studentMap = useMemo(() => Object.fromEntries(students.map((s) => [s.id, s])), [students])

@@ -78,7 +78,7 @@ const BLANK_DRAWER = { open: false, section: null, item: null, draft: {}, saving
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function StudentProfileView({ studentId, isAdminView = false }) {
+export default function StudentProfileView({ studentId, isAdminView = false, defaultTab = 'profile' }) {
   const [student,         setStudent]         = useState(null)
   const [user,            setUser]            = useState(null)
   const [research,        setResearch]        = useState(null)
@@ -87,7 +87,7 @@ export default function StudentProfileView({ studentId, isAdminView = false }) {
   const [selectedSub,     setSelectedSub]     = useState(null)
   const [subApprovals,    setSubApprovals]    = useState([])
   const [notFound,        setNotFound]        = useState(false)
-  const [tab,             setTab]             = useState('profile')
+  const [tab,             setTab]             = useState(defaultTab)
   const [bioEditing,      setBioEditing]      = useState(false)
   const [bioDraft,        setBioDraft]        = useState({})
   const [academicEditing, setAcademicEditing] = useState(false)

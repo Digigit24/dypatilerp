@@ -40,7 +40,7 @@ export const createBatch = async (payload, createdBy) => {
     `INSERT INTO batches (course_id, name, code, status, start_date, end_date, max_students, description, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
     [payload.course_id, payload.name, payload.code, payload.status,
-     payload.start_date, payload.end_date, payload.max_students, payload.description || null, createdBy]
+     payload.start_date, payload.end_date || null, payload.max_students, payload.description || null, createdBy]
   );
   return rows[0];
 };

@@ -43,7 +43,9 @@ const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 router.get('/', requirePermission('fees', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const filters = { ...req.query, limit, offset };
+  // X-Course-Id header takes precedence over query param
+  const course_id = req.courseId || req.query.course_id;
+  const filters = { ...req.query, course_id, limit, offset };
   if (req.user.roles.includes('student')) {
     filters.student_user_id = req.user.id;
   } else if (filters.student_user_id && !uuidRe.test(filters.student_user_id)) {

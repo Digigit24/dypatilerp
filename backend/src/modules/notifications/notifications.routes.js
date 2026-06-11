@@ -34,23 +34,49 @@ const TYPE_TO_EVENT = {
 };
 
 // ─── GET /notifications ───────────────────────────────────────────────────────
+// Admin/coordinator: returns all notifications for the active course.
+// Students: returns notifications received by them.
 router.get('/', requirePermission('notifications', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const isRead = req.query.is_read;
-  const params = [req.user.id];
-  let extra = '';
-  if (isRead !== undefined) {
-    params.push(isRead === 'true');
-    extra = `AND nr.is_read=$${params.length}`;
+  const isStudent = req.user.roles?.includes('student');
+  // X-Course-Id header takes precedence over query param
+  const course_id = req.courseId || req.query.course_id;
+
+  if (isStudent) {
+    // Student view: show only notifications addressed to them
+    const params = [req.user.id];
+    let extra = '';
+    const isRead = req.query.is_read;
+    if (isRead !== undefined) {
+      params.push(isRead === 'true');
+      extra = `AND nr.is_read=$${params.length}`;
+    }
+    const { rows: data } = await query(
+      `SELECT n.*, nr.is_read, nr.read_at FROM notifications n
+       JOIN notification_recipients nr ON nr.notification_id=n.id
+       WHERE nr.user_id=$1 ${extra} ORDER BY n.created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
+      [...params, limit, offset]
+    );
+    const { rows: [{ total }] } = await query(
+      `SELECT COUNT(*) AS total FROM notification_recipients WHERE user_id=$1`, [req.user.id]
+    );
+    return res.json({ success: true, data, pagination: buildPaginationMeta(parseInt(total), page, limit) });
   }
+
+  // Admin / coordinator view: list sent notifications filtered by course
+  const params = [];
+  const conds = [];
+  if (course_id) { params.push(course_id); conds.push(`n.course_id=$${params.length}`); }
+  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
   const { rows: data } = await query(
-    `SELECT n.*, nr.is_read, nr.read_at FROM notifications n
-     JOIN notification_recipients nr ON nr.notification_id=n.id
-     WHERE nr.user_id=$1 ${extra} ORDER BY n.created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
+    `SELECT n.*, COUNT(nr.user_id) AS recipient_count
+     FROM notifications n
+     LEFT JOIN notification_recipients nr ON nr.notification_id=n.id
+     ${where} GROUP BY n.id ORDER BY n.created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
     [...params, limit, offset]
   );
   const { rows: [{ total }] } = await query(
-    `SELECT COUNT(*) AS total FROM notification_recipients WHERE user_id=$1`, [req.user.id]
+    `SELECT COUNT(*) AS total FROM notifications n ${where}`, params
   );
   res.json({ success: true, data, pagination: buildPaginationMeta(parseInt(total), page, limit) });
 }));

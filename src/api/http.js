@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { useCourseStore } from '../store/courseStore.js'
 
 const BASE = import.meta.env.PROD
     ? 'https://dyperf.celiyo.com/api'
@@ -9,6 +10,14 @@ const http = axios.create({ baseURL: BASE, timeout: 15000 })
 http.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
+
+  // Attach active course so every backend list endpoint filters to the right course.
+  // useCourseStore.getState() is safe to call outside React (Zustand stores are plain JS objects).
+  const { currentCourse } = useCourseStore.getState()
+  if (currentCourse?.id) {
+    config.headers['X-Course-Id'] = currentCourse.id
+  }
+
   return config
 })
 

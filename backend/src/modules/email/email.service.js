@@ -1,85 +1,80 @@
 /**
- * Brevo (Sendinblue) transactional email service.
+ * Brevo SMTP transactional email service.
  *
- * Uses Brevo's v3 SMTP REST API directly — no SDK required, just node fetch.
- * Falls back to console-log in development if no API key is configured.
+ * Uses nodemailer + Brevo SMTP relay (smtp-relay.brevo.com:587).
+ * Falls back to console-log if no SMTP credentials are configured.
  *
  * Usage:
- *   import { sendEmail, sendNotificationEmail } from './email.service.js'
- *
- *   await sendEmail({ to: 'user@example.com', subject: 'Hello', html: '<p>Hi</p>' })
- *   await sendNotificationEmail('submission_approved', student, { submissionTitle: 'My Research' })
+ *   import { sendEmail, sendTestCredentials, sendNotificationEmail } from './email.service.js'
  */
 
+import nodemailer from 'nodemailer';
 import { env } from '../../config/env.js';
 import { query } from '../../config/database.js';
 
-const BREVO_API = 'https://api.brevo.com/v3/smtp/email';
+// ─── Transporter factory ──────────────────────────────────────────────────────
+
+let _transporter = null;
+
+const getTransporter = () => {
+  if (_transporter) return _transporter;
+  if (!env.BREVO_SMTP_USER || !env.BREVO_SMTP_PASS) return null;
+  _transporter = nodemailer.createTransport({
+    host: env.BREVO_SMTP_HOST,
+    port: env.BREVO_SMTP_PORT,
+    secure: false,          // STARTTLS on port 587
+    auth: {
+      user: env.BREVO_SMTP_USER,
+      pass: env.BREVO_SMTP_PASS,
+    },
+  });
+  return _transporter;
+};
 
 // ─── Core sender ──────────────────────────────────────────────────────────────
 
 /**
- * Send a single transactional email via Brevo REST API.
+ * Send a single transactional email.
  *
  * @param {object} opts
  * @param {string|{email:string,name?:string}|Array} opts.to
  * @param {string} opts.subject
  * @param {string} opts.html
  * @param {string} [opts.text]
- * @param {{email:string,name?:string}} [opts.sender]   – override default sender
- * @param {string} [opts.apiKey]                         – override API key (from DB settings)
+ * @param {{email:string,name?:string}} [opts.sender]  – override default sender
  * @returns {Promise<{success:boolean, messageId?:string, error?:string}>}
  */
-export const sendEmail = async ({ to, subject, html, text, sender, apiKey } = {}) => {
-  // Resolve API key: passed-in > env var
-  const key = apiKey || env.BREVO_API_KEY;
+export const sendEmail = async ({ to, subject, html, text, sender } = {}) => {
+  const transport = getTransporter();
 
-  if (!key) {
-    console.log('[email] No Brevo API key configured — skipping send');
+  if (!transport) {
+    console.log('[email] SMTP not configured — mock send');
     console.log(`[email] MOCK → To: ${JSON.stringify(to)} | Subject: ${subject}`);
     return { success: true, mock: true };
   }
 
-  // Normalise "to" → array of {email, name?}
+  // Normalise "to" → nodemailer address format
   const recipients = Array.isArray(to)
-    ? to.map((r) => (typeof r === 'string' ? { email: r } : r))
-    : [typeof to === 'string' ? { email: to } : to];
+    ? to.map((r) => (typeof r === 'string' ? r : `${r.name || ''} <${r.email}>`))
+    : [typeof to === 'string' ? to : `${to.name || ''} <${to.email}>`];
 
-  const defaultSender = {
-    name:  env.BREVO_SENDER_NAME  || 'DY Patil ERP',
-    email: env.BREVO_SENDER_EMAIL || 'noreply@example.com',
-  };
-
-  const payload = {
-    sender:   sender || defaultSender,
-    to:       recipients,
-    subject,
-    htmlContent: html,
-    ...(text && { textContent: text }),
+  const effectiveSender = sender || {
+    name:  env.BREVO_SENDER_NAME,
+    email: env.BREVO_SENDER_EMAIL,
   };
 
   try {
-    const res = await fetch(BREVO_API, {
-      method:  'POST',
-      headers: {
-        'accept':       'application/json',
-        'content-type': 'application/json',
-        'api-key':      key,
-      },
-      body: JSON.stringify(payload),
+    const info = await transport.sendMail({
+      from:    `"${effectiveSender.name}" <${effectiveSender.email}>`,
+      to:      recipients.join(', '),
+      subject,
+      html,
+      ...(text && { text }),
     });
-
-    if (!res.ok) {
-      const errBody = await res.text();
-      console.error(`[email] Brevo error ${res.status}:`, errBody);
-      return { success: false, error: `Brevo ${res.status}: ${errBody}` };
-    }
-
-    const data = await res.json();
-    console.log('[email] Sent → messageId:', data.messageId);
-    return { success: true, messageId: data.messageId };
+    console.log('[email] Sent →', info.messageId, '→', recipients);
+    return { success: true, messageId: info.messageId };
   } catch (err) {
-    console.error('[email] Fetch error:', err.message);
+    console.error('[email] SMTP error:', err.message);
     return { success: false, error: err.message };
   }
 };
@@ -90,7 +85,6 @@ let _cachedBrevoConfig = null;
 let _cacheTs = 0;
 
 const getBrevoConfig = async () => {
-  // Cache for 60 s to avoid a DB hit on every email
   if (_cachedBrevoConfig && Date.now() - _cacheTs < 60_000) return _cachedBrevoConfig;
   try {
     const { rows: [row] } = await query(`SELECT value FROM app_settings WHERE key='brevo'`);
@@ -102,12 +96,11 @@ const getBrevoConfig = async () => {
   return _cachedBrevoConfig;
 };
 
-/** Bust the Brevo config cache (call after saving new settings) */
 export const bustBrevoCache = () => { _cachedBrevoConfig = null; };
 
-// ─── Email templates ──────────────────────────────────────────────────────────
+// ─── HTML base template ────────────────────────────────────────────────────────
 
-const base = (body) => `<!DOCTYPE html>
+const base = (body, courseName = 'DY Patil ERP') => `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -122,9 +115,13 @@ const base = (body) => `<!DOCTYPE html>
     .body h2{margin:0 0 12px;font-size:18px;color:#111827}
     .body p{margin:0 0 16px;color:#374151;line-height:1.6;font-size:14px}
     .cta{display:inline-block;margin:8px 0 20px;padding:12px 24px;background:#4F46E5;color:#fff!important;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px}
+    .cta:hover{background:#4338CA}
     .info-box{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:16px 0}
     .info-box p{margin:4px 0;font-size:13px;color:#6b7280}
     .info-box strong{color:#111827}
+    .cred-box{background:#fefce8;border:2px solid #facc15;border-radius:12px;padding:20px;margin:16px 0}
+    .cred-box p{margin:6px 0;font-size:14px;color:#713f12}
+    .cred-box .val{font-family:monospace;font-size:16px;font-weight:700;color:#1e1b4b;background:#fff;padding:4px 10px;border-radius:6px;display:inline-block;letter-spacing:.5px}
     .footer{padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af}
     .badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600}
     .badge-green{background:#d1fae5;color:#065f46}
@@ -135,18 +132,59 @@ const base = (body) => `<!DOCTYPE html>
 <body>
   <div class="wrap">
     <div class="header">
-      <h1>DY Patil ERP</h1>
+      <h1>${courseName}</h1>
       <p>Research Program Management System</p>
     </div>
     <div class="body">${body}</div>
     <div class="footer">
-      <p>This is an automated message from DY Patil ERP. Please do not reply to this email.</p>
+      <p>This is an automated message. Please do not reply to this email.</p>
     </div>
   </div>
 </body>
 </html>`;
 
+// ─── Email templates ──────────────────────────────────────────────────────────
+
 const templates = {
+
+  // ── Test credentials sent when admin assigns test to applicant ──
+  test_credentials: ({ firstName, testTitle, username, password, loginUrl, duration, sections }) => ({
+    subject: `Your Entrance Test Credentials — ${testTitle}`,
+    html: base(`
+      <h2>Entrance Test Invitation</h2>
+      <p>Dear ${firstName},</p>
+      <p>You have been invited to take the <strong>${testTitle}</strong>. Please find your login credentials below.</p>
+
+      <div class="cred-box">
+        <p><strong>🔗 Test Login Link:</strong></p>
+        <p style="word-break:break-all;margin:8px 0 12px">
+          <a href="${loginUrl}" style="color:#4F46E5;font-weight:600">${loginUrl}</a>
+        </p>
+        <p><strong>👤 Username:</strong> <span class="val">${username}</span></p>
+        <p><strong>🔑 Password:</strong> <span class="val">${password}</span></p>
+      </div>
+
+      <div class="info-box">
+        <p><strong>Test:</strong> ${testTitle}</p>
+        <p><strong>Duration:</strong> ${duration} minutes</p>
+        ${sections ? `<p><strong>Sections:</strong> ${sections}</p>` : ''}
+        <p><strong>Important:</strong> Once you click "Start Test", the timer begins and cannot be paused.</p>
+      </div>
+
+      <a href="${loginUrl}" class="cta">Login &amp; Take Test →</a>
+
+      <p><strong>Instructions:</strong></p>
+      <ul style="color:#374151;font-size:14px;line-height:1.8;padding-left:20px">
+        <li>Click the link above (or copy it to your browser)</li>
+        <li>Log in with the username and password provided</li>
+        <li>Read the instructions carefully before starting</li>
+        <li>The timer starts when you click "Start Test" — it will not stop if you disconnect</li>
+        <li>Your answers are saved automatically every 30 seconds</li>
+      </ul>
+      <p>Best regards,<br/><strong>DY Patil Admissions Team</strong></p>
+    `),
+  }),
+
   application_submitted: ({ firstName, applicationId }) => ({
     subject: 'Application Received — DY Patil PhD Program',
     html: base(`
@@ -184,14 +222,13 @@ const templates = {
     html: base(`
       <h2>New Approval Stage Opened</h2>
       <p>Dear ${firstName},</p>
-      <p>A new approval stage has been opened for your submission. A reviewer has been assigned and will evaluate your work.</p>
+      <p>A new approval stage has been opened for your submission.</p>
       <div class="info-box">
         <p><strong>Submission:</strong> ${submissionTitle}</p>
         <p><strong>Stage:</strong> ${stageName}</p>
         ${reviewerName ? `<p><strong>Reviewer:</strong> ${reviewerName}</p>` : ''}
         <p><strong>Status:</strong> <span class="badge badge-yellow">Pending Review</span></p>
       </div>
-      <p>You will be notified when the review is complete.</p>
       <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
     `),
   }),
@@ -208,7 +245,6 @@ const templates = {
         <p><strong>Status:</strong> <span class="badge badge-green">Approved</span></p>
         ${comments ? `<p><strong>Comments:</strong> ${comments}</p>` : ''}
       </div>
-      <p>You may proceed to the next stage of your research program.</p>
       <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
     `),
   }),
@@ -218,7 +254,7 @@ const templates = {
     html: base(`
       <h2>Revision Requested</h2>
       <p>Dear ${firstName},</p>
-      <p>Your submission has been reviewed and requires revision before it can be approved.</p>
+      <p>Your submission has been reviewed and requires revision.</p>
       <div class="info-box">
         <p><strong>Submission:</strong> ${submissionTitle}</p>
         ${approverName ? `<p><strong>Reviewer:</strong> ${approverName}</p>` : ''}
@@ -226,7 +262,6 @@ const templates = {
         ${comments ? `<p><strong>Feedback:</strong> ${comments}</p>` : ''}
         ${suggestedTitle ? `<p><strong>Suggested Title:</strong> ${suggestedTitle}</p>` : ''}
       </div>
-      <p>Please log in to the ERP portal to view the full feedback and resubmit your work.</p>
       <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
     `),
   }),
@@ -243,7 +278,6 @@ const templates = {
         <p><strong>Due Date:</strong> ${dueDate || 'N/A'}</p>
         <p><strong>Status:</strong> <span class="badge badge-red">Overdue</span></p>
       </div>
-      <p>Please log in to the ERP portal immediately to submit your progress report. Contact your guide if you need an extension.</p>
       <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
     `),
   }),
@@ -253,14 +287,12 @@ const templates = {
     html: base(`
       <h2>Fee Payment Reminder</h2>
       <p>Dear ${firstName},</p>
-      <p>This is a reminder that your semester fee payment is due.</p>
       <div class="info-box">
         <p><strong>Semester:</strong> ${semester}</p>
         <p><strong>Amount Due:</strong> ₹${Number(amount).toLocaleString('en-IN')}</p>
         <p><strong>Due Date:</strong> ${dueDate || 'N/A'}</p>
         <p><strong>Status:</strong> <span class="badge badge-yellow">Payment Pending</span></p>
       </div>
-      <p>Please contact the accounts office to make your payment and avoid any late fees.</p>
       <p>Best regards,<br/><strong>DY Patil Accounts Team</strong></p>
     `),
   }),
@@ -291,51 +323,101 @@ const templates = {
   }),
 };
 
-// ─── High-level notification email sender ─────────────────────────────────────
+// ─── High-level helpers ───────────────────────────────────────────────────────
 
 /**
- * Send a templated notification email.
- *
- * @param {string} eventKey - e.g. 'submission_approved', 'deadline_overdue'
- * @param {{email:string, first_name:string}} recipient
- * @param {object} data - template-specific variables
- * @param {string} [courseId] - if provided, loads per-course sender config
+ * Send test credentials to one applicant.
+ * Called by test-assign.routes.js after creating a token.
+ */
+export const sendTestCredentials = async ({
+  applicant,       // { first_name, last_name, email }
+  test,            // { title, duration_minutes }
+  sections,        // array of section titles
+  username,
+  password,
+  loginUrl,
+  courseId,
+}) => {
+  const sectionStr = sections?.map((s) => s.title || s).join(', ') || null;
+  const { subject, html } = templates.test_credentials({
+    firstName: applicant.first_name,
+    testTitle: test.title,
+    username,
+    password,
+    loginUrl,
+    duration: test.duration_minutes,
+    sections: sectionStr,
+  });
+
+  // Plain-text fallback — keeps credentials on separate lines so no email client
+  // can accidentally concatenate URL + credentials into one broken hyperlink.
+  const text = [
+    `Entrance Test Invitation — ${test.title}`,
+    '',
+    `Dear ${applicant.first_name},`,
+    '',
+    'You have been invited to take an entrance test. Use the details below to log in.',
+    '',
+    `Test Login Link:`,
+    loginUrl,
+    '',
+    `Username: ${username}`,
+    `Password: ${password}`,
+    '',
+    `Test:     ${test.title}`,
+    `Duration: ${test.duration_minutes} minutes`,
+    ...(sectionStr ? [`Sections: ${sectionStr}`] : []),
+    '',
+    'IMPORTANT: Once you click "Start Test", the timer begins and cannot be paused.',
+    '',
+    'Instructions:',
+    '1. Open the link above in your browser',
+    '2. Log in with the username and password above',
+    '3. Read the instructions carefully before starting',
+    '4. Your answers are saved automatically every 30 seconds',
+    '',
+    'Best regards,',
+    'DY Patil Admissions Team',
+  ].join('\n');
+
+  return sendEmail({
+    to: { email: applicant.email, name: `${applicant.first_name} ${applicant.last_name}` },
+    subject,
+    html,
+    text,
+  });
+};
+
+/**
+ * Send a templated notification email, with optional per-course sender override.
  */
 export const sendNotificationEmail = async (eventKey, recipient, data = {}, courseId = null) => {
   try {
-    // 1. Load Brevo config from DB (with cache)
     const brevoConfig = await getBrevoConfig();
 
-    // 2. Determine effective API key and sender
-    const apiKey = brevoConfig.apiKey || env.BREVO_API_KEY;
-    const sender = brevoConfig.enabled !== false
-      ? { name: brevoConfig.senderName || env.BREVO_SENDER_NAME, email: brevoConfig.senderEmail || env.BREVO_SENDER_EMAIL }
-      : null;
-
-    // 3. Check course-specific notification rule
+    let senderOverride = null;
     if (courseId) {
       const { rows: [course] } = await query(
         `SELECT preferences FROM courses WHERE id=$1`, [courseId]
       ).catch(() => ({ rows: [] }));
       const courseEmailPrefs = course?.preferences?.email || {};
       const rules = courseEmailPrefs.notificationRules || {};
-      // If there's a rule explicitly set to false for this event, skip
       if (rules[eventKey]?.email === false) {
-        console.log(`[email] Rule disabled for event "${eventKey}" in course ${courseId}`);
+        console.log(`[email] Rule disabled for "${eventKey}" in course ${courseId}`);
         return { success: true, skipped: true };
       }
-      // Use course-level sender override if set
       if (courseEmailPrefs.senderName || courseEmailPrefs.senderEmail) {
-        sender.name  = courseEmailPrefs.senderName  || sender?.name;
-        sender.email = courseEmailPrefs.senderEmail || sender?.email;
+        senderOverride = {
+          name:  courseEmailPrefs.senderName  || env.BREVO_SENDER_NAME,
+          email: courseEmailPrefs.senderEmail || env.BREVO_SENDER_EMAIL,
+        };
       }
     }
 
-    // 4. Build template
     const template = templates[eventKey];
     if (!template) {
       console.warn(`[email] No template for event "${eventKey}"`);
-      return { success: false, error: `No template for event: ${eventKey}` };
+      return { success: false, error: `No template: ${eventKey}` };
     }
 
     const { subject, html } = template({
@@ -347,8 +429,7 @@ export const sendNotificationEmail = async (eventKey, recipient, data = {}, cour
       to: { email: recipient.email, name: `${recipient.first_name || ''} ${recipient.last_name || ''}`.trim() },
       subject,
       html,
-      sender,
-      apiKey,
+      ...(senderOverride && { sender: senderOverride }),
     });
   } catch (err) {
     console.error('[email] sendNotificationEmail error:', err.message);

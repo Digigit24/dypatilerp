@@ -1,11 +1,12 @@
 import { query } from '../../config/database.js';
 
-export const listFees = async ({ batch_id, student_user_id, status, limit, offset }) => {
+export const listFees = async ({ batch_id, student_user_id, status, course_id, limit, offset }) => {
   const params = [];
   const conds = [];
-  if (batch_id) { params.push(batch_id); conds.push(`f.batch_id=$${params.length}`); }
-  if (student_user_id) { params.push(student_user_id); conds.push(`f.student_user_id=$${params.length}`); }
-  if (status) { params.push(status); conds.push(`f.status=$${params.length}`); }
+  if (course_id)        { params.push(course_id);        conds.push(`b.course_id=$${params.length}`);         }
+  if (batch_id)         { params.push(batch_id);         conds.push(`f.batch_id=$${params.length}`);          }
+  if (student_user_id)  { params.push(student_user_id);  conds.push(`f.student_user_id=$${params.length}`);   }
+  if (status)           { params.push(status);           conds.push(`f.status=$${params.length}`);            }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
   const { rows: data } = await query(
     `SELECT f.*, u.first_name, u.last_name, u.email, b.name as batch_name,

@@ -29,9 +29,10 @@ const toCSV = (rows) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
 const buildWhere = (q) => {
   const params = [];
   const conds  = [];
-  if (q.batch_id) { params.push(q.batch_id);           conds.push(`be.batch_id=$${params.length}`);   }
-  if (q.status)   { params.push(q.status);              conds.push(`be.status=$${params.length}`);     }
-  if (q.search)   {
+  if (q.course_id) { params.push(q.course_id);          conds.push(`b.course_id=$${params.length}`);   }
+  if (q.batch_id)  { params.push(q.batch_id);           conds.push(`be.batch_id=$${params.length}`);   }
+  if (q.status)    { params.push(q.status);              conds.push(`be.status=$${params.length}`);     }
+  if (q.search)    {
     params.push(`%${q.search}%`);
     conds.push(`(u.first_name ILIKE $${params.length} OR u.last_name ILIKE $${params.length} OR u.email ILIKE $${params.length})`);
   }
@@ -41,7 +42,8 @@ const buildWhere = (q) => {
 // ─── GET /students/export ─────────────────────────────────────────────────────
 // IMPORTANT: must be declared BEFORE /:id to avoid route shadowing
 router.get('/export', requirePermission('students', 'read'), asyncHandler(async (req, res) => {
-  const { params, where } = buildWhere(req.query);
+  const course_id = req.courseId || req.query.course_id;
+  const { params, where } = buildWhere({ ...req.query, course_id });
 
   const { rows } = await query(
     `SELECT u.first_name, u.last_name, u.email, u.phone,
@@ -233,7 +235,9 @@ router.post('/bulk-action', requirePermission('students', 'update'), asyncHandle
 // ─── GET /students ────────────────────────────────────────────────────────────
 router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const { params, where } = buildWhere(req.query);
+  // X-Course-Id header takes precedence over query param
+  const course_id = req.courseId || req.query.course_id;
+  const { params, where } = buildWhere({ ...req.query, course_id });
 
   const { rows: data } = await query(
     `SELECT be.*, u.first_name, u.last_name, u.email, u.phone, u.avatar_url,
@@ -247,7 +251,9 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
   );
   const { rows: [{ total }] } = await query(
     `SELECT COUNT(*) AS total FROM batch_enrollments be
-     JOIN users u ON u.id=be.user_id ${where}`, params
+     JOIN users u ON u.id=be.user_id
+     JOIN batches b ON b.id=be.batch_id
+     ${where}`, params
   );
   res.json({ success: true, data, pagination: buildPaginationMeta(parseInt(total), page, limit) });
 }));

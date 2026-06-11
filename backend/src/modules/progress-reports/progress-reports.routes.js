@@ -39,20 +39,30 @@ const updateSchema = z.object({
  */
 router.get('/', requirePermission('progress_reports', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
+  // X-Course-Id header takes precedence over query param
+  const course_id = req.courseId || req.query.course_id;
   const params = [];
   const conds = [];
-  if (req.query.batch_id) { params.push(req.query.batch_id); conds.push(`pr.batch_id=$${params.length}`); }
+  if (course_id)                 { params.push(course_id);              conds.push(`b.course_id=$${params.length}`); }
+  if (req.query.batch_id)        { params.push(req.query.batch_id);     conds.push(`pr.batch_id=$${params.length}`); }
   if (req.query.student_user_id) { params.push(req.query.student_user_id); conds.push(`pr.student_user_id=$${params.length}`); }
-  if (req.query.semester) { params.push(req.query.semester); conds.push(`pr.semester=$${params.length}`); }
+  if (req.query.semester)        { params.push(req.query.semester);     conds.push(`pr.semester=$${params.length}`); }
   if (req.user.roles.includes('student')) { params.push(req.user.id); conds.push(`pr.student_user_id=$${params.length}`); }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+  // Always JOIN batches b so b.course_id filter works in WHERE
   const { rows: data } = await query(
-    `SELECT pr.*, u.first_name, u.last_name, b.name as batch_name FROM progress_reports pr
-     JOIN users u ON u.id=pr.student_user_id JOIN batches b ON b.id=pr.batch_id
+    `SELECT pr.*, u.first_name, u.last_name, b.name as batch_name, b.course_id
+     FROM progress_reports pr
+     JOIN users u ON u.id=pr.student_user_id
+     JOIN batches b ON b.id=pr.batch_id
      ${where} ORDER BY pr.created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
     [...params, limit, offset]
   );
-  const { rows: [{ total }] } = await query(`SELECT COUNT(*) AS total FROM progress_reports pr ${where}`, params);
+  const { rows: [{ total }] } = await query(
+    `SELECT COUNT(*) AS total FROM progress_reports pr
+     JOIN batches b ON b.id=pr.batch_id
+     ${where}`, params
+  );
   res.json({ success: true, data, pagination: buildPaginationMeta(parseInt(total), page, limit) });
 }));
 

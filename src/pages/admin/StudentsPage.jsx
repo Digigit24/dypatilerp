@@ -16,6 +16,7 @@ import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { useCourseStore } from '../../store/courseStore.js'
 
 const STATUS_TABS = ['all', 'active', 'inactive']
 
@@ -39,6 +40,7 @@ export default function StudentsPage() {
   const [exportLoading,  setExportLoading]  = useState(false)
   const [showImport,     setShowImport]     = useState(false)
   const addToast = useUiStore((s) => s.addToast)
+  const { currentCourse } = useCourseStore()
 
   useScrollLock(Boolean(selected) || showImport)
 
@@ -48,7 +50,12 @@ export default function StudentsPage() {
       setUsers(userRes.data)
     })
 
-  useEffect(() => { loadStudents() }, [])
+  // Re-fetch when the active course changes; X-Course-Id header is added automatically
+  useEffect(() => {
+    setItems(null)
+    setSelectedIds(new Set())
+    loadStudents()
+  }, [currentCourse?.id])
 
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users])
   const nameOf  = (s) => {

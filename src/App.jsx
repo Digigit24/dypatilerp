@@ -33,7 +33,10 @@ import ConfirmationPage from './pages/public/ConfirmationPage.jsx'
 import LandingPage from './pages/public/LandingPage.jsx'
 import OnboardPage from './pages/public/OnboardPage.jsx'
 import PublicProfilePage from './pages/public/PublicProfilePage.jsx'
+import TestLoginPage from './pages/public/TestLoginPage.jsx'
+import TestInstructionsPage from './pages/public/TestInstructionsPage.jsx'
 import TestPage from './pages/public/TestPage.jsx'
+import ApplicantTestResultsPage from './pages/admin/ApplicantTestResultsPage.jsx'
 import DashboardPage from './pages/student/DashboardPage.jsx'
 import StudentFeesPage from './pages/student/FeesPage.jsx'
 import NotificationsPage from './pages/student/NotificationsPage.jsx'
@@ -66,6 +69,8 @@ export default function App() {
           <Route path="/apply" element={<ApplyPage />} />
           <Route path="/confirmation" element={<ConfirmationPage />} />
         </Route>
+        <Route path="/test-login" element={<TestLoginPage />} />
+        <Route path="/test/:testId/instructions" element={<TestInstructionsPage />} />
         <Route path="/test/:testId" element={<TestPage />} />
         <Route path="/onboard" element={<OnboardPage />} />
         <Route path="/p/:slug" element={<PublicProfilePage />} />
@@ -113,6 +118,7 @@ export default function App() {
           <Route path="approvals" element={<ApprovalsPage />} />
           <Route path="fees" element={<FeesPage />} />
           <Route path="test-builder" element={<TestBuilderPage />} />
+          <Route path="applicants/:applicantId/test-results" element={<ApplicantTestResultsPage />} />
           <Route path="notifications" element={<AdminNotificationsPage />} />
           <Route path="lectures" element={<LecturesManagePage />} />
           <Route path="lectures/:id" element={<AdminLectureDetailPage />} />

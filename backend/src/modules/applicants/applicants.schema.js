@@ -1,18 +1,47 @@
 import { z } from 'zod';
 
-export const createApplicantSchema = z.object({
-  course_id: z.string().uuid(),
-  first_name: z.string().min(1).max(100),
-  last_name: z.string().min(1).max(100),
-  email: z.string().email(),
-  phone: z.string().optional(),
-  phd_details: z.object({
-    university: z.string().optional(),
-    year_awarded: z.number().int().optional(),
-    subject: z.string().optional(),
-    thesis_title: z.string().optional(),
-  }).optional().default({}),
-  application_data: z.record(z.any()).optional().default({}),
+const personalSchema = z.object({
+  full_name:     z.string().optional(),
+  first_name:    z.string().min(1),
+  last_name:     z.string().min(1),
+  email:         z.string().email(),
+  phone:         z.string().optional(),
+  mobile:        z.string().optional(),
+  state_country: z.string().optional(),
+});
+
+const academicSchema = z.record(z.any()).optional();
+
+export const createApplicantSchema = z.union([
+  // Flat structure (direct API usage)
+  z.object({
+    course_id:        z.string().uuid().optional(),
+    batch_id:         z.string().uuid().optional(),
+    first_name:       z.string().min(1).max(100),
+    last_name:        z.string().min(1).max(100),
+    email:            z.string().email(),
+    phone:            z.string().optional(),
+    phd_details:      z.record(z.any()).optional().default({}),
+    application_data: z.record(z.any()).optional().default({}),
+  }),
+  // Nested structure (frontend form)
+  z.object({
+    course_id:          z.string().uuid().optional(),
+    batch_id:           z.string().uuid().optional(),
+    personal:           personalSchema,
+    academic:           academicSchema,
+    research_statement: z.string().optional(),
+    application_data:   z.record(z.any()).optional().default({}),
+  }),
+]);
+
+export const updateApplicantDetailsSchema = z.object({
+  first_name:    z.string().min(1).max(100).optional(),
+  last_name:     z.string().min(1).max(100).optional(),
+  email:         z.string().email().optional(),
+  phone:         z.string().optional(),
+  phd_details:   z.record(z.any()).optional(),
+  application_data: z.record(z.any()).optional(),
 });
 
 export const updateApplicantStatusSchema = z.object({

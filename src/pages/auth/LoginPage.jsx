@@ -62,7 +62,7 @@ export default function LoginPage() {
       >
         <div>
           <p className="text-white/80 text-sm font-semibold tracking-widest uppercase">
-            DY Patil Education Foundation
+            Dr. D. Y. Patil Education and Research Foundation
           </p>
           <h1 className="mt-6 text-4xl font-bold text-white leading-tight">
             Applied Business<br />Research Fellowship

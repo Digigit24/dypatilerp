@@ -58,6 +58,12 @@ export const createApplicant = async (payload) => {
   return ok(normalize(res.data))
 }
 
+export const updateApplicantDetails = async (id, payload) => {
+  if (USE_MOCK) { await delay(); const item = byId(APPLICANTS, id); return item ? ok({ ...item, ...payload }) : notFound() }
+  const { data: res } = await http.put(`/applicants/${id}`, payload)
+  return ok(normalize(res.data))
+}
+
 export const updateApplicantStatus = async (id, status, batch_id) => {
   if (USE_MOCK) { await delay(); const item = byId(APPLICANTS, id); return item ? ok({ ...item, status }) : notFound() }
   const { data: res } = await http.put(`/applicants/${id}/status`, { status, batch_id })

@@ -16,7 +16,9 @@ export const list = asyncHandler(async (req, res) => {
   const is_published = req.query.is_published !== undefined
     ? req.query.is_published === 'true'
     : (req.user.roles?.includes('admin') || req.user.roles?.includes('coordinator') ? undefined : true);
-  const { data, total } = await svc.listVideos({ course_id: req.query.course_id, batch_id: req.query.batch_id, is_published, limit, offset });
+  // X-Course-Id header takes precedence over query param
+  const course_id = req.courseId || req.query.course_id;
+  const { data, total } = await svc.listVideos({ course_id, batch_id: req.query.batch_id, is_published, limit, offset });
   res.json({ success: true, data, pagination: buildPaginationMeta(total, page, limit) });
 });
 

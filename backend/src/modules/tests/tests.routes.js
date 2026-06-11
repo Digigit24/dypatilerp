@@ -8,53 +8,58 @@ import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate.js';
 
+// Mount sub-routers
+import sectionRoutes from './test-sections.routes.js';
+import assignRoutes  from './test-assign.routes.js';
+
 const router = Router();
 
+// ── Sub-routers ────────────────────────────────────────────────────────────────
+router.use('/:testId/sections', sectionRoutes);
+router.use('/:id/assign',       assignRoutes);
+
+// ── Schemas ────────────────────────────────────────────────────────────────────
 const createTestSchema = z.object({
-  course_id: z.string().uuid(),
-  batch_id: z.string().uuid().optional(),
-  title: z.string().min(2).max(255),
-  description: z.string().optional(),
-  type: z.enum(['entrance','assessment','quiz']).default('entrance'),
-  duration_minutes: z.number().int().min(1).default(60),
-  total_marks: z.number().int().min(1).default(100),
-  passing_marks: z.number().int().optional(),
-  instructions: z.string().optional(),
-  start_time: z.string().datetime().optional(),
-  end_time: z.string().datetime().optional(),
+  course_id:        z.string().uuid().optional().nullable(),
+  batch_id:         z.string().uuid().optional(),
+  title:            z.string().min(2).max(255),
+  description:      z.string().optional(),
+  type:             z.enum(['entrance','assessment','quiz']).default('entrance'),
+  duration_minutes: z.number().int().min(1).default(90),
+  total_marks:      z.number().int().min(1).default(100),
+  passing_marks:    z.number().int().optional(),
+  instructions:     z.string().optional(),
+  start_time:       z.string().datetime().optional(),
+  end_time:         z.string().datetime().optional(),
 });
 
 const questionSchema = z.object({
   question_type: z.enum(['mcq','short_answer','long_answer','true_false','file_upload']),
   question_text: z.string().min(1),
-  marks: z.number().int().min(1).default(1),
-  order_index: z.number().int().default(0),
-  is_required: z.boolean().default(true),
-  config: z.record(z.any()).default({}),
+  section_id:    z.string().uuid().optional().nullable(),
+  marks:         z.number().int().min(1).default(1),
+  order_index:   z.number().int().default(0),
+  is_required:   z.boolean().default(true),
+  config:        z.record(z.any()).default({}),
 });
 
-/**
- * @swagger
- * /tests:
- *   get:
- *     tags: [Tests]
- *     summary: List tests (filter by course_id, batch_id, type, status)
- *     responses:
- *       200:
- *         description: Paginated tests
- */
+// ── List tests ─────────────────────────────────────────────────────────────────
 router.get('/', authenticate, requirePermission('tests', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   const params = [];
   const conds = [];
-  if (req.query.course_id) { params.push(req.query.course_id); conds.push(`t.course_id=$${params.length}`); }
-  if (req.query.batch_id) { params.push(req.query.batch_id); conds.push(`t.batch_id=$${params.length}`); }
-  if (req.query.status) { params.push(req.query.status); conds.push(`t.status=$${params.length}`); }
+  // X-Course-Id header takes precedence over query param
+  const courseId = req.courseId || req.query.course_id;
+  if (courseId)            { params.push(courseId);            conds.push(`t.course_id=$${params.length}`); }
+  if (req.query.batch_id)  { params.push(req.query.batch_id);  conds.push(`t.batch_id=$${params.length}`);  }
+  if (req.query.status)    { params.push(req.query.status);    conds.push(`t.status=$${params.length}`);    }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
   const { rows: data } = await query(
-    `SELECT t.*, c.name as course_name,
-            (SELECT COUNT(*) FROM test_questions WHERE test_id=t.id) as question_count
-     FROM tests t JOIN courses c ON c.id=t.course_id
+    `SELECT t.*, c.name AS course_name,
+            (SELECT COUNT(*) FROM test_questions WHERE test_id=t.id)::int   AS question_count,
+            (SELECT COUNT(*) FROM test_sections  WHERE test_id=t.id)::int   AS section_count,
+            (SELECT COUNT(*) FROM test_access_tokens WHERE test_id=t.id)::int AS assigned_count
+     FROM tests t LEFT JOIN courses c ON c.id=t.course_id
      ${where} ORDER BY t.created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
     [...params, limit, offset]
   );
@@ -62,35 +67,27 @@ router.get('/', authenticate, requirePermission('tests', 'read'), asyncHandler(a
   res.json({ success: true, data, pagination: buildPaginationMeta(parseInt(total), page, limit) });
 }));
 
-/**
- * @swagger
- * /tests/{id}:
- *   get:
- *     tags: [Tests]
- *     summary: Get test by ID (with questions if published)
- *     responses:
- *       200:
- *         description: Test detail
- */
+// ── Get test by ID (with sections + questions) ─────────────────────────────────
 router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
   const { rows: [test] } = await query('SELECT * FROM tests WHERE id=$1', [req.params.id]);
   if (!test) return notFound(res, 'Test not found');
-  const { rows: questions } = await query(
-    'SELECT * FROM test_questions WHERE test_id=$1 ORDER BY order_index ASC', [test.id]
+
+  const { rows: sections } = await query(
+    'SELECT * FROM test_sections WHERE test_id=$1 ORDER BY order_index ASC', [test.id]
   );
-  ok(res, { ...test, questions });
+  const { rows: questions } = await query(
+    `SELECT * FROM test_questions WHERE test_id=$1 ORDER BY order_index ASC`,
+    [test.id]
+  );
+  // Nest questions inside their sections
+  const sectionsWithQ = sections.map((s) => ({
+    ...s,
+    questions: questions.filter((q) => q.section_id === s.id),
+  }));
+  ok(res, { ...test, sections: sectionsWithQ, questions });
 }));
 
-/**
- * @swagger
- * /tests:
- *   post:
- *     tags: [Tests]
- *     summary: Create a new test
- *     responses:
- *       201:
- *         description: Test created in draft
- */
+// ── Create test ────────────────────────────────────────────────────────────────
 router.post('/', authenticate, requirePermission('tests', 'create'), validate(createTestSchema), asyncHandler(async (req, res) => {
   const b = req.body;
   const { rows: [test] } = await query(
@@ -102,61 +99,92 @@ router.post('/', authenticate, requirePermission('tests', 'create'), validate(cr
   created(res, test, 'Test created');
 }));
 
-/**
- * @swagger
- * /tests/{id}/publish:
- *   post:
- *     tags: [Tests]
- *     summary: Publish a draft test (makes it available to applicants/students)
- *     responses:
- *       200:
- *         description: Test published
- */
-router.post('/:id/publish', authenticate, requirePermission('tests', 'update'), asyncHandler(async (req, res) => {
+// ── Update test metadata ───────────────────────────────────────────────────────
+router.patch('/:id', authenticate, requirePermission('tests', 'update'), asyncHandler(async (req, res) => {
+  const b = req.body;
   const { rows: [test] } = await query(
-    `UPDATE tests SET status='published', updated_at=NOW() WHERE id=$1 AND status='draft' RETURNING *`, [req.params.id]
+    `UPDATE tests SET
+       title            = COALESCE($1, title),
+       description      = COALESCE($2, description),
+       instructions     = COALESCE($3, instructions),
+       duration_minutes = COALESCE($4, duration_minutes),
+       total_marks      = COALESCE($5, total_marks),
+       passing_marks    = COALESCE($6, passing_marks),
+       start_time       = COALESCE($7, start_time),
+       end_time         = COALESCE($8, end_time),
+       updated_at       = NOW()
+     WHERE id = $9 RETURNING *`,
+    [b.title||null, b.description||null, b.instructions||null,
+     b.duration_minutes||null, b.total_marks||null, b.passing_marks||null,
+     b.start_time||null, b.end_time||null, req.params.id]
+  );
+  if (!test) return notFound(res, 'Test not found');
+  ok(res, test);
+}));
+
+// ── Publish test ───────────────────────────────────────────────────────────────
+router.post('/:id/publish', authenticate, requirePermission('tests', 'update'), asyncHandler(async (req, res) => {
+  const { rows: [{ count }] } = await query(
+    'SELECT COUNT(*)::int AS count FROM test_questions WHERE test_id=$1', [req.params.id]
+  );
+  if (count === 0) return badRequest(res, 'Cannot publish a test with no questions.');
+  const { rows: [test] } = await query(
+    `UPDATE tests SET status='published', updated_at=NOW() WHERE id=$1 AND status='draft' RETURNING *`,
+    [req.params.id]
   );
   if (!test) return badRequest(res, 'Test not found or already published');
   ok(res, test, 'Test published');
 }));
 
-/**
- * @swagger
- * /tests/{testId}/questions:
- *   post:
- *     tags: [Tests]
- *     summary: Add a question to a test
- *     parameters:
- *       - in: path
- *         name: testId
- *         required: true
- *         schema: { type: string, format: uuid }
- *     responses:
- *       201:
- *         description: Question added
- */
+// ── Unpublish / close test ─────────────────────────────────────────────────────
+router.post('/:id/close', authenticate, requirePermission('tests', 'update'), asyncHandler(async (req, res) => {
+  const { rows: [test] } = await query(
+    `UPDATE tests SET status='closed', updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id]
+  );
+  if (!test) return notFound(res, 'Test not found');
+  ok(res, test, 'Test closed');
+}));
+
+// ── Add question ───────────────────────────────────────────────────────────────
 router.post('/:testId/questions', authenticate, requirePermission('tests', 'update'),
   validate(questionSchema), asyncHandler(async (req, res) => {
     const b = req.body;
+    // Auto-assign order_index if not given
+    const { rows: [{ next }] } = await query(
+      'SELECT COALESCE(MAX(order_index), -1) + 1 AS next FROM test_questions WHERE test_id=$1',
+      [req.params.testId]
+    );
     const { rows: [q] } = await query(
-      `INSERT INTO test_questions (test_id,question_type,question_text,marks,order_index,is_required,config)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [req.params.testId, b.question_type, b.question_text, b.marks, b.order_index, b.is_required, JSON.stringify(b.config)]
+      `INSERT INTO test_questions (test_id,section_id,question_type,question_text,marks,order_index,is_required,config)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [req.params.testId, b.section_id||null, b.question_type, b.question_text,
+       b.marks, b.order_index ?? next, b.is_required, JSON.stringify(b.config)]
     );
     created(res, q, 'Question added');
   })
 );
 
-/**
- * @swagger
- * /tests/{testId}/questions/{questionId}:
- *   delete:
- *     tags: [Tests]
- *     summary: Delete a question from a test
- *     responses:
- *       204:
- *         description: Deleted
- */
+// ── Update question ────────────────────────────────────────────────────────────
+router.patch('/:testId/questions/:questionId', authenticate, requirePermission('tests', 'update'),
+  asyncHandler(async (req, res) => {
+    const b = req.body;
+    const { rows: [q] } = await query(
+      `UPDATE test_questions SET
+         section_id    = COALESCE($1, section_id),
+         question_text = COALESCE($2, question_text),
+         marks         = COALESCE($3, marks),
+         order_index   = COALESCE($4, order_index),
+         config        = COALESCE($5, config)
+       WHERE id=$6 AND test_id=$7 RETURNING *`,
+      [b.section_id||null, b.question_text||null, b.marks||null, b.order_index||null,
+       b.config ? JSON.stringify(b.config) : null, req.params.questionId, req.params.testId]
+    );
+    if (!q) return notFound(res, 'Question not found');
+    ok(res, q);
+  })
+);
+
+// ── Delete question ────────────────────────────────────────────────────────────
 router.delete('/:testId/questions/:questionId', authenticate, requirePermission('tests', 'update'),
   asyncHandler(async (req, res) => {
     await query('DELETE FROM test_questions WHERE id=$1 AND test_id=$2', [req.params.questionId, req.params.testId]);
@@ -164,72 +192,228 @@ router.delete('/:testId/questions/:questionId', authenticate, requirePermission(
   })
 );
 
-/**
- * @swagger
- * /tests/{id}/start:
- *   post:
- *     tags: [Tests]
- *     summary: Start a test attempt (for applicant/student)
- *     responses:
- *       201:
- *         description: Attempt started
- */
+// ── Bulk replace questions for a test ─────────────────────────────────────────
+router.put('/:testId/questions', authenticate, requirePermission('tests', 'update'),
+  asyncHandler(async (req, res) => {
+    const questions = req.body.questions || [];
+    // Delete all and re-insert for simplicity
+    await query('DELETE FROM test_questions WHERE test_id=$1', [req.params.testId]);
+    const inserted = [];
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      const { rows: [row] } = await query(
+        `INSERT INTO test_questions (test_id,section_id,question_type,question_text,marks,order_index,is_required,config)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [req.params.testId, q.section_id||null, q.question_type||'mcq', q.question_text,
+         q.marks||1, i, q.is_required!==false, JSON.stringify(q.config||{})]
+      );
+      inserted.push(row);
+    }
+    ok(res, inserted, `${inserted.length} questions saved`);
+  })
+);
+
+// ── Start attempt ──────────────────────────────────────────────────────────────
 router.post('/:id/start', authenticate, asyncHandler(async (req, res) => {
   const { rows: [test] } = await query('SELECT * FROM tests WHERE id=$1 AND status=$2', [req.params.id, 'published']);
   if (!test) return notFound(res, 'Test not found or not published');
+
   const { rows: [existing] } = await query(
     'SELECT * FROM test_attempts WHERE test_id=$1 AND user_id=$2', [req.params.id, req.user.id]
   );
-  if (existing) return ok(res, existing, 'Existing attempt returned');
+  if (existing) {
+    if (existing.status === 'submitted') return badRequest(res, 'You have already submitted this test.');
+    return ok(res, existing, 'Resuming existing attempt');
+  }
+
+  // Get applicant_id from token claim if present (test-scoped JWT)
+  const applicantId = req.user.applicant_id || null;
+  const tokenId     = req.user.token_id     || null;
+
   const { rows: [attempt] } = await query(
-    `INSERT INTO test_attempts (test_id,user_id) VALUES ($1,$2) RETURNING *`,
-    [req.params.id, req.user.id]
+    `INSERT INTO test_attempts (test_id, user_id, applicant_id, token_id)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [req.params.id, req.user.id, applicantId, tokenId]
   );
   created(res, attempt, 'Attempt started');
 }));
 
-/**
- * @swagger
- * /tests/{id}/submit:
- *   post:
- *     tags: [Tests]
- *     summary: Submit a test attempt with responses
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               responses:
- *                 type: array
- *                 items:
- *                   type: object
- *                   properties:
- *                     question_id: { type: string, format: uuid }
- *                     response_data: { type: object }
- *     responses:
- *       200:
- *         description: Test submitted
- */
-router.post('/:id/submit', authenticate, asyncHandler(async (req, res) => {
+// ── Get my attempt + saved responses (for resume) ─────────────────────────────
+router.get('/:id/my-attempt', authenticate, asyncHandler(async (req, res) => {
+  // Compute time_remaining_secs in pure SQL so it's timezone-independent.
+  // started_at is TIMESTAMP WITHOUT TIME ZONE stored as UTC (Neon default).
+  // We subtract NOW() AT TIME ZONE 'UTC' (also TIMESTAMP WITHOUT TIME ZONE in UTC)
+  // so the interval arithmetic is consistent regardless of server/client locale.
   const { rows: [attempt] } = await query(
-    `SELECT * FROM test_attempts WHERE test_id=$1 AND user_id=$2 AND status='in_progress'`, [req.params.id, req.user.id]
+    `SELECT ta.*,
+       GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (
+         ta.started_at + (t.duration_minutes * INTERVAL '1 minute')
+         - (NOW() AT TIME ZONE 'UTC')
+       ))))::int AS time_remaining_secs
+     FROM test_attempts ta
+     JOIN tests t ON t.id = ta.test_id
+     WHERE ta.test_id = $1 AND ta.user_id = $2`,
+    [req.params.id, req.user.id]
+  );
+  if (!attempt) return ok(res, null, 'No attempt found');
+
+  const { rows: responseRows } = await query(
+    'SELECT question_id, response_data FROM test_responses WHERE attempt_id=$1', [attempt.id]
+  );
+  // Flatten response_data so frontend can read r.selected_option directly
+  const responses = responseRows.map((r) => ({
+    question_id: r.question_id,
+    selected_option: r.response_data?.selected_option ?? null,
+  }));
+  ok(res, { ...attempt, responses });
+}));
+
+// ── Autosave responses ─────────────────────────────────────────────────────────
+router.patch('/:id/autosave', authenticate, asyncHandler(async (req, res) => {
+  const { rows: [attempt] } = await query(
+    `SELECT * FROM test_attempts WHERE test_id=$1 AND user_id=$2 AND status='in_progress'`,
+    [req.params.id, req.user.id]
   );
   if (!attempt) return badRequest(res, 'No active attempt found');
-  for (const r of (req.body.responses || [])) {
+
+  const responses = req.body.responses || [];
+  let saved = 0;
+  for (const r of responses) {
+    if (!r.question_id) continue;
     await query(
-      `INSERT INTO test_responses (attempt_id,question_id,response_data)
-       VALUES ($1,$2,$3) ON CONFLICT (attempt_id,question_id) DO UPDATE SET response_data=EXCLUDED.response_data`,
-      [attempt.id, r.question_id, JSON.stringify(r.response_data)]
+      `INSERT INTO test_responses (attempt_id, question_id, response_data)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (attempt_id, question_id)
+       DO UPDATE SET response_data = EXCLUDED.response_data`,
+      [attempt.id, r.question_id, JSON.stringify({ selected_option: r.selected_option })]
+    );
+    saved++;
+  }
+
+  await query('UPDATE test_attempts SET last_saved_at=NOW() WHERE id=$1', [attempt.id]);
+  ok(res, { saved_count: saved, last_saved_at: new Date() });
+}));
+
+// ── Submit test (with MCQ auto-scoring) ───────────────────────────────────────
+router.post('/:id/submit', authenticate, asyncHandler(async (req, res) => {
+  const { rows: [attempt] } = await query(
+    `SELECT * FROM test_attempts WHERE test_id=$1 AND user_id=$2 AND status='in_progress'`,
+    [req.params.id, req.user.id]
+  );
+  if (!attempt) return badRequest(res, 'No active attempt found');
+
+  // Save all final responses
+  for (const r of (req.body.responses || [])) {
+    if (!r.question_id) continue;
+    await query(
+      `INSERT INTO test_responses (attempt_id, question_id, response_data)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (attempt_id, question_id)
+       DO UPDATE SET response_data = EXCLUDED.response_data`,
+      [attempt.id, r.question_id, JSON.stringify({ selected_option: r.selected_option })]
     );
   }
-  const timeTaken = Math.floor((Date.now() - new Date(attempt.started_at).getTime()) / 1000);
-  await query(
-    `UPDATE test_attempts SET status='submitted', submitted_at=NOW(), time_taken_secs=$1 WHERE id=$2`,
-    [timeTaken, attempt.id]
+
+  // ── Auto-score MCQ questions ──
+  const { rows: questions } = await query(
+    `SELECT q.id, q.marks, q.config, q.question_type
+     FROM test_questions q WHERE q.test_id = $1`, [req.params.id]
   );
-  ok(res, { attempt_id: attempt.id, time_taken_secs: timeTaken }, 'Test submitted');
+  const { rows: responses } = await query(
+    'SELECT * FROM test_responses WHERE attempt_id=$1', [attempt.id]
+  );
+  const responseMap = Object.fromEntries(responses.map((r) => [r.question_id, r]));
+
+  let totalScore = 0;
+  for (const q of questions) {
+    if (q.question_type !== 'mcq') continue;
+    const resp = responseMap[q.id];
+    if (!resp) continue;
+    const correct = q.config?.correct_answer;
+    const given   = resp.response_data?.selected_option;
+    const award   = (correct && given && correct === given) ? (q.marks || 1) : 0;
+    totalScore += award;
+    await query(
+      'UPDATE test_responses SET marks_awarded=$1 WHERE id=$2',
+      [award, resp.id]
+    );
+  }
+
+  const timeTaken = Math.floor((Date.now() - new Date(attempt.started_at).getTime()) / 1000);
+
+  await query(
+    `UPDATE test_attempts SET status='submitted', submitted_at=NOW(), time_taken_secs=$1, score=$2 WHERE id=$3`,
+    [timeTaken, totalScore, attempt.id]
+  );
+
+  // Update applicant status → test_completed
+  if (attempt.applicant_id) {
+    await query(
+      `UPDATE applicants SET status='test_completed' WHERE id=$1 AND status='test_pending'`,
+      [attempt.applicant_id]
+    );
+  }
+
+  ok(res, {
+    attempt_id: attempt.id,
+    score: totalScore,
+    time_taken_secs: timeTaken,
+  }, 'Test submitted successfully');
 }));
+
+// ── Admin: get full test results for an applicant ─────────────────────────────
+router.get('/:id/results/:applicantId', authenticate, requirePermission('applicants', 'read'),
+  asyncHandler(async (req, res) => {
+    // Always pick the LATEST submitted attempt (after a reset, old one is deleted so this is fine)
+    const { rows: [attempt] } = await query(
+      `SELECT ta.*, u.first_name, u.last_name, u.email
+       FROM test_attempts ta
+       JOIN users u ON u.id = ta.user_id
+       WHERE ta.test_id=$1 AND ta.applicant_id=$2 AND ta.status='submitted'
+       ORDER BY ta.submitted_at DESC LIMIT 1`,
+      [req.params.id, req.params.applicantId]
+    );
+    if (!attempt) return notFound(res, 'No submitted attempt found for this applicant');
+
+    const { rows: responses } = await query(
+      `SELECT tr.*, q.question_text, q.question_type, q.marks, q.config, q.order_index,
+              s.title AS section_title, s.order_index AS section_order
+       FROM test_responses tr
+       JOIN test_questions q ON q.id = tr.question_id
+       LEFT JOIN test_sections s ON s.id = q.section_id
+       WHERE tr.attempt_id=$1
+       ORDER BY s.order_index ASC NULLS LAST, q.order_index ASC`,
+      [attempt.id]
+    );
+
+    // Build section-level summary
+    const sectionMap = {};
+    for (const r of responses) {
+      const key = r.section_title || 'General';
+      if (!sectionMap[key]) sectionMap[key] = { section_title: key, total: 0, correct: 0, marks: 0, total_marks: 0 };
+      sectionMap[key].total++;
+      sectionMap[key].total_marks += (r.marks || 1);
+      if ((r.marks_awarded || 0) > 0) {
+        sectionMap[key].correct++;
+        sectionMap[key].marks += r.marks_awarded;
+      }
+    }
+
+    // Fetch test title for display
+    const { rows: [testRow] } = await query('SELECT title, total_marks, duration_minutes FROM tests WHERE id=$1', [req.params.id]);
+
+    ok(res, {
+      test: testRow || null,
+      attempt,
+      responses: responses.map((r) => ({
+        ...r,
+        is_correct: (r.marks_awarded || 0) > 0,
+        correct_answer: r.config?.correct_answer,
+        options: r.config?.options || [],
+      })),
+      section_scores: Object.values(sectionMap),
+    });
+  })
+);
 
 export default router;

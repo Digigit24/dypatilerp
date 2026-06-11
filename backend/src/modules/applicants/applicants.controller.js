@@ -5,7 +5,9 @@ import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 
 export const list = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const { data, total } = await svc.listApplicants({ ...req.query, limit, offset });
+  // X-Course-Id header takes precedence over query param so the UI never mixes courses
+  const course_id = req.courseId || req.query.course_id || undefined;
+  const { data, total } = await svc.listApplicants({ ...req.query, course_id, limit, offset });
   res.json({ success: true, data, pagination: buildPaginationMeta(total, page, limit) });
 });
 
@@ -18,6 +20,12 @@ export const getOne = asyncHandler(async (req, res) => {
 export const create = asyncHandler(async (req, res) => {
   const applicant = await svc.createApplicant(req.body);
   created(res, applicant, 'Application submitted');
+});
+
+export const updateDetails = asyncHandler(async (req, res) => {
+  const applicant = await svc.updateApplicantDetails(req.params.id, req.body);
+  if (!applicant) return notFound(res, 'Applicant not found');
+  ok(res, applicant, 'Applicant updated');
 });
 
 export const updateStatus = asyncHandler(async (req, res) => {

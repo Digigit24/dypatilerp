@@ -5,7 +5,7 @@ import { validate } from '../../middleware/validate.js';
 import * as ctrl from './applicants.controller.js';
 import {
   createApplicantSchema, updateApplicantStatusSchema,
-  convertToStudentSchema, bulkConvertSchema,
+  updateApplicantDetailsSchema, convertToStudentSchema, bulkConvertSchema,
 } from './applicants.schema.js';
 
 const router = Router();
@@ -82,6 +82,24 @@ router.post('/', optionalAuth, validate(createApplicantSchema), ctrl.create);
  *       200:
  *         description: Status updated
  */
+/**
+ * @swagger
+ * /applicants/{id}:
+ *   put:
+ *     tags: [Applicants]
+ *     summary: Edit applicant personal/academic details
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Applicant updated
+ */
+router.put('/:id', authenticate, requirePermission('applicants', 'update'),
+  validate(updateApplicantDetailsSchema), ctrl.updateDetails);
+
 router.put('/:id/status', authenticate, requirePermission('applicants', 'update'),
   validate(updateApplicantStatusSchema), ctrl.updateStatus);
 

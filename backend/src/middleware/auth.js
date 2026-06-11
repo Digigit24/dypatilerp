@@ -28,6 +28,12 @@ export const authenticate = async (req, res, next) => {
     }
     req.user = rows[0];
     req.user.roles = parseRoles(payload.roles);
+    // Carry test-scoped claims through (set by test-auth login)
+    if (payload.scope === 'test_only') {
+      req.user.applicant_id = payload.applicant_id || null;
+      req.user.token_id     = payload.token_id     || null;
+      req.user.test_scope   = payload.test_id      || null;
+    }
     next();
   } catch {
     return unauthorized(res, 'Invalid or expired token');

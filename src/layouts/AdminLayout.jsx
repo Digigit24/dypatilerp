@@ -3,12 +3,11 @@ import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
 import CourseSwitcher from '../components/shared/CourseSwitcher.jsx'
-import DevRoleSwitcher from '../components/shared/DevRoleSwitcher.jsx'
 import NotificationBell from '../components/shared/NotificationBell.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
 import { roleLabel } from '../lib/utils.js'
 import { useAuthStore } from '../store/authStore.js'
-import { useCourseStore, getModulePrefs } from '../store/courseStore.js'
+import { useCourseStore } from '../store/courseStore.js'
 import { useUiStore } from '../store/uiStore.js'
 import useScrollLock from '../hooks/useScrollLock.js'
 import { logout } from '../api/services/userService.js'
@@ -48,46 +47,42 @@ export default function AdminLayout() {
     : 'User'
   const initials = displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 
-  // Preference-aware sidebar items
-  const prefs = getModulePrefs(currentCourse)
-  const show = (key) => prefs[key] !== false
-
   const sections = [
     {
       title: 'STUDENTS',
       items: [
-        show('applicants')   && { to: '/admin/applicants', label: 'Applicants', icon: Users },
-        show('students')     && { to: '/admin/students',   label: 'Students',   icon: UserCog },
-        show('batches')      && { to: '/admin/batches',    label: 'Batches',    icon: Layers },
-        show('progress')     && { to: '/admin/progress',   label: 'Progress Reports', icon: BookOpen },
-      ].filter(Boolean),
+        { to: '/admin/applicants', label: 'Applicants',       icon: Users },
+        { to: '/admin/students',   label: 'Students',         icon: UserCog },
+        { to: '/admin/batches',    label: 'Batches',          icon: Layers },
+        { to: '/admin/progress',   label: 'Progress Reports', icon: BookOpen },
+      ],
     },
     {
       title: 'ACADEMIC',
       items: [
-        show('approvals')    && { to: '/admin/approvals',  label: 'Approvals', icon: ClipboardCheck },
-        show('fees')         && { to: '/admin/fees',       label: 'Fees',      icon: IndianRupee },
-      ].filter(Boolean),
+        { to: '/admin/approvals', label: 'Approvals', icon: ClipboardCheck },
+        { to: '/admin/fees',      label: 'Fees',      icon: IndianRupee },
+      ],
     },
     {
       title: 'TOOLS',
       items: [
-        show('lectures')     && { to: '/admin/lectures',      label: 'Lectures',      icon: PlayCircle },
-        show('test-builder') && { to: '/admin/test-builder',  label: 'Test Builder',  icon: FileText },
-        show('notifications')&& { to: '/admin/notifications', label: 'Notifications', icon: Bell },
-      ].filter(Boolean),
+        { to: '/admin/lectures',      label: 'Lectures',      icon: PlayCircle },
+        { to: '/admin/test-builder',  label: 'Test Builder',  icon: FileText },
+        { to: '/admin/notifications', label: 'Notifications', icon: Bell },
+      ],
     },
     ...(role === 'admin' ? [{
       title: 'SYSTEM',
       items: [
-        show('courses')    && { to: '/admin/courses',    label: 'Courses',           icon: GraduationCap },
-        show('users')      && { to: '/admin/users',      label: 'Users',             icon: Users },
-        show('roles')      && { to: '/admin/roles',      label: 'Roles & Permissions', icon: Shield },
-        { to: '/admin/audit-logs', label: 'Audit Logs', icon: Activity },
-        show('settings')   && { to: '/admin/settings',   label: 'Settings',          icon: Settings },
-      ].filter(Boolean),
+        { to: '/admin/courses',    label: 'Courses',             icon: GraduationCap },
+        { to: '/admin/users',      label: 'Users',               icon: Users },
+        { to: '/admin/roles',      label: 'Roles & Permissions', icon: Shield },
+        { to: '/admin/audit-logs', label: 'Audit Logs',          icon: Activity },
+        { to: '/admin/settings',   label: 'Settings',            icon: Settings },
+      ],
     }] : []),
-  ].filter((s) => s.items.length > 0)
+  ]
 
   return (
     <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
@@ -136,7 +131,6 @@ export default function AdminLayout() {
         </div>
         <Outlet />
       </main>
-      {import.meta.env.DEV && <DevRoleSwitcher />}
     </div>
   )
 }

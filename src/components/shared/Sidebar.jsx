@@ -11,7 +11,7 @@ export default function Sidebar({ sections, footer, width = 260, role, collapsed
           <img src="/logo-new.jpg" alt="DYPERF" className="mx-auto h-12 w-12 rounded-2xl object-cover object-left" />
         ) : (
           <div>
-            <img src="/logo-new.jpg" alt="DYPERF - DY Patil Education And Research Foundation" className="h-auto w-full rounded-2xl object-contain" />
+            <img src="/logo-new.jpg" alt="DYPERF - Dr. D. Y. Patil Education and Research Foundation" className="h-auto w-full rounded-2xl object-contain" />
             {role && <div className="mt-3 inline-flex rounded-full bg-[color:var(--accent-tint)] px-3 py-1 text-[11px] font-semibold text-[color:var(--accent)]">{role}</div>}
           </div>
         )}
