@@ -1,9 +1,9 @@
 import axios from 'axios'
 import { useCourseStore } from '../store/courseStore.js'
 
-const BASE = import.meta.env.PROD
-    ? 'https://dyperf.celiyo.com/api'
-    : 'http://localhost:5000/api'
+const BASE =
+    import.meta.env.VITE_API_URL ||
+    'https://dypatilerp.celiyo.com/api'
 
 const http = axios.create({ baseURL: BASE, timeout: 15000 })
 
