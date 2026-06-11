@@ -30,7 +30,6 @@ import AdminLectureDetailPage from './pages/admin/AdminLectureDetailPage.jsx'
 import AuditLogsPage from './pages/admin/AuditLogsPage.jsx'
 import ApplyPage from './pages/public/ApplyPage.jsx'
 import ConfirmationPage from './pages/public/ConfirmationPage.jsx'
-import LandingPage from './pages/public/LandingPage.jsx'
 import OnboardPage from './pages/public/OnboardPage.jsx'
 import PublicProfilePage from './pages/public/PublicProfilePage.jsx'
 import TestLoginPage from './pages/public/TestLoginPage.jsx'
@@ -62,10 +61,12 @@ export default function App() {
   return <>
     <div key={location.pathname} className="fade-page">
       <Routes>
+        {/* Root → login */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
         {/* Public routes — no auth required */}
         <Route path="/login" element={<LoginPage />} />
         <Route element={<PublicLayout />}>
-          <Route path="/" element={<LandingPage />} />
           <Route path="/apply" element={<ApplyPage />} />
           <Route path="/confirmation" element={<ConfirmationPage />} />
         </Route>

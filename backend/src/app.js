@@ -38,6 +38,7 @@ app.set('trust proxy', 1);
 // that could short-circuit the request.
 const allowedOrigins = [
   env.FRONTEND_URL,
+  'https://app.dyperf.com',
   'https://dyperf.netlify.app',
   'http://localhost:5173',
   'http://localhost:3000',
