@@ -108,7 +108,7 @@ export default function LecturesManagePage() {
             }
           }
           xhr.onerror = () => reject(new Error('Upload network error'))
-          xhr.open('POST', `${import.meta.env.VITE_API_URL || 'https://dypatilerp.celiyo.com/api'}/videos/upload`)
+          xhr.open('POST', `${import.meta.env.VITE_API_URL || 'https://app.dyperf.com/api'}/videos/upload`)
           const token = localStorage.getItem('access_token')
           if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
           xhr.send(formData)

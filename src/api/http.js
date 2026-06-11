@@ -3,7 +3,7 @@ import { useCourseStore } from '../store/courseStore.js'
 
 const BASE =
     import.meta.env.VITE_API_URL ||
-    'https://dypatilerp.celiyo.com/api'
+    'https://app.dyperf.com/api'
 
 const http = axios.create({ baseURL: BASE, timeout: 15000 })
 

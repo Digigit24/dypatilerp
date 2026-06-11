@@ -6,8 +6,8 @@
 import axios from 'axios'
 
 const BASE = import.meta.env.PROD
-  ? 'https://dyperf.celiyo.com/api'
-  : 'http://localhost:5000/api'
+  ? 'https://app.dyperf.com/api'
+  : 'https://app.dyperf.com/api'
 
 const testHttp = axios.create({ baseURL: BASE, timeout: 15000 })
 
