@@ -94,11 +94,11 @@ export const createSession = async (videoId) => {
 
 /** Returns the proxy stream URL to pass to the <video> src */
 export const buildStreamUrl = (videoId, sessionToken) =>
-  `${import.meta.env.VITE_API_URL || 'https://dypatilerp.celiyo.com/api'}/videos/${videoId}/stream?sessionToken=${sessionToken}`
+  `${import.meta.env.VITE_API_URL || 'https://app.dyperf.com/api'}/videos/${videoId}/stream?sessionToken=${sessionToken}`
 
 /** Returns the thumbnail URL for a video (no auth required) */
 export const buildThumbnailUrl = (videoId) =>
-  `${import.meta.env.VITE_API_URL || 'https://dypatilerp.celiyo.com/api'}/videos/${videoId}/thumbnail`
+  `${import.meta.env.VITE_API_URL || 'https://app.dyperf.com/api'}/videos/${videoId}/thumbnail`
 
 // ─── Progress heartbeat ───────────────────────────────────────────────────────
 
