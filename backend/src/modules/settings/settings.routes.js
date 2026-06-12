@@ -34,6 +34,43 @@ router.get('/', requireRole('admin'), asyncHandler(async (req, res) => {
   ok(res, rows);
 }));
 
+// ─── GET /settings/email/effective ────────────────────────────────────────────
+// What the server will ACTUALLY use to send email (env + DB merged). Admin-only.
+router.get('/email/effective', requireRole('admin'), asyncHandler(async (req, res) => {
+  const { rows: [row] } = await query(`SELECT value, updated_at FROM app_settings WHERE key='brevo'`);
+  const db = row?.value || {};
+  const mask = (v) => (v ? (v.length > 8 ? `${v.slice(0, 4)}\u2026${v.slice(-4)}` : '\u2022\u2022\u2022\u2022') : null);
+
+  const smtpConfigured = !!(env.BREVO_SMTP_USER && env.BREVO_SMTP_PASS);
+  ok(res, {
+    mode: smtpConfigured ? 'live' : 'mock',
+    smtp: {
+      host:        env.BREVO_SMTP_HOST,
+      port:        env.BREVO_SMTP_PORT,
+      user:        env.BREVO_SMTP_USER || null,
+      pass_masked: mask(env.BREVO_SMTP_PASS),
+      configured:  smtpConfigured,
+      source:      'server .env',
+    },
+    sender: {
+      name:   db.senderName  || env.BREVO_SENDER_NAME,
+      email:  db.senderEmail || env.BREVO_SENDER_EMAIL,
+      source: (db.senderName || db.senderEmail) ? 'saved settings' : 'server .env',
+    },
+    settings: {
+      enabled:        db.enabled ?? false,
+      api_key_masked: mask(db.apiKey),
+      senderName:     db.senderName  || '',
+      senderEmail:    db.senderEmail || '',
+      updated_at:     row?.updated_at || null,
+    },
+    env_defaults: {
+      senderName:  env.BREVO_SENDER_NAME,
+      senderEmail: env.BREVO_SENDER_EMAIL,
+    },
+  });
+}));
+
 // ─── GET /settings/:key ───────────────────────────────────────────────────────
 router.get('/:key', requireRole('admin'), asyncHandler(async (req, res) => {
   const { rows: [row] } = await query(
@@ -105,10 +142,28 @@ h2{color:#4F46E5;margin-top:0}.badge{background:#d1fae5;color:#065f46;border-rad
     sender,
   });
 
+  const debugInfo = {
+    smtp_host: env.BREVO_SMTP_HOST,
+    smtp_port: env.BREVO_SMTP_PORT,
+    smtp_user: env.BREVO_SMTP_USER || null,
+    sender_used: `${sender.name} <${sender.email}>`,
+  };
+
   if (result.success) {
-    ok(res, { delivered: true, mock: result.mock || false }, 'Test email sent successfully');
+    ok(res, {
+      delivered: !result.mock,
+      mock: result.mock || false,
+      message_id: result.messageId || null,
+      ...debugInfo,
+    }, result.mock
+      ? 'SMTP not configured on server (.env) \u2014 email was logged to console only'
+      : 'Test email sent successfully');
   } else {
-    res.status(400).json({ success: false, message: result.error || 'Email delivery failed' });
+    res.status(400).json({
+      success: false,
+      message: `SMTP error: ${result.error || 'Email delivery failed'}`,
+      data: debugInfo,
+    });
   }
 }));
 

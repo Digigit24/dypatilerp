@@ -5,7 +5,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import { deriveThemeTokens } from '../../api/services/themeService.js'
-import { getSettings, saveSettings, sendTestEmail } from '../../api/services/settingsService.js'
+import { getEffectiveEmailConfig, getSettings, saveSettings, sendTestEmail } from '../../api/services/settingsService.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 const presets = [
@@ -71,12 +71,26 @@ export default function SettingsPage() {
   // Test email state
   const [testEmail,   setTestEmail]   = useState('')
   const [testLoading, setTestLoading] = useState(false)
-  const [testResult,  setTestResult]  = useState(null)   // null | 'ok' | 'fail'
+  const [testResult,  setTestResult]  = useState(null)   // null | { status: 'ok'|'fail', detail }
+
+  // Effective server email config (env + DB merged)
+  const [effective, setEffective] = useState(null)
+  const loadEffective = () =>
+    getEffectiveEmailConfig().then((r) => setEffective(r.data)).catch(() => setEffective(null))
 
   useEffect(() => {
-    getSettings('brevo')
-      .then((r) => {
-        if (r.data && Object.keys(r.data).length) setBrevo((prev) => ({ ...prev, ...r.data }))
+    Promise.all([getSettings('brevo'), getEffectiveEmailConfig().catch(() => ({ data: null }))])
+      .then(([r, eff]) => {
+        const saved = (r.data && Object.keys(r.data).length) ? r.data : {}
+        const envDefaults = eff.data?.env_defaults || {}
+        setEffective(eff.data)
+        // Prefill from saved settings, falling back to the server's .env values
+        setBrevo((prev) => ({
+          ...prev,
+          ...saved,
+          senderName:  saved.senderName  || envDefaults.senderName  || '',
+          senderEmail: saved.senderEmail || envDefaults.senderEmail || '',
+        }))
       })
       .catch(() => {})
       .finally(() => setBrevoLoading(false))
@@ -87,6 +101,7 @@ export default function SettingsPage() {
     try {
       await saveSettings('brevo', brevo)
       addToast({ type: 'success', title: 'Brevo settings saved.' })
+      loadEffective()
     } catch {
       addToast({ type: 'error', title: 'Failed to save Brevo settings.' })
     } finally { setBrevoSaving(false) }
@@ -97,17 +112,28 @@ export default function SettingsPage() {
     setTestLoading(true)
     setTestResult(null)
     try {
-      await sendTestEmail({
+      const r = await sendTestEmail({
         to: testEmail,
         apiKey: brevo.apiKey,
         senderName: brevo.senderName,
         senderEmail: brevo.senderEmail,
       })
-      setTestResult('ok')
-      addToast({ type: 'success', title: `Test email sent to ${testEmail}` })
-    } catch {
-      setTestResult('fail')
-      addToast({ type: 'error', title: 'Test email failed. Check your Brevo API key.' })
+      const d = r.data || {}
+      setTestResult({
+        status: d.mock ? 'mock' : 'ok',
+        detail: d.mock
+          ? 'Server is in MOCK mode \u2014 BREVO_SMTP_USER / BREVO_SMTP_PASS are missing in the server .env, so the email was only logged to the server console.'
+          : `Delivered via ${d.smtp_user || 'SMTP'} as ${d.sender_used || ''}${d.message_id ? ` \u00b7 id: ${d.message_id}` : ''}`,
+      })
+      addToast({ type: d.mock ? 'info' : 'success', title: d.mock ? 'Mock send (SMTP not configured)' : `Test email sent to ${testEmail}` })
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Unknown error'
+      const dbg = err.response?.data?.data
+      setTestResult({
+        status: 'fail',
+        detail: `${msg}${dbg?.smtp_user ? ` \u00b7 SMTP user: ${dbg.smtp_user}` : ''}${dbg?.smtp_host ? ` \u00b7 host: ${dbg.smtp_host}:${dbg.smtp_port}` : ''}`,
+      })
+      addToast({ type: 'error', title: 'Test email failed', message: msg })
     } finally { setTestLoading(false) }
   }
 
@@ -226,6 +252,29 @@ export default function SettingsPage() {
             </div>
           ) : (
             <div className="space-y-5">
+              {/* Server email status — what the backend actually loaded */}
+              {effective && (
+                <div className={`rounded-3xl border p-5 ${effective.mode === 'live' ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-amber-50/40'}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[color:var(--text)]">Server Email Status</p>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${effective.mode === 'live' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {effective.mode === 'live' ? '\u25cf Live SMTP' : '\u25cb Mock \u2014 console only'}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2">
+                    <p className="text-[color:var(--secondary)]">SMTP Host: <span className="font-mono text-[color:var(--text)]">{effective.smtp?.host}:{effective.smtp?.port}</span></p>
+                    <p className="text-[color:var(--secondary)]">SMTP User <span className="opacity-60">(.env)</span>: <span className="font-mono text-[color:var(--text)]">{effective.smtp?.user || '\u2014 not set'}</span></p>
+                    <p className="text-[color:var(--secondary)]">SMTP Password <span className="opacity-60">(.env)</span>: <span className="font-mono text-[color:var(--text)]">{effective.smtp?.pass_masked || '\u2014 not set'}</span></p>
+                    <p className="text-[color:var(--secondary)]">Sender: <span className="font-mono text-[color:var(--text)]">{effective.sender?.name} &lt;{effective.sender?.email}&gt;</span> <span className="opacity-60">(from {effective.sender?.source})</span></p>
+                  </div>
+                  {effective.mode !== 'live' && (
+                    <p className="mt-3 text-xs font-semibold text-amber-700">
+                      Emails will NOT be delivered: set BREVO_SMTP_USER and BREVO_SMTP_PASS in the server&apos;s backend/.env and restart the backend.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Enable toggle */}
               <div className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
                 <div>
@@ -314,15 +363,17 @@ export default function SettingsPage() {
                     Send
                   </button>
                 </div>
-                {testResult === 'ok' && (
-                  <div className="mt-3 flex items-center gap-2 text-sm text-emerald-600">
-                    <CheckCircle2 size={15} /> Email delivered successfully!
+                {testResult?.status === 'ok' && (
+                  <div className="mt-3 flex items-start gap-2 text-sm text-emerald-600">
+                    <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
+                    <span>Email delivered successfully! <span className="text-xs opacity-80">{testResult.detail}</span></span>
                   </div>
                 )}
-                {testResult === 'fail' && (
-                  <p className="mt-3 text-sm text-red-500">
-                    Delivery failed — check your API key and sender email.
-                  </p>
+                {testResult?.status === 'mock' && (
+                  <p className="mt-3 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">{testResult.detail}</p>
+                )}
+                {testResult?.status === 'fail' && (
+                  <p className="mt-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600 break-all">{testResult.detail}</p>
                 )}
               </div>
 

@@ -36,11 +36,16 @@ http.interceptors.response.use(
           localStorage.setItem('refresh_token', refresh_token)
           original.headers.Authorization = `Bearer ${access_token}`
           return http(original)
-        } catch {
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
-          localStorage.removeItem('auth_user')
-          window.location.href = '/login'
+        } catch (refreshErr) {
+          // Only log out when the refresh token was genuinely rejected.
+          // Network errors / 5xx (e.g. DB timeout) must NOT destroy the session.
+          const st = refreshErr.response?.status
+          if (st === 400 || st === 401 || st === 403) {
+            localStorage.removeItem('access_token')
+            localStorage.removeItem('refresh_token')
+            localStorage.removeItem('auth_user')
+            window.location.href = '/login'
+          }
         }
       } else {
         window.location.href = '/login'

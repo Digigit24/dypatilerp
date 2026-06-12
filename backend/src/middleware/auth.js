@@ -17,8 +17,18 @@ export const authenticate = async (req, res, next) => {
   }
 
   const token = authHeader.slice(7);
+
+  // 1. Verify the JWT first — only token problems may produce a 401
+  let payload;
   try {
-    const payload = jwt.verify(token, env.JWT_SECRET);
+    payload = jwt.verify(token, env.JWT_SECRET);
+  } catch {
+    return unauthorized(res, 'Invalid or expired token');
+  }
+
+  // 2. DB lookup — a DB outage must NOT masquerade as an auth failure,
+  //    otherwise the frontend logs the user out on every DB hiccup.
+  try {
     const { rows } = await query(
       'SELECT id, email, first_name, last_name, is_active FROM users WHERE id = $1',
       [payload.sub]
@@ -35,8 +45,12 @@ export const authenticate = async (req, res, next) => {
       req.user.test_scope   = payload.test_id      || null;
     }
     next();
-  } catch {
-    return unauthorized(res, 'Invalid or expired token');
+  } catch (err) {
+    console.error('[auth] DB error during authentication:', err.message);
+    return res.status(503).json({
+      success: false,
+      message: 'Database temporarily unreachable — please retry',
+    });
   }
 };
 

@@ -35,6 +35,13 @@ export const sendTestEmail = async ({ to, apiKey, senderName, senderEmail }) => 
   return { data: res.data }
 }
 
+/** Get the effective email config the server will actually use (env + DB merged) */
+export const getEffectiveEmailConfig = async () => {
+  if (USE_MOCK) return { data: { mode: 'mock', smtp: { configured: false }, sender: {}, settings: {}, env_defaults: {} } }
+  const { data: res } = await http.get('/settings/email/effective')
+  return { data: res.data }
+}
+
 // ─── User preferences (current user) ─────────────────────────────────────────
 
 /** Load the current user's preferences from the backend */
