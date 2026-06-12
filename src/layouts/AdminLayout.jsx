@@ -1,4 +1,4 @@
-import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, GraduationCap, Home, IndianRupee, Layers, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, Search, Settings, Shield, Sun, UserCog, Users } from 'lucide-react'
+import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, Search, Settings, Shield, Sun, UserCog, Users, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -22,7 +22,7 @@ export default function AdminLayout() {
   const role = useAuthStore((s) => s.role)
   const theme = useUiStore((s) => s.theme)
   const toggleTheme = useUiStore((s) => s.toggleTheme)
-  const { currentCourse, setCourses } = useCourseStore()
+  const { setCourses } = useCourseStore()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const navigate = useNavigate()
@@ -88,8 +88,7 @@ export default function AdminLayout() {
     ...(role === 'admin' ? [{
       title: 'SYSTEM',
       items: [
-        { to: '/admin/courses',    label: 'Courses',             icon: GraduationCap },
-        { to: '/admin/team',       label: 'Team Assignments',    icon: Users },
+        { to: '/admin/wizard',     label: 'Admin Wizard',        icon: Wand2 },
         { to: '/admin/users',      label: 'Users',               icon: Users },
         { to: '/admin/roles',      label: 'Roles & Permissions', icon: Shield },
         { to: '/admin/audit-logs', label: 'Audit Logs',          icon: Activity },

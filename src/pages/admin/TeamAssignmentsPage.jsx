@@ -39,8 +39,9 @@ const ROLE_TONES = {
   admin: 'bg-red-50 text-red-600',
 }
 
-export default function TeamAssignmentsPage() {
-  const { currentCourse } = useCourseStore()
+export default function TeamAssignmentsPage({ courseOverride = null, embedded = false }) {
+  const { currentCourse: headerCourse } = useCourseStore()
+  const currentCourse = courseOverride || headerCourse
   const addToast = useUiStore((s) => s.addToast)
   const navigate = useNavigate()
 
@@ -78,9 +79,9 @@ export default function TeamAssignmentsPage() {
 
   if (!currentCourse?.id) {
     return (
-      <div className="fade-page">
-        <PageHeader title="Team Assignments" subtitle="Assign coordinators, guides and mentors to courses and batches." />
-        <div className="card p-14 text-center text-sm text-[color:var(--secondary)]">Select a course from the header first.</div>
+      <div className={embedded ? '' : 'fade-page'}>
+        {!embedded && <PageHeader title="Team Assignments" subtitle="Assign coordinators, guides and mentors to courses and batches." />}
+        <div className="card p-14 text-center text-sm text-[color:var(--secondary)]">Select a course first.</div>
       </div>
     )
   }
@@ -90,19 +91,24 @@ export default function TeamAssignmentsPage() {
   const byBatch = (batchId) => assignments.filter((a) => a.batch_id === batchId)
 
   return (
-    <div className="fade-page">
-      <PageHeader
-        title="Team Assignments"
-        subtitle={`Staff ${currentCourse.name}: scoped permissions follow these assignments — a batch coordinator manages that batch only.`}
-        action={
-          <button
-            className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
-            onClick={() => setCreateUserOpen(true)}
-          >
-            <UserPlus size={15} /> Create User
-          </button>
-        }
-      />
+    <div className={embedded ? '' : 'fade-page'}>
+      {!embedded && (
+        <PageHeader
+          title="Team Assignments"
+          subtitle={`Staff ${currentCourse.name}: scoped permissions follow these assignments — a batch coordinator manages that batch only.`}
+        />
+      )}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <p className="text-xs text-[color:var(--secondary)]">
+          Scoped permissions follow these assignments — a batch coordinator manages that batch only.
+        </p>
+        <button
+          className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
+          onClick={() => setCreateUserOpen(true)}
+        >
+          <UserPlus size={15} /> Create User
+        </button>
+      </div>
 
       {/* ── Course-level team ── */}
       <div className="card p-5">

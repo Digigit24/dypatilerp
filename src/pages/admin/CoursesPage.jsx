@@ -1,4 +1,5 @@
 import { AlertTriangle, BookOpen, GraduationCap, Layers, Loader2, PenLine, Plus, Trash2, XCircle } from 'lucide-react'
+import FeeStructureEditor from '../../components/admin/FeeStructureEditor.jsx'
 import { useAuthStore } from '../../store/authStore.js'
 import { useEffect, useState } from 'react'
 import { createCourse, deleteCourse, getCourses, updateCourse } from '../../api/services/courseService.js'
@@ -17,7 +18,7 @@ const BLANK = {
   is_active: true,
 }
 
-export default function CoursesPage() {
+export default function CoursesPage({ embedded = false }) {
   const isAdmin = useAuthStore((s) => s.role) === 'admin'
   const [deleteTarget, setDeleteTarget] = useState(null)   // course pending deletion
   const [deleting, setDeleting] = useState(false)
@@ -26,7 +27,7 @@ export default function CoursesPage() {
   const [editing, setEditing] = useState(null) // null = add, course = edit
   const [form, setForm] = useState(BLANK)
   const [saving, setSaving] = useState(false)
-  const [feeStr, setFeeStr] = useState('{"1":50000,"2":50000,"3":50000,"4":50000}')
+  // fee_structure edited directly via FeeStructureEditor (object form)
   const addToast = useUiStore((s) => s.addToast)
   const { setCourses: storeSetCourses, setCurrentCourse } = useCourseStore()
   const navigate = useNavigate()
@@ -43,7 +44,6 @@ export default function CoursesPage() {
   const openAdd = () => {
     setEditing(null)
     setForm(BLANK)
-    setFeeStr(JSON.stringify(BLANK.fee_structure, null, 0))
     setDrawerOpen(true)
   }
 
@@ -54,7 +54,6 @@ export default function CoursesPage() {
       duration_months: course.duration_months, max_students_per_batch: course.max_students_per_batch,
       fee_structure: course.fee_structure || {}, is_active: course.is_active,
     })
-    setFeeStr(JSON.stringify(course.fee_structure || {}, null, 2))
     setDrawerOpen(true)
   }
 
@@ -62,9 +61,7 @@ export default function CoursesPage() {
     e.preventDefault()
     setSaving(true)
     try {
-      let parsedFees = {}
-      try { parsedFees = JSON.parse(feeStr) } catch { parsedFees = form.fee_structure }
-      const payload = { ...form, fee_structure: parsedFees }
+      const payload = { ...form }
       if (editing) {
         const r = await updateCourse(editing.id, payload)
         setCourses((cs) => cs.map((c) => (c.id === editing.id ? r.data : c)))
@@ -103,16 +100,25 @@ export default function CoursesPage() {
   if (!courses) return <SkeletonCard rows={6} />
 
   return (
-    <div className="fade-page">
-      <PageHeader
-        title="Courses"
-        subtitle="Manage fellowship programs, their batches, and configuration."
-        action={
+    <div className={embedded ? '' : 'fade-page'}>
+      {!embedded && (
+        <PageHeader
+          title="Courses"
+          subtitle="Manage fellowship programs, their batches, and configuration."
+          action={
+            <button className="btn-primary inline-flex items-center gap-2" onClick={openAdd}>
+              <Plus size={17} /> New Course
+            </button>
+          }
+        />
+      )}
+      {embedded && (
+        <div className="mb-4 flex justify-end">
           <button className="btn-primary inline-flex items-center gap-2" onClick={openAdd}>
             <Plus size={17} /> New Course
           </button>
-        }
-      />
+        </div>
+      )}
 
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {courses.map((course) => (
@@ -213,13 +219,10 @@ export default function CoursesPage() {
                     <input className="input w-full" type="number" min={1} max={200} {...f('max_students_per_batch')} />
                   </Field>
                 </div>
-                <Field label='Fee Structure (JSON: {"semester": amount})'>
-                  <textarea
-                    className="input w-full font-mono text-xs resize-none"
-                    rows={4}
-                    value={feeStr}
-                    onChange={(e) => setFeeStr(e.target.value)}
-                    placeholder='{"1":50000,"2":50000,"3":50000,"4":50000}'
+                <Field label="Fee Structure (per semester)">
+                  <FeeStructureEditor
+                    value={form.fee_structure}
+                    onChange={(fee_structure) => setForm((p) => ({ ...p, fee_structure }))}
                   />
                 </Field>
                 <div className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">

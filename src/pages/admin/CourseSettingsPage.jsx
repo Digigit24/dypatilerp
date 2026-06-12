@@ -1,7 +1,8 @@
-import { AlertCircle, ArrowLeft, Mail, Save } from 'lucide-react'
+import { ArrowLeft, Mail, Save } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getCourseById, updateCourse } from '../../api/services/courseService.js'
+import FeeStructureEditor from '../../components/admin/FeeStructureEditor.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import { useCourseStore } from '../../store/courseStore.js'
@@ -28,7 +29,7 @@ export default function CourseSettingsPage() {
   const navigate = useNavigate()
   const [course,      setCourse]      = useState(null)
   const [modules,     setModules]     = useState({})
-  const [feeStr,      setFeeStr]      = useState('{}')
+  const [feeStruct,   setFeeStruct]   = useState({})
   const [displayName, setDisplayName] = useState('')
   const [emailPrefs,  setEmailPrefs]  = useState({
     senderName:        '',
@@ -57,7 +58,7 @@ export default function CourseSettingsPage() {
       const mods = { ...{ applicants:true,students:true,batches:true,progress:true,approvals:true,fees:true,'test-builder':true,notifications:true,users:true,settings:true,courses:true,roles:true }, ...(prefs.modules || {}) }
       setModules(mods)
       setDisplayName(prefs.display?.program_name || r.data.name)
-      setFeeStr(JSON.stringify(r.data.fee_structure || {}, null, 2))
+      setFeeStruct(r.data.fee_structure || {})
       // Load email preferences from course.preferences.email
       if (prefs.email) {
         setEmailPrefs((prev) => ({
@@ -73,8 +74,7 @@ export default function CourseSettingsPage() {
     if (!course) return
     setSaving(true)
     try {
-      let fee_structure = {}
-      try { fee_structure = JSON.parse(feeStr) } catch { fee_structure = course.fee_structure }
+      const fee_structure = feeStruct
       const preferences = { modules, display: { program_name: displayName }, email: emailPrefs }
       const r = await updateCourse(course.id, { fee_structure, preferences })
       setCourse(r.data)
@@ -171,126 +171,22 @@ export default function CourseSettingsPage() {
             </div>
           </div>
 
-          {/* ── Email Notification Settings ── */}
-          <div className="card p-6">
-            <div className="flex items-start gap-3 mb-5">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[color:var(--accent-tint)] text-[color:var(--accent)]">
-                <Mail size={18} />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-[color:var(--text)]">Email Notifications</h2>
-                <p className="mt-0.5 text-sm text-[color:var(--secondary)]">
-                  Per-course sender override and event-level email toggles. Leave sender blank to use global settings.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {/* Sender override */}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="text-sm font-semibold text-[color:var(--text)]">Sender Name Override</label>
-                  <input
-                    className="input mt-1.5 w-full"
-                    value={emailPrefs.senderName}
-                    onChange={(e) => setEmailPrefs((p) => ({ ...p, senderName: e.target.value }))}
-                    placeholder="DY Patil ERP"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-semibold text-[color:var(--text)]">Sender Email Override</label>
-                  <input
-                    className="input mt-1.5 w-full"
-                    type="email"
-                    value={emailPrefs.senderEmail}
-                    onChange={(e) => setEmailPrefs((p) => ({ ...p, senderEmail: e.target.value }))}
-                    placeholder="phd@yourdomain.com"
-                  />
-                </div>
-              </div>
-
-              {/* Per-event toggles */}
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)] mb-3">Notification Rules</p>
-                <div className="space-y-2">
-                  {[
-                    { key: 'application_submitted',     label: 'Application Submitted' },
-                    { key: 'test_completed',             label: 'Test Completed' },
-                    { key: 'approval_stage_opened',      label: 'Approval Stage Opened' },
-                    { key: 'submission_approved',        label: 'Submission Approved' },
-                    { key: 'submission_needs_revision',  label: 'Revision Requested' },
-                    { key: 'deadline_overdue',           label: 'Deadline Overdue' },
-                    { key: 'fee_due',                    label: 'Fee Due Reminder' },
-                  ].map(({ key, label }) => {
-                    const enabled = emailPrefs.notificationRules?.[key]?.email !== false
-                    return (
-                      <div key={key} className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
-                        <span className="text-sm font-medium text-[color:var(--text)]">{label}</span>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-semibold ${enabled ? 'text-emerald-600' : 'text-[color:var(--muted)]'}`}>
-                            {enabled ? 'On' : 'Off'}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setEmailPrefs((p) => ({
-                              ...p,
-                              notificationRules: {
-                                ...p.notificationRules,
-                                [key]: { ...p.notificationRules?.[key], email: !enabled },
-                              },
-                            }))}
-                            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${enabled ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}
-                          >
-                            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 rounded-3xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-                <AlertCircle size={14} /> Global Brevo API key is configured in <strong>Settings → Email Delivery</strong>.
-              </div>
-            </div>
+          {/* Email config moved to the Admin Wizard */}
+          <div className="card flex items-center gap-3 p-5">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[color:var(--accent-tint)] text-[color:var(--accent)]"><Mail size={17} /></span>
+            <p className="text-sm text-[color:var(--secondary)]">
+              Email sender &amp; notification rules for this course are now managed in the{' '}
+              <a href="/admin/wizard" className="font-semibold text-[color:var(--accent)] hover:underline">Admin Wizard → Notifications</a>.
+            </p>
           </div>
 
           <div className="card p-6">
             <h2 className="text-lg font-semibold text-[color:var(--text)]">Fee Structure</h2>
             <p className="mt-1 text-sm text-[color:var(--secondary)]">
-              JSON map of semester number → amount in ₹.
+              Amount due per semester. Stored as structured data behind the scenes.
             </p>
-            <textarea
-              className="input mt-4 w-full font-mono text-xs resize-none"
-              rows={8}
-              value={feeStr}
-              onChange={(e) => setFeeStr(e.target.value)}
-              placeholder='{"1": 50000, "2": 50000}'
-            />
-            <div className="mt-3 rounded-3xl bg-[color:var(--accent-tint)] p-4">
-              {(() => {
-                try {
-                  const parsed = JSON.parse(feeStr)
-                  const total = Object.values(parsed).reduce((s, v) => s + Number(v), 0)
-                  return (
-                    <div className="space-y-1">
-                      {Object.entries(parsed).map(([sem, amt]) => (
-                        <div key={sem} className="flex justify-between text-sm">
-                          <span className="text-[color:var(--secondary)]">Semester {sem}</span>
-                          <span className="font-semibold text-[color:var(--text)]">₹{Number(amt).toLocaleString('en-IN')}</span>
-                        </div>
-                      ))}
-                      <div className="flex justify-between border-t border-[color:var(--border)] pt-2 text-sm font-semibold">
-                        <span className="text-[color:var(--text)]">Total</span>
-                        <span className="text-[color:var(--accent)]">₹{total.toLocaleString('en-IN')}</span>
-                      </div>
-                    </div>
-                  )
-                } catch {
-                  return <p className="text-xs text-red-500">Invalid JSON</p>
-                }
-              })()}
+            <div className="mt-4">
+              <FeeStructureEditor value={feeStruct} onChange={setFeeStruct} />
             </div>
           </div>
         </div>

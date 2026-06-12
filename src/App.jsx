@@ -11,7 +11,6 @@ import ApplicantsPage from './pages/admin/ApplicantsPage.jsx'
 import ApprovalsPage from './pages/admin/ApprovalsPage.jsx'
 import BatchesPage from './pages/admin/BatchesPage.jsx'
 import BatchStudentsPage from './pages/admin/BatchStudentsPage.jsx'
-import CoursesPage from './pages/admin/CoursesPage.jsx'
 import CourseSettingsPage from './pages/admin/CourseSettingsPage.jsx'
 import FeesPage from './pages/admin/FeesPage.jsx'
 import AdminNotificationsPage from './pages/admin/NotificationsPage.jsx'
@@ -28,7 +27,7 @@ import LecturePlayerPage from './pages/student/LecturePlayerPage.jsx'
 import MediaManagerPage from './pages/admin/MediaManagerPage.jsx'
 import FormatsPage from './pages/admin/FormatsPage.jsx'
 import AssignmentsPage from './pages/admin/AssignmentsPage.jsx'
-import TeamAssignmentsPage from './pages/admin/TeamAssignmentsPage.jsx'
+import AdminWizardPage from './pages/admin/AdminWizardPage.jsx'
 import StudentFormatsPage from './pages/student/FormatsPage.jsx'
 import StudentAssignmentsPage from './pages/student/AssignmentsPage.jsx'
 import AdminLectureDetailPage from './pages/admin/AdminLectureDetailPage.jsx'
@@ -132,11 +131,12 @@ export default function App() {
           <Route path="assignments" element={<AssignmentsPage />} />
           <Route path="lectures" element={<MediaManagerPage />} />
           <Route path="lectures/:id" element={<AdminLectureDetailPage />} />
-          <Route path="courses" element={<CoursesPage />} />
+          <Route path="courses" element={<Navigate to="/admin/wizard" replace />} />
           <Route path="courses/:id/settings" element={<CourseSettingsPage />} />
           <Route path="users" element={<UserManagementPage />} />
           <Route path="roles" element={<RolesPage />} />
-          <Route path="team" element={<TeamAssignmentsPage />} />
+          <Route path="wizard" element={<AdminWizardPage />} />
+          <Route path="team" element={<Navigate to="/admin/wizard" replace />} />
           <Route path="audit-logs" element={<AuditLogsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
