@@ -92,5 +92,5 @@ plus a **Resolution** and **Resolved date**.
 - **Verification:** backend 23/23 + frontend 27/27 vitest passing. Live E2E on the
   take-test route not run (would require creating an applicant attempt = DB write,
   disallowed); covered by the API integration tests above.
-- **Fix commit:** `__COMMIT_SHA__`
+- **Fix commit:** `ae6b4bb`
 - **Resolved date:** 2026-06-12
