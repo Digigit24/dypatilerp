@@ -44,24 +44,73 @@ const getTransporter = () => {
  * @param {{email:string,name?:string}} [opts.sender]  – override default sender
  * @returns {Promise<{success:boolean, messageId?:string, error?:string}>}
  */
-export const sendEmail = async ({ to, subject, html, text, sender } = {}) => {
+// ─── Brevo HTTP API sender (port 443 — immune to SMTP interception/blocks) ───
+const sendViaBrevoApi = async ({ apiKey, sender, recipients, subject, html, text }) => {
+  try {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': apiKey, 'Content-Type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({
+        sender: { name: sender.name, email: sender.email },
+        to: recipients,
+        subject,
+        htmlContent: html,
+        ...(text && { textContent: text }),
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, error: `Brevo API ${res.status}: ${body.message || JSON.stringify(body)}` };
+    }
+    return { success: true, messageId: body.messageId || null, via: 'api' };
+  } catch (err) {
+    return { success: false, error: `Brevo API request failed: ${err.message}` };
+  }
+};
+
+export const sendEmail = async ({ to, subject, html, text, sender, apiKey } = {}) => {
+  const effectiveSender = sender || {
+    name:  env.BREVO_SENDER_NAME,
+    email: env.BREVO_SENDER_EMAIL,
+  };
+
+  const list = Array.isArray(to) ? to : [to];
+
+  // ── 1. Prefer the Brevo HTTPS API (port 443) when an API key is available ──
+  //    SMTP (587) is often intercepted/blocked by cPanel "SMTP Restrictions".
+  let key = apiKey || env.BREVO_API_KEY;
+  if (!key) {
+    const db = await getBrevoConfig();
+    key = db.apiKey || '';
+  }
+  let apiError = null;
+  if (key) {
+    const apiRecipients = list.map((r) =>
+      typeof r === 'string' ? { email: r } : { email: r.email, ...(r.name ? { name: r.name } : {}) }
+    );
+    const result = await sendViaBrevoApi({
+      apiKey: key, sender: effectiveSender, recipients: apiRecipients, subject, html, text,
+    });
+    if (result.success) {
+      console.log('[email] Sent via Brevo API →', result.messageId, '→', apiRecipients.map((r) => r.email));
+      return result;
+    }
+    apiError = result.error;
+    console.warn('[email] Brevo API failed, falling back to SMTP:', apiError);
+  }
+
+  // ── 2. SMTP fallback ────────────────────────────────────────────────────────
   const transport = getTransporter();
 
   if (!transport) {
+    if (apiError) return { success: false, error: apiError };
     console.log('[email] SMTP not configured — mock send');
     console.log(`[email] MOCK → To: ${JSON.stringify(to)} | Subject: ${subject}`);
     return { success: true, mock: true };
   }
 
   // Normalise "to" → nodemailer address format
-  const recipients = Array.isArray(to)
-    ? to.map((r) => (typeof r === 'string' ? r : `${r.name || ''} <${r.email}>`))
-    : [typeof to === 'string' ? to : `${to.name || ''} <${to.email}>`];
-
-  const effectiveSender = sender || {
-    name:  env.BREVO_SENDER_NAME,
-    email: env.BREVO_SENDER_EMAIL,
-  };
+  const recipients = list.map((r) => (typeof r === 'string' ? r : `${r.name || ''} <${r.email}>`));
 
   try {
     const info = await transport.sendMail({

@@ -22,6 +22,7 @@ export const env = {
   BREVO_SMTP_PORT:    parseInt(process.env.BREVO_SMTP_PORT || '587', 10),
   BREVO_SMTP_USER:    process.env.BREVO_SMTP_USER  || '',
   BREVO_SMTP_PASS:    process.env.BREVO_SMTP_PASS  || '',
+  BREVO_API_KEY:      process.env.BREVO_API_KEY    || '',
   BREVO_SENDER_NAME:  process.env.BREVO_SENDER_NAME  || 'DY Patil ERP',
   BREVO_SENDER_EMAIL: process.env.BREVO_SENDER_EMAIL || 'postdoc@dyperf.com',
   // Zata S3-compatible storage (optional — stub mode if not set)
