@@ -26,6 +26,7 @@ Coverage: `npm run test:coverage` (frontend) / `cd backend && npm run test:cover
 | Submissions list — auth-scoped load + detail drawer | Component + E2E | ✅ Covered |
 | Submit flow — auth-scoped create | Component + E2E | ✅ Covered |
 | Authentication (login/redirect) | E2E | ⚠️ Needs live backend |
+| Take-test serve (sampling + answer-key sanitization) | API (middleware + route) | ✅ Covered (ISSUE-007) |
 
 ## APIs Covered
 
@@ -35,6 +36,8 @@ Coverage: `npm run test:coverage` (frontend) / `cd backend && npm run test:cover
 | `GET /api/fees/:id` | — | ⛔ Not yet (not in current diff) |
 | `POST /api/fees` | — | ⛔ Not yet (not in current diff) |
 | `POST /api/fees/:id/payments` | — | ⛔ Not yet (not in current diff) |
+| `GET /api/tests/:id` (take-test) | candidate → frozen 100 (25/50/25), no answer keys; admin → full bank sanitized; admin `?includeAnswers=1` → keys; non-admin staff → no keys; unauth → counts only | ✅ 7 tests |
+| auth middleware (`optionalAuth`/`authenticate`/`mapTokenToUser`) | test_scope mapping parity; missing-token paths | ✅ 6 tests |
 
 ## Components Covered
 
@@ -43,7 +46,7 @@ Coverage: `npm run test:coverage` (frontend) / `cd backend && npm run test:cover
 | `src/pages/student/FeesPage.jsx` | 6 | ✅ 100% stmts |
 | `src/pages/student/ProfilePage.jsx` | 3 | ✅ 100% stmts |
 | `src/pages/student/ProgressPage.jsx` | 5 | ✅ 100% stmts |
-| `src/pages/student/ResearchProfilePage.jsx` | 4 | ✅ render/load paths |
+| `src/pages/student/ResearchProfilePage.jsx` | 3 | ✅ header + prop wiring (post ISSUE-005) |
 | `src/pages/student/SubmissionsPage.jsx` | 6 | ✅ render/load/detail |
 | `src/pages/student/SubmitPage.jsx` | 4 | ✅ 100% stmts |
 

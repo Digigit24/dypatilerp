@@ -117,16 +117,26 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
     return s.pick_count && s.pick_count > 0 ? Math.min(s.pick_count, bank) : bank;
   };
 
-  // Staff = authenticated WITHOUT a test-scoped JWT. Everyone else —
-  // candidates AND unauthenticated requests — never receives the full bank.
-  const isStaff = !!req.user && !req.user.test_scope;
+  // Strip the answer key from a question's config. Applied to candidate
+  // responses ALWAYS, and to staff responses unless an admin explicitly opts in.
+  const sanitize = (q) => {
+    const { correct_answer, ...cfg } = q.config || {};
+    return { ...q, config: cfg };
+  };
+
+  // Staff = authenticated with a NON-test-scoped token (positive signal).
+  // A test-scoped token (scope === 'test_only'), and unauthenticated requests,
+  // are candidates and never receive the full bank. Deriving this from the
+  // presence of scope (not the absence of test_scope) is what closes ISSUE-007.
+  const isStaff = !!req.user && req.user.scope !== 'test_only';
+
+  // Answer keys are only ever returned when an admin explicitly asks for them.
+  const includeAnswers = ['1', 'true', 'yes'].includes(
+    String(req.query.includeAnswers || '').toLowerCase()
+  );
+  const canSeeAnswers = isStaff && includeAnswers && (req.user.roles || []).includes('admin');
 
   if (!isStaff) {
-    const sanitize = (q) => {
-      const { correct_answer, ...cfg } = q.config || {};
-      return { ...q, config: cfg };
-    };
-
     let attempt = null;
     if (req.user) {
       ({ rows: [attempt] } = await query(
@@ -169,13 +179,16 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
     });
   }
 
-  // Admin / builder view — full bank
+  // Admin / builder view — full bank. Answer keys are stripped unless an admin
+  // explicitly opts in via ?includeAnswers=1 (defense in depth — a future
+  // mis-classification must not be able to leak correct answers).
+  const present = (q) => (canSeeAnswers ? q : sanitize(q));
   const sectionsWithQ = sections.map((s) => ({
     ...s,
-    questions: questions.filter((q) => q.section_id === s.id),
+    questions: questions.filter((q) => q.section_id === s.id).map(present),
     effective_question_count: effectiveCount(s),
   }));
-  ok(res, { ...test, sections: sectionsWithQ, questions });
+  ok(res, { ...test, sections: sectionsWithQ, questions: questions.map(present) });
 }));
 
 // ── Create test ────────────────────────────────────────────────────────────────

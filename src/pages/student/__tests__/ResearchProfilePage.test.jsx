@@ -1,63 +1,55 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { render, screen } from '@testing-library/react'
+
+/**
+ * ResearchProfilePage now delegates rendering to StudentProfileView (defaultTab
+ * "research") instead of fetching the profile itself — see ISSUE-005 resolution.
+ * These tests assert the header + prop wiring + the currentUser gating.
+ */
 
 const auth = vi.hoisted(() => ({ user: null }))
 vi.mock('../../../store/authStore.js', () => ({
   useAuthStore: (selector) => selector({ currentUser: auth.user, role: null }),
 }))
 
-vi.mock('../../../api/services/researchProfileService.js', () => ({
-  getProfile: vi.fn(),
-  togglePublic: vi.fn(),
+// StudentProfileView is heavy (many services); stub it and assert the prop wiring.
+vi.mock('../../../components/shared/StudentProfileView.jsx', () => ({
+  default: ({ studentId, isAdminView, defaultTab }) => (
+    <div
+      data-testid="profile-view"
+      data-student-id={studentId}
+      data-admin={String(isAdminView)}
+      data-tab={defaultTab}
+    />
+  ),
 }))
 
-import { getProfile } from '../../../api/services/researchProfileService.js'
 import ResearchProfilePage from '../ResearchProfilePage.jsx'
 
 const STUDENT = { id: 'cccc1111-2222-4333-8444-555555555555' }
-const profile = {
-  student_id: STUDENT.id,
-  is_public: false,
-  public_slug: 'priya',
-  research_papers: [{ id: 'p1', title: 'Paper A', is_verified: true }],
-  patents: [],
-  workshops_seminars: [],
-  publications: [],
-  skills: ['Genomics', 'Python'],
-}
-
-const renderPage = () => render(<MemoryRouter><ResearchProfilePage /></MemoryRouter>)
 
 beforeEach(() => {
   vi.clearAllMocks()
   auth.user = STUDENT
-  getProfile.mockResolvedValue({ data: profile })
 })
 
 describe('ResearchProfilePage', () => {
-  it('shows a skeleton while loading', () => {
-    getProfile.mockReturnValue(new Promise(() => {}))
-    const { container } = renderPage()
-    expect(container.querySelector('.shimmer')).toBeInTheDocument()
+  it('always renders the page header', () => {
+    render(<ResearchProfilePage />)
+    expect(screen.getByText('Research Profile')).toBeInTheDocument()
   })
 
-  it('does not fetch without an authenticated user id', () => {
+  it('passes the authenticated user id and research tab to StudentProfileView', () => {
+    render(<ResearchProfilePage />)
+    const view = screen.getByTestId('profile-view')
+    expect(view).toHaveAttribute('data-student-id', STUDENT.id)
+    expect(view).toHaveAttribute('data-admin', 'false')
+    expect(view).toHaveAttribute('data-tab', 'research')
+  })
+
+  it('does not render the profile view when there is no authenticated user', () => {
     auth.user = null
-    renderPage()
-    expect(getProfile).not.toHaveBeenCalled()
-  })
-
-  it('fetches the profile for the authenticated user id (not hardcoded)', async () => {
-    renderPage()
-    await waitFor(() => expect(getProfile).toHaveBeenCalledWith(STUDENT.id))
-    expect(getProfile).not.toHaveBeenCalledWith('stu_001')
-  })
-
-  it('renders profile sections and skills after load', async () => {
-    renderPage()
-    expect(await screen.findByText('Research Papers')).toBeInTheDocument()
-    expect(screen.getByText('Paper A')).toBeInTheDocument()
-    expect(screen.getByText('Genomics')).toBeInTheDocument()
+    render(<ResearchProfilePage />)
+    expect(screen.queryByTestId('profile-view')).not.toBeInTheDocument()
   })
 })

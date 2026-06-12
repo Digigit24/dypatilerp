@@ -4,6 +4,57 @@ QA cycle triggered by working-tree changes scoping student pages + the fees API
 to the authenticated user. Test infrastructure did not previously exist; it was
 established as part of this cycle.
 
+---
+
+## Production bug investigation — 2026-06-12 (read-only)
+
+**Report:** On production (`/test/0e…`) an applicant is served **all 300**
+questions of a 3-section test instead of the randomized **100**. Per-section
+pill `…/100`, footer `0/300`.
+
+**Verdict: CODE bug — not config, not data, not cache.** → **RESOLVED 2026-06-12**
+(see `../vulnerabilities/resolved-issues.md`, ISSUE-007).
+
+**Resolution summary:** extracted a shared `mapTokenToUser` helper so
+`optionalAuth` and `authenticate` can't drift (`optionalAuth` now sets
+`test_scope`); `GET /api/tests/:id` now uses a positive staff signal
+(`req.user.scope !== 'test_only'`); the staff branch now strips `correct_answer`
+unless an admin passes `?includeAnswers=1`. Covered by 13 new backend tests
+(`auth.middleware.test.js`, `tests.routes.test.js`). Code-only — in-progress
+attempts self-heal via their existing frozen `question_set`; no DB writes.
+
+**Data flow traced (applicant take-test):**
+- Frontend `src/pages/public/TestPage.jsx` → `getTestForTaking(testId)`
+  (`src/api/services/testService.js:25`) → `GET /api/tests/:id` via the
+  test-scoped axios instance (`testHttp`). The page does **no** client-side
+  sampling; it renders `test.sections[].questions` as-is, so the `/100` and
+  `/300` counts come straight from the API response.
+- Backend `GET /api/tests/:id` (`backend/src/modules/tests/tests.routes.js:102`,
+  `optionalAuth`). Branches on `isStaff = !!req.user && !req.user.test_scope`
+  (line 122): candidates get the sanitized frozen `question_set`; staff get the
+  full bank (lines 172–178).
+
+**Root cause:** `optionalAuth` (`backend/src/middleware/auth.js:57–73`) does not
+copy the test-scoped JWT claims onto `req.user` — the `test_scope` mapping exists
+only in `authenticate` (lines 42–46). So on the serve route the candidate's
+`req.user.test_scope` is `undefined`, `isStaff` is **true**, and the handler
+returns the **entire 300-question bank** via the staff branch — which also skips
+the `sanitize()` step, so `correct_answer` is leaked too.
+
+**Evidence (read-only Neon query), test `0eb0bfdc-7a8f-46b8-8e7d-bd6b821016d7`:**
+- `pick_count` per section = 25 / 50 / 25 (bank 100 each) → intended 100.
+  **Config correct** (rules out a `pick_count`/`randomize` flag issue).
+- Latest in-progress attempt `question_set` length = **100**.
+  **Frozen sample correct in DB** (rules out a sampling/data issue).
+- No frontend service worker; no cache middleware on `/api/tests/:id`
+  (rules out CDN/SW/Redis caching).
+
+The bug is global to all sampled tests taken via this route, and is an
+exam-integrity issue (over-serving questions **and** exposing answer keys).
+No code or DB changes were made during this investigation.
+
+---
+
 ## 1. Changed Files
 
 | File | Change |

@@ -10,6 +10,23 @@ const parseRoles = (raw) => {
   return [];
 };
 
+// Apply JWT payload claims onto the DB user row. Used by BOTH authenticate and
+// optionalAuth so the two can never drift (the source of ISSUE-007, where
+// optionalAuth omitted the test-scoped claims and candidates were treated as
+// staff on the take-test endpoint).
+export const mapTokenToUser = (user, payload) => {
+  user.roles = parseRoles(payload.roles);
+  user.scope = payload.scope || null;
+  // Test-scoped claims (set by test-auth login) — carry them through so the
+  // take-test route can positively identify a candidate.
+  if (payload.scope === 'test_only') {
+    user.applicant_id = payload.applicant_id || null;
+    user.token_id     = payload.token_id     || null;
+    user.test_scope   = payload.test_id      || null;
+  }
+  return user;
+};
+
 export const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
@@ -36,14 +53,7 @@ export const authenticate = async (req, res, next) => {
     if (!rows.length || !rows[0].is_active) {
       return unauthorized(res, 'User not found or inactive');
     }
-    req.user = rows[0];
-    req.user.roles = parseRoles(payload.roles);
-    // Carry test-scoped claims through (set by test-auth login)
-    if (payload.scope === 'test_only') {
-      req.user.applicant_id = payload.applicant_id || null;
-      req.user.token_id     = payload.token_id     || null;
-      req.user.test_scope   = payload.test_id      || null;
-    }
+    req.user = mapTokenToUser(rows[0], payload);
     next();
   } catch (err) {
     console.error('[auth] DB error during authentication:', err.message);
@@ -65,8 +75,7 @@ export const optionalAuth = async (req, res, next) => {
       [payload.sub]
     );
     if (rows.length && rows[0].is_active) {
-      req.user = rows[0];
-      req.user.roles = parseRoles(payload.roles);
+      req.user = mapTokenToUser(rows[0], payload);
     }
   } catch { /* ignore */ }
   next();

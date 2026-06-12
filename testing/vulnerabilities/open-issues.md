@@ -3,6 +3,9 @@
 Each entry: Date · Severity · Location · Reproduction · Suggested fix · Status.
 Resolved items move to `resolved-issues.md`.
 
+> ISSUE-007 (test-take full-bank + answer-key leak) — **RESOLVED 2026-06-12**,
+> see `resolved-issues.md`.
+
 ---
 
 ## VULN-001 — Roles are read from the JWT, not re-checked at request time
