@@ -1,7 +1,7 @@
 import {
-  ChevronDown, ChevronRight, FilePlus2, Loader2,
+  ChevronDown, ChevronRight, Clock, FilePlus2, Loader2,
   Plus, Save, Send, Trash2, Users, X, Copy, Eye, EyeOff, CheckCircle2, Mail, MailCheck,
-  RefreshCw, Link2, Search, ExternalLink, ClipboardList,
+  RefreshCw, Link2, Search, ExternalLink, ClipboardList, Target, AlignLeft,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -115,7 +115,7 @@ function AssignModal({ test, courseId: testCourseId, onClose, addToast }) {
       <div className="relative w-full max-w-xl rounded-[28px] bg-[color:var(--card)] p-6 shadow-2xl">
         <button onClick={onClose} className="absolute right-5 top-5 text-[color:var(--secondary)]"><X size={20} /></button>
         <h2 className="text-lg font-semibold text-[color:var(--text)]">Assign Test</h2>
-        <p className="mt-0.5 text-xs text-[color:var(--secondary)]">{test.title}</p>
+        <p className="mt-0.5 text-xs text-[color:var(--secondary)]">{test.title} · links are valid for 5 days</p>
 
         {!result ? (
           <div className="mt-4 space-y-4">
@@ -204,7 +204,7 @@ function AssignModal({ test, courseId: testCourseId, onClose, addToast }) {
               </div>
               <div>
                 <p className="text-sm font-semibold text-[color:var(--text)]">Send credentials via email</p>
-                <p className="text-[11px] text-[color:var(--secondary)]">Each candidate receives their unique login link + username + password at <strong>postdoc@dyperf.com</strong></p>
+                <p className="text-[11px] text-[color:var(--secondary)]">Each candidate receives their unique login link (valid 5 days) + username + password</p>
               </div>
             </label>
 
@@ -273,18 +273,21 @@ function QuestionRow({ question, idx, onChange, onDelete, expanded, onToggle }) 
   const correct = config.correct_answer || 'A'
 
   return (
-    <div className="border-b border-[color:var(--border)] last:border-0">
+    <div className={`border-b border-[color:var(--border)] last:border-0 ${expanded ? 'bg-[color:var(--surface)]/60' : ''}`}>
       <div
-        className="flex cursor-pointer items-start gap-2 px-3 py-2 hover:bg-[color:var(--surface)] transition"
+        className="flex cursor-pointer items-start gap-2.5 px-4 py-2.5 hover:bg-[color:var(--surface)] transition"
         onClick={onToggle}
       >
-        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[color:var(--surface)] text-[10px] font-bold text-[color:var(--secondary)]">
+        <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-bold ${expanded ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--surface)] text-[color:var(--secondary)]'}`}>
           {idx + 1}
         </span>
-        <p className={`flex-1 text-sm ${question.question_text ? 'text-[color:var(--text)]' : 'italic text-[color:var(--secondary)]'}`}>
-          {question.question_text || 'Empty question…'}
+        <p className={`flex-1 text-sm leading-5 ${question.question_text ? 'text-[color:var(--text)]' : 'italic text-[color:var(--secondary)]'}`}>
+          {question.question_text || 'Empty question — click to edit'}
         </p>
         <div className="flex shrink-0 items-center gap-2">
+          <span className="rounded-md bg-[color:var(--surface)] px-1.5 py-0.5 text-[10px] font-semibold text-[color:var(--secondary)]">
+            {question.marks ?? 1}m
+          </span>
           {question.question_text && (
             <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
               {correct}✓
@@ -298,7 +301,7 @@ function QuestionRow({ question, idx, onChange, onDelete, expanded, onToggle }) 
       </div>
 
       {expanded && (
-        <div className="border-t border-[color:var(--border)] bg-[color:var(--surface)] px-3 pb-3 pt-2">
+        <div className="border-t border-[color:var(--border)] bg-[color:var(--surface)] px-4 pb-3.5 pt-2.5">
           <textarea
             className="textarea w-full text-sm"
             rows={2}
@@ -307,15 +310,19 @@ function QuestionRow({ question, idx, onChange, onDelete, expanded, onToggle }) 
             onChange={(e) => onChange({ question_text: e.target.value })}
             onClick={(e) => e.stopPropagation()}
           />
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             {options.map((opt) => (
-              <label key={opt.key} className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+              <label key={opt.key}
+                className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 transition ${correct === opt.key ? 'border-emerald-300 bg-emerald-50/60' : 'border-transparent'}`}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <input
                   type="radio"
                   name={`c_${question._id || question.id}`}
                   checked={correct === opt.key}
                   onChange={() => onChange({ config: { ...config, correct_answer: opt.key } })}
                   className="accent-[color:var(--accent)] h-3 w-3 shrink-0"
+                  title="Mark as correct answer"
                 />
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[color:var(--card)] text-[10px] font-bold text-[color:var(--secondary)]">{opt.key}</span>
                 <input
@@ -333,6 +340,7 @@ function QuestionRow({ question, idx, onChange, onDelete, expanded, onToggle }) 
               <input type="number" className="input h-6 w-12 text-xs" min={0} value={question.marks}
                 onChange={(e) => onChange({ marks: Number(e.target.value) })} />
             </label>
+            <span className="ml-auto text-[10px] text-[color:var(--muted)]">Select the radio next to the correct option</span>
           </div>
         </div>
       )}
@@ -357,6 +365,11 @@ export default function TestBuilderPage() {
   const [savingQ, setSavingQ] = useState(false)
   const [expandedQ, setExpandedQ] = useState(null)
   const [showAssign, setShowAssign] = useState(false)
+  const [showInstructions, setShowInstructions] = useState(false)
+
+  // Test list filters
+  const [testSearch, setTestSearch] = useState('')
+  const [testStatus, setTestStatus] = useState('all')
 
   // Tab: 'builder' | 'assigned'
   const [activeTab, setActiveTab] = useState('builder')
@@ -388,6 +401,7 @@ export default function TestBuilderPage() {
     setResetState({})
     setShowPwFor({})
     setActiveTab('builder')
+    setShowInstructions(false)
     setForm({
       title: test.title || '',
       instructions: test.instructions || '',
@@ -518,6 +532,15 @@ export default function TestBuilderPage() {
 
   if (!tests) return <SkeletonCard />
 
+  const filteredTests = tests.filter((t) => {
+    const q = testSearch.trim().toLowerCase()
+    if (q && !(t.title || '').toLowerCase().includes(q)) return false
+    if (testStatus !== 'all' && t.status !== testStatus) return false
+    return true
+  })
+
+  const totalMarks = allQuestions.reduce((s, q) => s + (Number(q.marks) || 0), 0)
+
   return (
     <div className="fade-page">
       <PageHeader
@@ -530,29 +553,69 @@ export default function TestBuilderPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
-        {/* ── Test list ── */}
-        <aside className="card p-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--secondary)]">
-            Tests {currentCourse ? `· ${currentCourse.name}` : ''}
-          </p>
-          <div className="space-y-1.5">
-            {tests.length === 0 && <p className="py-4 text-center text-xs text-[color:var(--secondary)]">No tests yet.</p>}
-            {tests.map((test) => (
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[230px_minmax(0,1fr)]">
+        {/* ── Mobile / narrow: test picker dropdown ── */}
+        <div className="lg:hidden">
+          <select
+            className="input w-full"
+            value={activeTestId || ''}
+            onChange={(e) => {
+              const t = tests.find((x) => x.id === e.target.value)
+              if (t) selectTest(t)
+            }}
+          >
+            {tests.length === 0 && <option value="">No tests yet</option>}
+            {tests.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.title} · {t.status === 'published' ? 'Live' : 'Draft'} · {t.question_count ?? 0}q
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* ── Test picker rail ── */}
+        <aside className="hidden lg:block card h-fit min-w-0 p-3 lg:sticky lg:top-4">
+          <div className="relative mb-2">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--muted)]" />
+            <input
+              className="input h-8 w-full pl-7 text-xs"
+              placeholder="Search tests…"
+              value={testSearch}
+              onChange={(e) => setTestSearch(e.target.value)}
+            />
+          </div>
+          <div className="mb-2.5 flex gap-1">
+            {[['all', 'All'], ['draft', 'Drafts'], ['published', 'Live']].map(([key, label]) => (
+              <button key={key} onClick={() => setTestStatus(key)}
+                className={`flex-1 whitespace-nowrap rounded-lg px-1.5 py-1 text-center text-[10px] font-bold uppercase tracking-wide transition ${testStatus === key ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--muted)] hover:text-[color:var(--text)]'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-1.5 lg:max-h-[calc(100vh-280px)] lg:overflow-y-auto">
+            {filteredTests.length === 0 && (
+              <p className="py-4 text-center text-xs text-[color:var(--secondary)]">
+                {tests.length === 0 ? 'No tests yet — create one.' : 'No tests match.'}
+              </p>
+            )}
+            {filteredTests.map((test) => (
               <button
                 key={test.id}
                 onClick={() => selectTest(test)}
                 className={`w-full rounded-xl border p-2.5 text-left transition ${
                   activeTestId === test.id
-                    ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]'
+                    ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)] shadow-sm'
                     : 'border-[color:var(--border)] hover:border-[color:var(--accent)]'
                 }`}
               >
-                <p className="truncate text-xs font-semibold text-[color:var(--text)]">{test.title}</p>
-                <div className="mt-1 flex items-center justify-between gap-1">
-                  <span className="text-[10px] text-[color:var(--secondary)]">{test.duration_minutes}min · {test.question_count ?? 0}q</span>
-                  <StatusBadge status={test.status} />
+                <div className="flex items-start justify-between gap-1.5">
+                  <p className="truncate text-xs font-semibold text-[color:var(--text)]">{test.title}</p>
+                  <span className={`mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full ${test.status === 'published' ? 'bg-emerald-500' : 'bg-amber-400'}`} title={test.status} />
                 </div>
+                <p className="mt-1 text-[10px] text-[color:var(--secondary)]">
+                  {test.duration_minutes} min · {test.question_count ?? 0} questions
+                </p>
               </button>
             ))}
           </div>
@@ -560,14 +623,109 @@ export default function TestBuilderPage() {
 
         {/* ── Editor ── */}
         {form && activeTest ? (
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
+            {/* ── Header card: meta + actions ── */}
+            <div className="card p-0 overflow-hidden">
+              <div className="flex flex-wrap items-center gap-3 border-b border-[color:var(--border)] px-4 py-3">
+                <input
+                  className="min-w-0 flex-1 bg-transparent text-lg font-semibold text-[color:var(--text)] outline-none placeholder:text-[color:var(--muted)]"
+                  value={form.title}
+                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder="Test title…"
+                />
+                <StatusBadge status={activeTest.status} />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-3 px-4 py-3">
+                <label className="flex items-center gap-2 text-xs font-semibold text-[color:var(--secondary)]" title="Duration in minutes">
+                  <Clock size={13} />
+                  <input
+                    className="input h-8 w-16 text-sm"
+                    type="number" min={1}
+                    value={form.duration_minutes}
+                    onChange={(e) => setForm((f) => ({ ...f, duration_minutes: Number(e.target.value) }))}
+                  />
+                  min
+                </label>
+                <label className="flex items-center gap-2 text-xs font-semibold text-[color:var(--secondary)]" title="Passing marks">
+                  <Target size={13} />
+                  <input
+                    className="input h-8 w-16 text-sm"
+                    type="number" min={0}
+                    value={form.passing_marks}
+                    onChange={(e) => setForm((f) => ({ ...f, passing_marks: Number(e.target.value) }))}
+                  />
+                  to pass
+                </label>
+                <span className="text-xs text-[color:var(--secondary)]">
+                  {allQuestions.length} questions · {totalMarks} marks
+                </span>
+                <button
+                  onClick={() => setShowInstructions((v) => !v)}
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition ${showInstructions ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)] hover:text-[color:var(--text)]'}`}
+                >
+                  <AlignLeft size={13} /> Instructions
+                </button>
+
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <button onClick={saveMeta} disabled={savingMeta} className="btn-primary inline-flex items-center gap-1.5 text-sm">
+                    {savingMeta ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
+                  </button>
+                  {activeTest.status === 'draft' && (
+                    <button onClick={publish} className="inline-flex items-center gap-1.5 rounded-[14px] bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">
+                      <Send size={13} /> Publish
+                    </button>
+                  )}
+                  {activeTest.status === 'published' && (
+                    <button onClick={() => setShowAssign(true)} className="inline-flex items-center gap-1.5 rounded-[14px] bg-[color:var(--accent-tint)] px-3 py-2 text-sm font-semibold text-[color:var(--accent)] hover:opacity-80">
+                      <Users size={13} /> Assign
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {showInstructions && (
+                <div className="border-t border-[color:var(--border)] px-4 py-3">
+                  <textarea
+                    className="textarea h-20 w-full text-sm"
+                    placeholder="Instructions shown to candidates on the test start page…"
+                    value={form.instructions}
+                    onChange={(e) => setForm((f) => ({ ...f, instructions: e.target.value }))}
+                  />
+                </div>
+              )}
+
+              {/* Published link strip */}
+              {activeTest.status === 'published' && (
+                <div className="flex flex-wrap items-center gap-2 border-t border-emerald-200 bg-emerald-50 px-4 py-2.5">
+                  <CheckCircle2 size={14} className="shrink-0 text-emerald-600" />
+                  <span className="text-xs font-semibold text-emerald-800">Live</span>
+                  <code className="min-w-0 flex-1 truncate rounded-lg border border-emerald-200 bg-white/70 px-2 py-1 font-mono text-[11px] text-emerald-900">
+                    {window.location.origin}/test-login?token=&lt;per-candidate&gt;
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/test-login`)
+                      addToast({ type: 'success', title: 'Base link copied!' })
+                    }}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                  >
+                    <Copy size={11} /> Copy
+                  </button>
+                  <span className="w-full text-[10px] text-emerald-600 sm:w-auto">
+                    Unique links are emailed on assignment · valid for 5 days
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* ── Tab bar ── */}
             <div className="flex gap-1 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-1 w-fit">
               <button
                 onClick={() => setActiveTab('builder')}
                 className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-sm font-semibold transition ${activeTab === 'builder' ? 'bg-[color:var(--card)] text-[color:var(--text)] shadow-sm' : 'text-[color:var(--secondary)] hover:text-[color:var(--text)]'}`}
               >
-                <ClipboardList size={14} /> Builder
+                <ClipboardList size={14} /> Questions
               </button>
               {activeTest.status === 'published' && (
                 <button
@@ -582,172 +740,107 @@ export default function TestBuilderPage() {
               )}
             </div>
 
-            {/* ── BUILDER TAB ── */}
+            {/* ── QUESTIONS TAB ── */}
             {activeTab === 'builder' && (
-              <>
-                {/* Metadata bar */}
-                <div className="card p-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <input
-                        className="input w-full font-semibold"
-                        value={form.title}
-                        onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                        placeholder="Test title"
-                      />
-                    </div>
-                    <input
-                      className="input w-24 text-sm"
-                      type="number"
-                      title="Duration (min)"
-                      placeholder="Min"
-                      value={form.duration_minutes}
-                      onChange={(e) => setForm((f) => ({ ...f, duration_minutes: Number(e.target.value) }))}
-                    />
-                    <input
-                      className="input w-20 text-sm"
-                      type="number"
-                      title="Passing marks"
-                      placeholder="Pass"
-                      value={form.passing_marks}
-                      onChange={(e) => setForm((f) => ({ ...f, passing_marks: Number(e.target.value) }))}
-                    />
-                    <StatusBadge status={activeTest.status} />
-                  </div>
-                  <textarea
-                    className="textarea mt-3 h-16 w-full text-sm"
-                    placeholder="Instructions (shown on test start page)…"
-                    value={form.instructions}
-                    onChange={(e) => setForm((f) => ({ ...f, instructions: e.target.value }))}
-                  />
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button onClick={saveMeta} disabled={savingMeta} className="btn-primary inline-flex items-center gap-1.5 text-sm">
-                      {savingMeta ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
-                    </button>
-                    {activeTest.status === 'draft' && (
-                      <button onClick={publish} className="inline-flex items-center gap-1.5 rounded-[14px] bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
-                        <Send size={13} /> Publish
-                      </button>
-                    )}
-                    {activeTest.status === 'published' && (
-                      <button onClick={() => setShowAssign(true)} className="inline-flex items-center gap-1.5 rounded-[14px] bg-[color:var(--accent-tint)] px-3 py-2 text-sm font-semibold text-[color:var(--accent)]">
-                        <Users size={13} /> Assign to Applicants
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Published link banner */}
-                  {activeTest.status === 'published' && (
-                    <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-                      <div className="flex items-start gap-2">
-                        <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-emerald-800">Test is Live</p>
-                          <p className="mt-0.5 text-[11px] text-emerald-700">
-                            Each candidate receives a unique login link when you assign the test. Copy the base URL below to include in emails.
-                          </p>
-                          <div className="mt-2 flex items-center gap-2">
-                            <code className="flex-1 truncate rounded-lg bg-white/70 px-2 py-1 text-[11px] font-mono text-emerald-900 border border-emerald-200">
-                              {window.location.origin}/test-login
-                            </code>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(`${window.location.origin}/test-login`)
-                                addToast({ type: 'success', title: 'Link copied!' })
-                              }}
-                              className="shrink-0 rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 inline-flex items-center gap-1"
-                            >
-                              <Copy size={11} /> Copy
-                            </button>
-                          </div>
-                          <p className="mt-1.5 text-[10px] text-emerald-600">
-                            Full link format: <span className="font-mono">/test-login?token=&lt;unique_token&gt;</span> — generated per candidate when you click &quot;Assign to Applicants&quot;
-                          </p>
-                        </div>
+              <div className="card overflow-hidden p-0">
+                {/* Section chips */}
+                <div className="flex items-center gap-1.5 overflow-x-auto border-b border-[color:var(--border)] px-3 py-2.5">
+                  {sections.map((sec) => {
+                    const count = allQuestions.filter((q) => q.section_id === sec.id).length
+                    const active = activeSectionId === sec.id
+                    return (
+                      <div key={sec.id}
+                        className={`group flex shrink-0 items-center gap-1 rounded-xl border pl-3 pr-1.5 py-1.5 transition cursor-pointer ${
+                          active
+                            ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]'
+                            : 'border-[color:var(--border)] hover:border-[color:var(--accent)]'
+                        }`}
+                        onClick={() => setActiveSectionId(sec.id)}
+                      >
+                        <span className={`text-xs font-semibold ${active ? 'text-[color:var(--accent)]' : 'text-[color:var(--secondary)]'}`}>
+                          {sec.title}
+                        </span>
+                        <span className={`rounded-md px-1 text-[10px] font-bold ${active ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--surface)] text-[color:var(--muted)]'}`}>
+                          {count}
+                        </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); removeSection(sec.id) }}
+                          className="grid h-5 w-5 place-items-center rounded-full text-[color:var(--muted)] opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-500"
+                          title="Delete section"
+                        >
+                          <X size={11} />
+                        </button>
                       </div>
+                    )
+                  })}
+                  <button
+                    onClick={addSection}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-dashed border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
+                  >
+                    <Plus size={12} /> Section
+                  </button>
+                </div>
+
+                {/* Active section title (inline rename) */}
+                {activeSectionId && (
+                  <div className="flex items-center gap-3 border-b border-[color:var(--border)] bg-[color:var(--surface)]/50 px-4 py-2">
+                    <input
+                      className="flex-1 bg-transparent text-sm font-semibold text-[color:var(--text)] outline-none"
+                      value={sections.find((s) => s.id === activeSectionId)?.title || ''}
+                      onChange={(e) => setSections((xs) => xs.map((s) => s.id === activeSectionId ? { ...s, title: e.target.value } : s))}
+                      onBlur={(e) => updateSection(activeTestId, activeSectionId, { title: e.target.value })}
+                      title="Click to rename section"
+                    />
+                    <span className="text-xs text-[color:var(--secondary)]">{sectionQs.length} question{sectionQs.length === 1 ? '' : 's'}</span>
+                  </div>
+                )}
+
+                {/* Question list */}
+                <div className="max-h-[calc(100vh-420px)] min-h-[160px] overflow-y-auto">
+                  {sectionQs.length === 0 && activeSectionId && (
+                    <div className="flex flex-col items-center gap-2 py-10 text-center">
+                      <ClipboardList size={22} className="text-[color:var(--muted)]" />
+                      <p className="text-sm text-[color:var(--secondary)]">No questions in this section yet.</p>
                     </div>
                   )}
+                  {!activeSectionId && (
+                    <div className="flex flex-col items-center gap-2 py-10 text-center">
+                      <Plus size={22} className="text-[color:var(--muted)]" />
+                      <p className="text-sm text-[color:var(--secondary)]">Create a section above to start adding questions.</p>
+                    </div>
+                  )}
+                  {sectionQs.map((q, idx) => (
+                    <QuestionRow
+                      key={q._id || q.id}
+                      question={q}
+                      idx={idx}
+                      expanded={expandedQ === (q._id || q.id)}
+                      onToggle={() => setExpandedQ((cur) => cur === (q._id || q.id) ? null : (q._id || q.id))}
+                      onChange={(patch) => patchQ(q._id || q.id, patch)}
+                      onDelete={() => deleteQ(q._id || q.id)}
+                    />
+                  ))}
                 </div>
 
-                {/* Sections + Questions */}
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[160px_minmax(0,1fr)]">
-                  <div className="card p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--secondary)]">Sections</span>
-                      <button onClick={addSection} className="text-[color:var(--accent)] hover:opacity-70"><Plus size={15} /></button>
-                    </div>
-                    <div className="space-y-1">
-                      {sections.map((sec) => (
-                        <div key={sec.id} className="flex items-center gap-1">
-                          <button
-                            onClick={() => setActiveSectionId(sec.id)}
-                            className={`flex-1 truncate rounded-lg px-2 py-1.5 text-left text-xs font-semibold transition ${
-                              activeSectionId === sec.id ? 'bg-[color:var(--accent)] text-white' : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'
-                            }`}
-                          >
-                            {sec.title}
-                            <span className="ml-1 opacity-70">({allQuestions.filter((q) => q.section_id === sec.id).length})</span>
-                          </button>
-                          <button onClick={() => removeSection(sec.id)} className="shrink-0 text-[color:var(--secondary)] hover:text-red-500"><X size={12} /></button>
-                        </div>
-                      ))}
-                      {sections.length === 0 && <p className="py-2 text-center text-[10px] text-[color:var(--secondary)]">No sections</p>}
-                    </div>
+                {/* Footer actions */}
+                {activeSectionId && (
+                  <div className="flex items-center gap-2 border-t border-[color:var(--border)] bg-[color:var(--surface)]/50 p-3">
+                    <button
+                      onClick={addQuestion}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
+                    >
+                      <Plus size={13} /> Add Question
+                    </button>
+                    <button onClick={saveQuestions} disabled={savingQ} className="btn-primary inline-flex items-center gap-1.5 text-xs py-1.5 px-3">
+                      {savingQ ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                      Save All Questions
+                    </button>
+                    <span className="ml-auto text-xs text-[color:var(--secondary)]">
+                      Total: {allQuestions.length}q · {totalMarks} marks
+                    </span>
                   </div>
-
-                  <div className="card overflow-hidden p-0">
-                    {activeSectionId && (
-                      <div className="flex items-center gap-3 border-b border-[color:var(--border)] px-4 py-2">
-                        <input
-                          className="flex-1 bg-transparent text-sm font-semibold text-[color:var(--text)] outline-none"
-                          value={sections.find((s) => s.id === activeSectionId)?.title || ''}
-                          onChange={(e) => setSections((xs) => xs.map((s) => s.id === activeSectionId ? { ...s, title: e.target.value } : s))}
-                          onBlur={(e) => updateSection(activeTestId, activeSectionId, { title: e.target.value })}
-                        />
-                        <span className="text-xs text-[color:var(--secondary)]">{sectionQs.length} questions</span>
-                      </div>
-                    )}
-
-                    <div className="max-h-[calc(100vh-360px)] overflow-y-auto">
-                      {sectionQs.length === 0 && activeSectionId && (
-                        <p className="py-8 text-center text-sm text-[color:var(--secondary)]">No questions. Add one below.</p>
-                      )}
-                      {!activeSectionId && (
-                        <p className="py-8 text-center text-sm text-[color:var(--secondary)]">Select or create a section.</p>
-                      )}
-                      {sectionQs.map((q, idx) => (
-                        <QuestionRow
-                          key={q._id || q.id}
-                          question={q}
-                          idx={idx}
-                          expanded={expandedQ === (q._id || q.id)}
-                          onToggle={() => setExpandedQ((cur) => cur === (q._id || q.id) ? null : (q._id || q.id))}
-                          onChange={(patch) => patchQ(q._id || q.id, patch)}
-                          onDelete={() => deleteQ(q._id || q.id)}
-                        />
-                      ))}
-                    </div>
-
-                    {activeSectionId && (
-                      <div className="flex items-center gap-2 border-t border-[color:var(--border)] p-3">
-                        <button
-                          onClick={addQuestion}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
-                        >
-                          <Plus size={13} /> Add Question
-                        </button>
-                        <button onClick={saveQuestions} disabled={savingQ} className="btn-primary inline-flex items-center gap-1.5 text-xs py-1.5 px-3">
-                          {savingQ ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                          Save {sectionQs.length > 0 ? `(${sectionQs.length})` : ''}
-                        </button>
-                        <span className="ml-auto text-xs text-[color:var(--secondary)]">
-                          Total: {allQuestions.length}q
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
+                )}
+              </div>
             )}
 
             {/* ── ASSIGNED TAB ── */}
@@ -787,6 +880,7 @@ export default function TestBuilderPage() {
                       const rs = resetState[row.applicant_id] || {}
                       const showPw = showPwFor[row.applicant_id]
                       const fresh = rs.result
+                      const expired = row.expires_at && new Date(row.expires_at) < new Date()
                       const attemptBadgeColor =
                         row.attempt_status === 'submitted'   ? 'bg-emerald-100 text-emerald-700' :
                         row.attempt_status === 'in_progress' ? 'bg-amber-100 text-amber-700' :
@@ -800,6 +894,11 @@ export default function TestBuilderPage() {
                               </p>
                               <p className="truncate text-xs text-[color:var(--secondary)]">{row.email}</p>
                             </div>
+                            {expired && !row.attempt_status && (
+                              <span className="shrink-0 rounded-lg bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                                link expired
+                              </span>
+                            )}
                             <span className={`shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-semibold ${attemptBadgeColor}`}>
                               {row.attempt_status || 'not started'}
                             </span>
@@ -820,7 +919,7 @@ export default function TestBuilderPage() {
                                 <span className="font-mono text-[color:var(--text)]">
                                   {showPw ? fresh.password : '••••••••'}
                                 </span>
-                                <button onClick={() => setShowPwFor((s) => ({ ...s, [row.applicant_id]: !s[row.applicant_id] }))}>
+                                                          <button onClick={() => setShowPwFor((s) => ({ ...s, [row.applicant_id]: !s[row.applicant_id] }))}>
                                   {showPw ? <EyeOff size={11} className="text-[color:var(--secondary)]" /> : <Eye size={11} className="text-[color:var(--secondary)]" />}
                                 </button>
                               </div>

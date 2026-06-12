@@ -34,6 +34,42 @@ export const deleteVideo = async (id) => {
   return ok(null)
 }
 
+// ─── Media folders ────────────────────────────────────────────────────────────
+
+export const getFolders = async (filters = {}) => {
+  if (USE_MOCK) return ok([])
+  const { data: res } = await http.get('/videos/folders', { params: filters })
+  return ok(res.data)
+}
+
+export const getFolderPath = async (folderId) => {
+  if (USE_MOCK) return ok([])
+  const { data: res } = await http.get(`/videos/folders/${folderId}/path`)
+  return ok(res.data)
+}
+
+export const createFolder = async (payload) => {
+  if (USE_MOCK) return ok({ id: `f_${Date.now()}`, ...payload })
+  const { data: res } = await http.post('/videos/folders', payload)
+  return ok(res.data)
+}
+
+export const updateFolder = async (id, payload) => {
+  if (USE_MOCK) return ok({ id, ...payload })
+  const { data: res } = await http.put(`/videos/folders/${id}`, payload)
+  return ok(res.data)
+}
+
+export const deleteFolder = async (id) => {
+  if (USE_MOCK) return ok(null)
+  await http.delete(`/videos/folders/${id}`)
+  return ok(null)
+}
+
+/** Returns the download URL for any media file (requires a session token) */
+export const buildDownloadUrl = (mediaId, sessionToken) =>
+  `${import.meta.env.VITE_API_URL || 'https://dypatilerp.celiyo.com/api'}/videos/${mediaId}/download?sessionToken=${sessionToken}`
+
 // ─── Upload ───────────────────────────────────────────────────────────────────
 
 export const requestUploadUrl = async (payload) => {

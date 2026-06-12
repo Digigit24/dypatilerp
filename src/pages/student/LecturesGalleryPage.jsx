@@ -55,7 +55,7 @@ export default function LecturesGalleryPage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const params = { is_published: true }
+    const params = { is_published: true, media_type: 'video' }
     if (currentCourse?.id) params.course_id = currentCourse.id
     getVideos(params).then(async (r) => {
       const vids = r.data || []

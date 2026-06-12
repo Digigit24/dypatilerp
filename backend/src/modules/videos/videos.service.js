@@ -4,12 +4,15 @@ import { env } from '../../config/env.js';
 
 // ─── Video CRUD ──────────────────────────────────────────────────────────────
 
-export const listVideos = async ({ course_id, batch_id, is_published, limit, offset }) => {
+export const listVideos = async ({ course_id, batch_id, is_published, media_type, folder_id, limit, offset }) => {
   const params = [];
   const conds = [];
   if (course_id)    { params.push(course_id);    conds.push(`v.course_id = $${params.length}`); }
   if (batch_id)     { params.push(batch_id);     conds.push(`v.batch_id = $${params.length}`); }
   if (is_published !== undefined) { params.push(is_published); conds.push(`v.is_published = $${params.length}`); }
+  if (media_type)   { params.push(media_type);   conds.push(`v.media_type = $${params.length}`); }
+  if (folder_id === 'root') { conds.push('v.folder_id IS NULL'); }
+  else if (folder_id)       { params.push(folder_id); conds.push(`v.folder_id = $${params.length}`); }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
   const { rows: data } = await query(
@@ -43,21 +46,23 @@ export const getVideoById = async (id) => {
 
 export const createVideo = async (payload, uploadedBy) => {
   const { rows } = await query(
-    `INSERT INTO videos (course_id, batch_id, title, description, duration_sec, object_key, file_size, thumbnail_key, sort_order, uploaded_by, is_published)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    `INSERT INTO videos (course_id, batch_id, title, description, duration_sec, object_key, file_size, thumbnail_key, sort_order, uploaded_by, is_published, media_type, mime_type, folder_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
     [
       payload.course_id, payload.batch_id || null, payload.title,
       payload.description || null, payload.duration_sec || 0,
       payload.object_key, payload.file_size || 0,
       payload.thumbnail_key || null, payload.sort_order || 0,
       uploadedBy, payload.is_published || false,
+      payload.media_type || 'video', payload.mime_type || null,
+      payload.folder_id || null,
     ]
   );
   return rows[0];
 };
 
 export const updateVideo = async (id, payload) => {
-  const allowed = ['title','description','duration_sec','is_published','sort_order','thumbnail_key'];
+  const allowed = ['title','description','duration_sec','is_published','sort_order','thumbnail_key','media_type','mime_type','folder_id'];
   const fields = [];
   const params = [];
   for (const k of allowed) {
@@ -77,6 +82,78 @@ export const deleteVideo = async (id) => {
   return video; // caller uses object_key to delete from Zata
 };
 
+// ─── Media folders ────────────────────────────────────────────────────────────
+
+export const listFolders = async ({ course_id, parent_id }) => {
+  const params = [];
+  const conds = [];
+  if (course_id) { params.push(course_id); conds.push(`f.course_id = $${params.length}`); }
+  if (parent_id === 'root') { conds.push('f.parent_id IS NULL'); }
+  else if (parent_id)       { params.push(parent_id); conds.push(`f.parent_id = $${params.length}`); }
+  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+  const { rows } = await query(
+    `SELECT f.*,
+            (SELECT COUNT(*) FROM videos v WHERE v.folder_id = f.id)        AS item_count,
+            (SELECT COUNT(*) FROM media_folders c WHERE c.parent_id = f.id) AS subfolder_count
+     FROM media_folders f
+     ${where}
+     ORDER BY f.name ASC`, params
+  );
+  return rows;
+};
+
+export const getFolderById = async (id) => {
+  const { rows } = await query('SELECT * FROM media_folders WHERE id=$1', [id]);
+  return rows[0] || null;
+};
+
+export const createFolder = async ({ course_id, parent_id, name }, createdBy) => {
+  const { rows } = await query(
+    `INSERT INTO media_folders (course_id, parent_id, name, created_by)
+     VALUES ($1,$2,$3,$4) RETURNING *`,
+    [course_id || null, parent_id || null, name, createdBy]
+  );
+  return rows[0];
+};
+
+export const updateFolder = async (id, payload) => {
+  const allowed = ['name', 'parent_id'];
+  const fields = [];
+  const params = [];
+  for (const k of allowed) {
+    if (payload[k] !== undefined) { params.push(payload[k]); fields.push(`${k}=$${params.length}`); }
+  }
+  if (!fields.length) return getFolderById(id);
+  params.push(id);
+  const { rows } = await query(
+    `UPDATE media_folders SET ${fields.join(',')}, updated_at=NOW() WHERE id=$${params.length} RETURNING *`, params
+  );
+  return rows[0] || null;
+};
+
+export const deleteFolder = async (id) => {
+  const folder = await getFolderById(id);
+  if (!folder) return null;
+  // Move contained media + subfolders up to the parent (no destructive cascade of files)
+  await query('UPDATE videos SET folder_id=$1 WHERE folder_id=$2', [folder.parent_id, id]);
+  await query('UPDATE media_folders SET parent_id=$1 WHERE parent_id=$2', [folder.parent_id, id]);
+  await query('DELETE FROM media_folders WHERE id=$1', [id]);
+  return folder;
+};
+
+/** Breadcrumb path from root → folder */
+export const getFolderPath = async (id) => {
+  const path = [];
+  let cur = await getFolderById(id);
+  let guard = 0;
+  while (cur && guard < 20) {
+    path.unshift({ id: cur.id, name: cur.name });
+    cur = cur.parent_id ? await getFolderById(cur.parent_id) : null;
+    guard += 1;
+  }
+  return path;
+};
+
 // ─── Session management ──────────────────────────────────────────────────────
 
 export const createSession = async (userId, videoId, ipAddress, userAgent) => {
@@ -94,7 +171,7 @@ export const createSession = async (userId, videoId, ipAddress, userAgent) => {
 
 export const validateSession = async (token) => {
   const { rows } = await query(
-    `SELECT vs.*, v.object_key, v.course_id, v.is_published, v.file_size
+    `SELECT vs.*, v.object_key, v.course_id, v.is_published, v.file_size, v.mime_type, v.media_type, v.title
      FROM video_sessions vs
      JOIN videos v ON v.id = vs.video_id
      WHERE vs.token = $1 AND vs.expires_at > NOW()`, [token]

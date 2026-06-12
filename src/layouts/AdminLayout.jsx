@@ -67,7 +67,7 @@ export default function AdminLayout() {
     {
       title: 'TOOLS',
       items: [
-        { to: '/admin/lectures',      label: 'Lectures',      icon: PlayCircle },
+        { to: '/admin/lectures',      label: 'Media',         icon: PlayCircle },
         { to: '/admin/test-builder',  label: 'Test Builder',  icon: FileText },
         { to: '/admin/notifications', label: 'Notifications', icon: Bell },
       ],

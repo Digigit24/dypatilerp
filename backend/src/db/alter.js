@@ -152,6 +152,30 @@ const run = async () => {
     `);
     console.log('✓  brevo app_settings seed (or already exists)');
 
+    // 14. Media folders (Media Manager)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS media_folders (
+        id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        course_id  UUID REFERENCES courses(id) ON DELETE CASCADE,
+        parent_id  UUID REFERENCES media_folders(id) ON DELETE CASCADE,
+        name       VARCHAR(255) NOT NULL,
+        created_by UUID REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('\u2713  media_folders table created (or already exists)');
+
+    // 15. Generic media support on videos table
+    await client.query(`
+      ALTER TABLE videos
+      ADD COLUMN IF NOT EXISTS media_type VARCHAR(20) DEFAULT 'video',
+      ADD COLUMN IF NOT EXISTS mime_type  VARCHAR(120),
+      ADD COLUMN IF NOT EXISTS folder_id  UUID REFERENCES media_folders(id) ON DELETE SET NULL
+    `);
+    await client.query(`UPDATE videos SET media_type = 'video' WHERE media_type IS NULL`);
+    console.log('\u2713  videos media columns added (media_type, mime_type, folder_id)');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

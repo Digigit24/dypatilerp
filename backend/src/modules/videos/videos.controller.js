@@ -18,8 +18,51 @@ export const list = asyncHandler(async (req, res) => {
     : (req.user.roles?.includes('admin') || req.user.roles?.includes('coordinator') ? undefined : true);
   // X-Course-Id header takes precedence over query param
   const course_id = req.courseId || req.query.course_id;
-  const { data, total } = await svc.listVideos({ course_id, batch_id: req.query.batch_id, is_published, limit, offset });
+  const { data, total } = await svc.listVideos({
+    course_id,
+    batch_id: req.query.batch_id,
+    is_published,
+    media_type: req.query.media_type,
+    folder_id: req.query.folder_id,
+    limit,
+    offset,
+  });
   res.json({ success: true, data, pagination: buildPaginationMeta(total, page, limit) });
+});
+
+// ─── Media folders ────────────────────────────────────────────────────────────
+
+export const listFolders = asyncHandler(async (req, res) => {
+  const course_id = req.courseId || req.query.course_id;
+  const folders = await svc.listFolders({ course_id, parent_id: req.query.parent_id });
+  ok(res, folders);
+});
+
+export const getFolderPath = asyncHandler(async (req, res) => {
+  const path = await svc.getFolderPath(req.params.id);
+  ok(res, path);
+});
+
+export const createFolder = asyncHandler(async (req, res) => {
+  if (!req.body.name?.trim()) return res.status(400).json({ success: false, message: 'Folder name is required' });
+  const folder = await svc.createFolder({
+    course_id: req.body.course_id || req.courseId || null,
+    parent_id: req.body.parent_id || null,
+    name: req.body.name.trim(),
+  }, req.user.id);
+  created(res, folder, 'Folder created');
+});
+
+export const updateFolder = asyncHandler(async (req, res) => {
+  const folder = await svc.updateFolder(req.params.id, req.body);
+  if (!folder) return notFound(res, 'Folder not found');
+  ok(res, folder, 'Folder updated');
+});
+
+export const removeFolder = asyncHandler(async (req, res) => {
+  const folder = await svc.deleteFolder(req.params.id);
+  if (!folder) return notFound(res, 'Folder not found');
+  noContent(res);
 });
 
 export const getOne = asyncHandler(async (req, res) => {
@@ -85,10 +128,11 @@ export const streamVideo = asyncHandler(async (req, res) => {
   }
 
   const range = req.headers.range;
+  const contentType = session.mime_type || 'video/mp4';
 
   // ── 1. Local storage (primary — works even when Zata is down) ─────────────
   if (session.object_key && local.videoExists(session.object_key)) {
-    return local.streamRange(session.object_key, range, res);
+    return local.streamRange(session.object_key, range, res, contentType);
   }
 
   // ── 2. Zata fallback ──────────────────────────────────────────────────────
@@ -111,6 +155,41 @@ export const streamVideo = asyncHandler(async (req, res) => {
       success: false,
       message: 'Video file not found — it may still be processing or the storage service is unavailable',
     });
+  }
+});
+
+/**
+ * Download any media file (admin preview / file download).
+ * Validated via sessionToken (same flow as streaming).
+ */
+export const downloadMedia = asyncHandler(async (req, res) => {
+  const session = await svc.validateSession(req.query.sessionToken);
+  if (!session) {
+    return res.status(401).json({ success: false, message: 'Invalid or expired session token' });
+  }
+  if (session.video_id !== req.params.id) {
+    return res.status(403).json({ success: false, message: 'Token does not match this file' });
+  }
+
+  const contentType = session.mime_type || 'application/octet-stream';
+  const safeName = (session.title || 'download').replace(/[^a-zA-Z0-9 ._-]/g, '_');
+  const ext = session.object_key?.split('.').pop() || '';
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}${ext ? `.${ext}` : ''}"`);
+
+  if (session.object_key && local.videoExists(session.object_key)) {
+    return local.streamRange(session.object_key, null, res, contentType);
+  }
+  if (s3.isConfigured() && session.object_key) {
+    try {
+      return await s3.streamVideoRange(session.object_key, null, res);
+    } catch (err) {
+      if (!res.headersSent) {
+        return res.status(502).json({ success: false, message: 'Storage temporarily unavailable', detail: err.message });
+      }
+    }
+  }
+  if (!res.headersSent) {
+    res.status(503).json({ success: false, message: 'File not found in storage' });
   }
 });
 
@@ -199,7 +278,8 @@ export const proxyUpload = asyncHandler(async (req, res) => {
   const filename     = (Array.isArray(fields.filename)    ? fields.filename[0]    : fields.filename)    || file.originalFilename;
   const course_code  = (Array.isArray(fields.course_code) ? fields.course_code[0] : fields.course_code);
   const video_id     = (Array.isArray(fields.video_id)    ? fields.video_id[0]    : fields.video_id);
-  const content_type = (Array.isArray(fields.content_type)? fields.content_type[0]: fields.content_type) || file.mimetype || 'video/mp4';
+  const content_type = (Array.isArray(fields.content_type)? fields.content_type[0]: fields.content_type) || file.mimetype || 'application/octet-stream';
+  const isVideo = content_type.startsWith('video/');
 
   if (!filename || !course_code || !video_id) {
     await unlink(file.filepath).catch(() => {});
@@ -220,13 +300,15 @@ export const proxyUpload = asyncHandler(async (req, res) => {
         .catch((e) => console.warn(`[upload] Zata sync failed (non-fatal): ${e.message}`));
     }
 
-    // ── 3. Thumbnail + duration (best-effort, non-blocking) ───────────────
-    local.generateThumbnail(objectKey, video_id).catch(() => {});
-    local.probeDuration(objectKey).then((dur) => {
-      if (dur > 0) svc.updateVideo(video_id, { duration_sec: dur }).catch(() => {});
-    }).catch(() => {});
+    // ── 3. Thumbnail + duration — videos only (best-effort, non-blocking) ──
+    if (isVideo) {
+      local.generateThumbnail(objectKey, video_id).catch(() => {});
+      local.probeDuration(objectKey).then((dur) => {
+        if (dur > 0) svc.updateVideo(video_id, { duration_sec: dur }).catch(() => {});
+      }).catch(() => {});
+    }
 
-    ok(res, { object_key: objectKey, file_size: file.size });
+    ok(res, { object_key: objectKey, file_size: file.size, mime_type: content_type });
   } finally {
     // Temp file from formidable — safe to delete since we copied it
     await unlink(file.filepath).catch(() => {});

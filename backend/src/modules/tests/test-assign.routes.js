@@ -21,6 +21,10 @@ const genPassword = () => randomBytes(5).toString('base64url').slice(0, 8);
 /** Generate a 64-char hex token */
 const genToken = () => randomBytes(32).toString('hex');
 
+/** Test links are valid for 5 days from issue/reset */
+const TOKEN_VALIDITY_DAYS = 5;
+const tokenExpiry = () => new Date(Date.now() + TOKEN_VALIDITY_DAYS * 24 * 60 * 60 * 1000);
+
 /**
  * POST /tests/:id/assign
  * Body: { applicant_ids: [...] }  OR  { assign_all: true, course_id: "..." }
@@ -131,7 +135,7 @@ router.post('/', authenticate, requirePermission('tests', 'update'), asyncHandle
         token,
         username,
         userId,
-        test.end_time || null,
+        tokenExpiry(),
       ]
     );
 
@@ -215,9 +219,9 @@ router.post('/reset', authenticate, requirePermission('tests', 'update'), asyncH
   // Refresh access token (reset used_at so fresh login is required)
   await query(
     `UPDATE test_access_tokens
-     SET token=$1, used_at=NULL, created_at=NOW()
+     SET token=$1, used_at=NULL, created_at=NOW(), expires_at=$4
      WHERE test_id=$2 AND applicant_id=$3`,
-    [newToken, testId, applicant_id]
+    [newToken, testId, applicant_id, tokenExpiry()]
   );
 
   // ── Reset applicant status → test_pending ──

@@ -25,7 +25,7 @@ import UserManagementPage from './pages/admin/UserManagementPage.jsx'
 import LoginPage from './pages/auth/LoginPage.jsx'
 import LecturesGalleryPage from './pages/student/LecturesGalleryPage.jsx'
 import LecturePlayerPage from './pages/student/LecturePlayerPage.jsx'
-import LecturesManagePage from './pages/admin/LecturesManagePage.jsx'
+import MediaManagerPage from './pages/admin/MediaManagerPage.jsx'
 import AdminLectureDetailPage from './pages/admin/AdminLectureDetailPage.jsx'
 import AuditLogsPage from './pages/admin/AuditLogsPage.jsx'
 import ApplyPage from './pages/public/ApplyPage.jsx'
@@ -121,7 +121,7 @@ export default function App() {
           <Route path="test-builder" element={<TestBuilderPage />} />
           <Route path="applicants/:applicantId/test-results" element={<ApplicantTestResultsPage />} />
           <Route path="notifications" element={<AdminNotificationsPage />} />
-          <Route path="lectures" element={<LecturesManagePage />} />
+          <Route path="lectures" element={<MediaManagerPage />} />
           <Route path="lectures/:id" element={<AdminLectureDetailPage />} />
           <Route path="courses" element={<CoursesPage />} />
           <Route path="courses/:id/settings" element={<CourseSettingsPage />} />

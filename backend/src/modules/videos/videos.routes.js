@@ -16,6 +16,33 @@ router.get('/', authenticate, requirePermission('dashboard', 'read'), ctrl.list)
 
 /**
  * @swagger
+ * /videos/folders:
+ *   get:
+ *     tags: [Videos]
+ *     summary: List media folders (filter by course_id, parent_id - use parent_id=root for top level)
+ *   post:
+ *     tags: [Videos]
+ *     summary: Create a media folder
+ */
+router.get('/folders', authenticate, requirePermission('dashboard', 'read'), ctrl.listFolders);
+router.post('/folders', authenticate, requireRole('admin', 'coordinator'), ctrl.createFolder);
+
+/**
+ * @swagger
+ * /videos/folders/{id}:
+ *   put:
+ *     tags: [Videos]
+ *     summary: Rename / move a media folder
+ *   delete:
+ *     tags: [Videos]
+ *     summary: Delete a folder (contents move up to its parent)
+ */
+router.get('/folders/:id/path', authenticate, requirePermission('dashboard', 'read'), ctrl.getFolderPath);
+router.put('/folders/:id', authenticate, requireRole('admin', 'coordinator'), ctrl.updateFolder);
+router.delete('/folders/:id', authenticate, requireRole('admin', 'coordinator'), ctrl.removeFolder);
+
+/**
+ * @swagger
  * /videos/{id}:
  *   get:
  *     tags: [Videos]
@@ -81,6 +108,15 @@ router.post('/:id/session', authenticate, ctrl.createSession);
  *       503: { description: Zata not configured }
  */
 router.get('/:id/stream', ctrl.streamVideo); // No JWT middleware — validated via sessionToken query param
+
+/**
+ * @swagger
+ * /videos/{id}/download:
+ *   get:
+ *     tags: [Videos]
+ *     summary: Download any media file (validated via sessionToken)
+ */
+router.get('/:id/download', ctrl.downloadMedia); // Validated via sessionToken query param
 
 /**
  * @swagger

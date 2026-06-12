@@ -53,7 +53,7 @@ export const saveVideo = (sourcePath, objectKey) => {
  * Stream a video with HTTP Range support (206 Partial Content).
  * Chunk size caps at 10 MB so the client buffers progressively.
  */
-export const streamRange = (objectKey, range, res) => {
+export const streamRange = (objectKey, range, res, contentType = 'video/mp4') => {
   const fp = videoPath(objectKey);
   if (!existsSync(fp)) throw new Error(`Local video not found: ${objectKey}`);
 
@@ -74,7 +74,7 @@ export const streamRange = (objectKey, range, res) => {
       'Content-Range':                `bytes ${start}-${end}/${size}`,
       'Accept-Ranges':                'bytes',
       'Content-Length':               chunkSize,
-      'Content-Type':                 'video/mp4',
+      'Content-Type':                 contentType,
       'Cache-Control':                'private, no-store',
       'X-Content-Type-Options':       'nosniff',
       'Cross-Origin-Resource-Policy': 'cross-origin',
@@ -84,7 +84,7 @@ export const streamRange = (objectKey, range, res) => {
     // Full file
     res.writeHead(200, {
       'Content-Length':               size,
-      'Content-Type':                 'video/mp4',
+      'Content-Type':                 contentType,
       'Accept-Ranges':                'bytes',
       'Cache-Control':                'private, no-store',
       'X-Content-Type-Options':       'nosniff',

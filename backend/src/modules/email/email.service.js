@@ -168,6 +168,7 @@ const templates = {
         <p><strong>Test:</strong> ${testTitle}</p>
         <p><strong>Duration:</strong> ${duration} minutes</p>
         ${sections ? `<p><strong>Sections:</strong> ${sections}</p>` : ''}
+        <p><strong>Link Validity:</strong> This test link is valid for <strong>5 days</strong> from the time of this email. Please complete your test before it expires.</p>
         <p><strong>Important:</strong> Once you click "Start Test", the timer begins and cannot be paused.</p>
       </div>
 
@@ -368,6 +369,7 @@ export const sendTestCredentials = async ({
     `Duration: ${test.duration_minutes} minutes`,
     ...(sectionStr ? [`Sections: ${sectionStr}`] : []),
     '',
+    'LINK VALIDITY: This test link is valid for 5 days from the time of this email.',
     'IMPORTANT: Once you click "Start Test", the timer begins and cannot be paused.',
     '',
     'Instructions:',
