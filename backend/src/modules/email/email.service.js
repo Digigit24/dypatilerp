@@ -124,7 +124,13 @@ export const sendEmail = async ({ to, subject, html, text, sender, apiKey } = {}
     return { success: true, messageId: info.messageId };
   } catch (err) {
     console.error('[email] SMTP error:', err.message);
-    return { success: false, error: err.message };
+    // Surface BOTH failures — the API error is usually the actionable one
+    return {
+      success: false,
+      error: apiError
+        ? `Brevo API failed: ${apiError} || SMTP fallback also failed: ${err.message}`
+        : err.message,
+    };
   }
 };
 
