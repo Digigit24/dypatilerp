@@ -14,6 +14,35 @@ import assignRoutes  from './test-assign.routes.js';
 
 const router = Router();
 
+// ── Random sampling helper ─────────────────────────────────────────────────────
+// Builds a per-candidate question id set: each section's bank is shuffled and
+// truncated to pick_count (or kept whole). Section order is preserved.
+const buildQuestionSet = async (testId) => {
+  const { rows: sections } = await query(
+    'SELECT id, pick_count FROM test_sections WHERE test_id=$1 ORDER BY order_index ASC', [testId]
+  );
+  const { rows: bank } = await query(
+    'SELECT id, section_id FROM test_questions WHERE test_id=$1 ORDER BY order_index ASC', [testId]
+  );
+  const shuffle = (arr) => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+  const set = [];
+  for (const sec of sections) {
+    const sectionBank = bank.filter((q) => q.section_id === sec.id);
+    const shuffled = shuffle(sectionBank);
+    const picked = sec.pick_count && sec.pick_count > 0 ? shuffled.slice(0, sec.pick_count) : shuffled;
+    set.push(...picked.map((q) => q.id));
+  }
+  set.push(...bank.filter((q) => !q.section_id).map((q) => q.id));
+  return set;
+};
+
 // ── Sub-routers ────────────────────────────────────────────────────────────────
 router.use('/:testId/sections', sectionRoutes);
 router.use('/:id/assign',       assignRoutes);
@@ -88,18 +117,31 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
     return s.pick_count && s.pick_count > 0 ? Math.min(s.pick_count, bank) : bank;
   };
 
-  const isCandidate = !!req.user?.test_scope;
+  // Staff = authenticated WITHOUT a test-scoped JWT. Everyone else —
+  // candidates AND unauthenticated requests — never receives the full bank.
+  const isStaff = !!req.user && !req.user.test_scope;
 
-  if (isCandidate) {
+  if (!isStaff) {
     const sanitize = (q) => {
       const { correct_answer, ...cfg } = q.config || {};
       return { ...q, config: cfg };
     };
 
-    const { rows: [attempt] } = await query(
-      'SELECT question_set FROM test_attempts WHERE test_id=$1 AND user_id=$2', [test.id, req.user.id]
-    );
-    const set = attempt?.question_set;
+    let attempt = null;
+    if (req.user) {
+      ({ rows: [attempt] } = await query(
+        'SELECT id, question_set, status FROM test_attempts WHERE test_id=$1 AND user_id=$2', [test.id, req.user.id]
+      ));
+    }
+
+    let set = attempt?.question_set;
+
+    // Lazy backfill: attempts started before sampling existed get a set now,
+    // so in-progress candidates are healed without a reset.
+    if (attempt && (!Array.isArray(set) || !set.length)) {
+      set = await buildQuestionSet(test.id);
+      await query('UPDATE test_attempts SET question_set=$1 WHERE id=$2', [JSON.stringify(set), attempt.id]);
+    }
 
     if (Array.isArray(set) && set.length) {
       // Attempt exists — serve exactly the frozen sampled set, in its random order
@@ -279,33 +321,8 @@ router.post('/:id/start', authenticate, asyncHandler(async (req, res) => {
   const applicantId = req.user.applicant_id || null;
   const tokenId     = req.user.token_id     || null;
 
-  // ── Build the per-candidate question set ──────────────────────────────────
-  // For each section: shuffle the bank, take pick_count (or all). The set is
-  // frozen on the attempt so resume, scoring and results all use the same
-  // questions even though every candidate gets a different random selection.
-  const { rows: sections } = await query(
-    'SELECT id, pick_count FROM test_sections WHERE test_id=$1 ORDER BY order_index ASC', [req.params.id]
-  );
-  const { rows: bank } = await query(
-    'SELECT id, section_id FROM test_questions WHERE test_id=$1 ORDER BY order_index ASC', [req.params.id]
-  );
-  const shuffle = (arr) => {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  };
-  const questionSet = [];
-  for (const s of sections) {
-    const sectionBank = bank.filter((q) => q.section_id === s.id);
-    const shuffled = shuffle(sectionBank);
-    const picked = s.pick_count && s.pick_count > 0 ? shuffled.slice(0, s.pick_count) : shuffled;
-    questionSet.push(...picked.map((q) => q.id));
-  }
-  // Section-less questions are always included (not sampled)
-  questionSet.push(...bank.filter((q) => !q.section_id).map((q) => q.id));
+  // ── Build & freeze the per-candidate random question set ──────────────────
+  const questionSet = await buildQuestionSet(req.params.id);
 
   const { rows: [attempt] } = await query(
     `INSERT INTO test_attempts (test_id, user_id, applicant_id, token_id, question_set)

@@ -18,6 +18,16 @@ export const getTestById = async (id) => {
   return ok(res.data)
 }
 
+/**
+ * Candidate-side fetch — uses the test-scoped JWT (testHttp) so the backend
+ * serves the candidate's sampled random question set, never the full bank.
+ */
+export const getTestForTaking = async (id) => {
+  if (USE_MOCK) { await delay(); const test = byId(TESTS, id); return test ? ok(test) : notFound() }
+  const { data: res } = await testHttp.get(`/tests/${id}`)
+  return ok(res.data)
+}
+
 export const createTest = async (payload) => {
   if (USE_MOCK) { await delay(); return ok({ id: `test_${Date.now()}`, status: 'draft', created_at: new Date().toISOString(), ...payload }) }
   const { data: res } = await http.post('/tests', payload)

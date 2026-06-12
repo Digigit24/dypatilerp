@@ -1,7 +1,7 @@
 import { AlertTriangle, CheckCircle, Clock, Loader2, Moon, Sun, WifiOff } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { autosaveResponses, getMyAttempt, getTestById, submitTest } from '../../api/services/testService.js'
+import { autosaveResponses, getMyAttempt, getTestForTaking, submitTest } from '../../api/services/testService.js'
 import { useTestStore } from '../../store/testStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
@@ -78,7 +78,7 @@ export default function TestPage() {
     setLoading(true)
     try {
       const [testRes, attemptRes] = await Promise.all([
-        getTestById(testId),
+        getTestForTaking(testId),
         getMyAttempt(testId),
       ])
       const t = testRes.data

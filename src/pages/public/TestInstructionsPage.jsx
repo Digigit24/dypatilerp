@@ -1,7 +1,7 @@
 import { AlertTriangle, BookOpen, CheckCircle, Clock, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getTestById, startTest } from '../../api/services/testService.js'
+import { getTestForTaking, startTest } from '../../api/services/testService.js'
 import { useTestStore } from '../../store/testStore.js'
 
 export default function TestInstructionsPage() {
@@ -23,7 +23,7 @@ export default function TestInstructionsPage() {
   const loadTest = async () => {
     setLoading(true)
     try {
-      const res = await getTestById(testId)
+      const res = await getTestForTaking(testId)
       setLocalTest(res.data)
       setTest(res.data)
     } catch (e) {
