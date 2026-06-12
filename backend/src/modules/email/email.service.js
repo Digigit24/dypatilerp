@@ -69,20 +69,20 @@ const sendViaBrevoApi = async ({ apiKey, sender, recipients, subject, html, text
 };
 
 export const sendEmail = async ({ to, subject, html, text, sender, apiKey } = {}) => {
+  // Saved settings (app_settings.brevo in the database) are the source of truth.
+  // Resolution order: explicit param → database → .env (legacy fallback).
+  const db = await getBrevoConfig();
+
   const effectiveSender = sender || {
-    name:  env.BREVO_SENDER_NAME,
-    email: env.BREVO_SENDER_EMAIL,
+    name:  db.senderName  || env.BREVO_SENDER_NAME,
+    email: db.senderEmail || env.BREVO_SENDER_EMAIL,
   };
 
   const list = Array.isArray(to) ? to : [to];
 
   // ── 1. Prefer the Brevo HTTPS API (port 443) when an API key is available ──
   //    SMTP (587) is often intercepted/blocked by cPanel "SMTP Restrictions".
-  let key = apiKey || env.BREVO_API_KEY;
-  if (!key) {
-    const db = await getBrevoConfig();
-    key = db.apiKey || '';
-  }
+  const key = (apiKey || '').trim() || (db.apiKey || '').trim() || (env.BREVO_API_KEY || '').trim();
   let apiError = null;
   if (key) {
     const apiRecipients = list.map((r) =>

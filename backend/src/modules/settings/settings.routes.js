@@ -87,6 +87,9 @@ router.put('/:key', requireRole('admin'), asyncHandler(async (req, res) => {
   const { key } = req.params;
   const value = req.body; // whole body is the value
 
+  // Hygiene: trim pasted credentials so stray whitespace never breaks sending
+  if (key === 'brevo' && typeof value.apiKey === 'string') value.apiKey = value.apiKey.trim();
+
   await query(
     `INSERT INTO app_settings (key, value, updated_at, updated_by)
      VALUES ($1, $2, NOW(), $3)
@@ -99,6 +102,7 @@ router.put('/:key', requireRole('admin'), asyncHandler(async (req, res) => {
 
   // Bust email cache if Brevo config was updated
   if (key === 'brevo') bustBrevoCache();
+
 
   ok(res, value, 'Settings saved');
 }));
@@ -115,11 +119,13 @@ const testEmailSchema = z.object({
 router.post('/test-email', requireRole('admin'), validate(testEmailSchema), asyncHandler(async (req, res) => {
   const { to, apiKey, senderName, senderEmail } = req.body;
 
-  // Use provided values or fall back to env
-  const key    = apiKey || env.BREVO_API_KEY;
+  // Resolution order: value typed in the UI → saved settings (database) → .env
+  const { rows: [dbRow] } = await query(`SELECT value FROM app_settings WHERE key='brevo'`);
+  const db = dbRow?.value || {};
+  const key = (apiKey || '').trim() || (db.apiKey || '').trim() || (env.BREVO_API_KEY || '').trim();
   const sender = {
-    name:  senderName  || env.BREVO_SENDER_NAME,
-    email: senderEmail || env.BREVO_SENDER_EMAIL,
+    name:  senderName  || db.senderName  || env.BREVO_SENDER_NAME,
+    email: senderEmail || db.senderEmail || env.BREVO_SENDER_EMAIL,
   };
 
   const result = await sendEmail({
@@ -142,7 +148,13 @@ h2{color:#4F46E5;margin-top:0}.badge{background:#d1fae5;color:#065f46;border-rad
     sender,
   });
 
+  const keySource = (apiKey || '').trim() ? 'UI field'
+    : (db.apiKey || '').trim() ? 'saved settings (database)'
+    : (env.BREVO_API_KEY || '').trim() ? 'server .env'
+    : 'none — will fall back to SMTP';
   const debugInfo = {
+    api_key_source: keySource,
+    api_key_prefix: key ? `${key.slice(0, 9)}…` : null,
     smtp_host: env.BREVO_SMTP_HOST,
     smtp_port: env.BREVO_SMTP_PORT,
     smtp_user: env.BREVO_SMTP_USER || null,
