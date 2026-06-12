@@ -4,7 +4,7 @@ import { env } from '../../config/env.js';
 
 // ─── Video CRUD ──────────────────────────────────────────────────────────────
 
-export const listVideos = async ({ course_id, batch_id, is_published, media_type, folder_id, limit, offset }) => {
+export const listVideos = async ({ course_id, batch_id, is_published, media_type, folder_id, visibility, user_roles, limit, offset }) => {
   const params = [];
   const conds = [];
   if (course_id)    { params.push(course_id);    conds.push(`v.course_id = $${params.length}`); }
@@ -13,6 +13,26 @@ export const listVideos = async ({ course_id, batch_id, is_published, media_type
   if (media_type)   { params.push(media_type);   conds.push(`v.media_type = $${params.length}`); }
   if (folder_id === 'root') { conds.push('v.folder_id IS NULL'); }
   else if (folder_id)       { params.push(folder_id); conds.push(`v.folder_id = $${params.length}`); }
+
+  // Visibility filtering based on caller role
+  if (visibility) {
+    // Explicit override (admin use)
+    params.push(visibility);
+    conds.push(`v.visibility = $${params.length}`);
+  } else if (user_roles) {
+    const roles = Array.isArray(user_roles) ? user_roles : [user_roles];
+    const isAdmin = roles.some((r) => ['admin', 'coordinator'].includes(r));
+    const isStaff = roles.some((r) => ['academic_guide', 'industry_mentor'].includes(r));
+    if (!isAdmin && !isStaff) {
+      // Students: see 'course' and 'public' items (batch-scoped items handled by batch_id filter above)
+      conds.push(`v.visibility IN ('course','public')`);
+    } else if (isStaff) {
+      // Staff (guide/mentor): see 'course' and 'public' (not 'private' drafts unless it's their own)
+      conds.push(`v.visibility IN ('course','public','batch')`);
+    }
+    // admin/coordinator: no restriction — see everything
+  }
+
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
   const { rows: data } = await query(
@@ -46,8 +66,8 @@ export const getVideoById = async (id) => {
 
 export const createVideo = async (payload, uploadedBy) => {
   const { rows } = await query(
-    `INSERT INTO videos (course_id, batch_id, title, description, duration_sec, object_key, file_size, thumbnail_key, sort_order, uploaded_by, is_published, media_type, mime_type, folder_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+    `INSERT INTO videos (course_id, batch_id, title, description, duration_sec, object_key, file_size, thumbnail_key, sort_order, uploaded_by, is_published, media_type, mime_type, folder_id, visibility, assignment_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
     [
       payload.course_id, payload.batch_id || null, payload.title,
       payload.description || null, payload.duration_sec || 0,
@@ -56,13 +76,15 @@ export const createVideo = async (payload, uploadedBy) => {
       uploadedBy, payload.is_published || false,
       payload.media_type || 'video', payload.mime_type || null,
       payload.folder_id || null,
+      payload.visibility || 'course',
+      payload.assignment_id || null,
     ]
   );
   return rows[0];
 };
 
 export const updateVideo = async (id, payload) => {
-  const allowed = ['title','description','duration_sec','is_published','sort_order','thumbnail_key','media_type','mime_type','folder_id'];
+  const allowed = ['title','description','duration_sec','is_published','sort_order','thumbnail_key','media_type','mime_type','folder_id','visibility','batch_id','assignment_id'];
   const fields = [];
   const params = [];
   for (const k of allowed) {
@@ -80,6 +102,21 @@ export const deleteVideo = async (id) => {
   const video = await getVideoById(id);
   await query('DELETE FROM videos WHERE id=$1', [id]);
   return video; // caller uses object_key to delete from Zata
+};
+
+// ─── Default folder lookup ────────────────────────────────────────────────────
+
+export const getOrCreateDefaultFolder = async (courseId, folderName, createdBy) => {
+  const { rows: [existing] } = await query(
+    `SELECT id FROM media_folders WHERE course_id=$1 AND name=$2 AND parent_id IS NULL`,
+    [courseId, folderName]
+  );
+  if (existing) return existing.id;
+  const { rows: [created] } = await query(
+    `INSERT INTO media_folders (course_id, name, created_by) VALUES ($1,$2,$3) RETURNING id`,
+    [courseId, folderName, createdBy]
+  );
+  return created.id;
 };
 
 // ─── Media folders ────────────────────────────────────────────────────────────

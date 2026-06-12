@@ -33,6 +33,7 @@ const seed = async () => {
     'users', 'roles', 'courses', 'batches', 'applicants',
     'students', 'tests', 'submissions', 'approvals',
     'progress_reports', 'fees', 'notifications', 'research_profiles', 'dashboard',
+    'dashboard_student', 'assignments', 'formats', 'lectures',
   ];
   const actions = ['create', 'read', 'update', 'delete'];
   const permIds = {};
@@ -73,8 +74,12 @@ const seed = async () => {
     'research_profiles:read',
     'dashboard:read',
     'tests:create', 'tests:read', 'tests:update',
+    'assignments:read', 'assignments:create', 'assignments:update',
+    'lectures:read', 'lectures:create', 'lectures:update',
+    'formats:read',
   ];
   for (const key of coordinatorPerms) {
+    if (!permIds[key]) continue;
     await query(
       `INSERT INTO role_permissions (role_id, permission_id)
        VALUES ($1, $2) ON CONFLICT DO NOTHING`,
@@ -82,21 +87,39 @@ const seed = async () => {
     );
   }
 
-  // Grant read-heavy permissions to student
-  const studentPerms = [
-    'fees:read',
-    'progress_reports:read',
-    'submissions:read', 'submissions:create',
-    'approvals:read',
-    'research_profiles:read', 'research_profiles:update',
-    'notifications:read',
-    'dashboard:read',
+  // Grant permissions to student — with correct own/course scope
+  const studentPermDefs = [
+    // Dashboard
+    { key: 'dashboard:read',           scope: 'course' },
+    { key: 'dashboard_student:read',   scope: 'own'    },
+    // Academic (read-only, course-wide)
+    { key: 'assignments:read',         scope: 'course' },
+    { key: 'formats:read',             scope: 'course' },
+    { key: 'lectures:read',            scope: 'course' },
+    // Own academic data
+    { key: 'submissions:read',         scope: 'own'    },
+    { key: 'submissions:create',       scope: 'own'    },
+    { key: 'submissions:update',       scope: 'own'    },
+    { key: 'approvals:read',           scope: 'own'    },
+    { key: 'progress_reports:read',    scope: 'own'    },
+    { key: 'progress_reports:create',  scope: 'own'    },
+    { key: 'fees:read',                scope: 'own'    },
+    { key: 'notifications:read',       scope: 'own'    },
+    // Own profile management
+    { key: 'students:read',            scope: 'own'    },
+    { key: 'students:update',          scope: 'own'    },
+    { key: 'users:read',               scope: 'own'    },
+    { key: 'users:update',             scope: 'own'    },
+    { key: 'research_profiles:read',   scope: 'own'    },
+    { key: 'research_profiles:create', scope: 'own'    },
+    { key: 'research_profiles:update', scope: 'own'    },
   ];
-  for (const key of studentPerms) {
+  for (const { key, scope } of studentPermDefs) {
+    if (!permIds[key]) continue;
     await query(
-      `INSERT INTO role_permissions (role_id, permission_id)
-       VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-      [roleIds['student'], permIds[key]]
+      `INSERT INTO role_permissions (role_id, permission_id, scope)
+       VALUES ($1, $2, $3) ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope`,
+      [roleIds['student'], permIds[key], scope]
     );
   }
 
@@ -109,8 +132,10 @@ const seed = async () => {
     'research_profiles:read',
     'notifications:read', 'notifications:create',
     'dashboard:read',
+    'assignments:read', 'lectures:read',
   ];
   for (const key of academicGuidePerms) {
+    if (!permIds[key]) continue;
     await query(
       `INSERT INTO role_permissions (role_id, permission_id)
        VALUES ($1, $2) ON CONFLICT DO NOTHING`,
@@ -129,6 +154,7 @@ const seed = async () => {
     'dashboard:read',
   ];
   for (const key of industryMentorPerms) {
+    if (!permIds[key]) continue;
     await query(
       `INSERT INTO role_permissions (role_id, permission_id)
        VALUES ($1, $2) ON CONFLICT DO NOTHING`,
@@ -143,6 +169,7 @@ const seed = async () => {
     'notifications:read',
   ];
   for (const key of applicantPerms) {
+    if (!permIds[key]) continue;
     await query(
       `INSERT INTO role_permissions (role_id, permission_id)
        VALUES ($1, $2) ON CONFLICT DO NOTHING`,
@@ -168,7 +195,7 @@ const seed = async () => {
   );
 
   // Seed sample course
-  const { rows: courseRows } = await query(
+  await query(
     `INSERT INTO courses (name, code, description, duration_months, max_students_per_batch, fee_structure, created_by)
      VALUES (
        'Applied Business Research Fellowship',
@@ -178,8 +205,7 @@ const seed = async () => {
        '{"1":50000,"2":50000,"3":50000,"4":50000}',
        $1
      )
-     ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
-     RETURNING id`,
+     ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name`,
     [adminId]
   );
 

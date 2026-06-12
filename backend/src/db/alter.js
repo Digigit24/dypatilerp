@@ -313,6 +313,58 @@ const run = async () => {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_nq_course ON notification_queue(course_id, created_at DESC)`);
     console.log('\u2713  notification_queue table');
 
+
+    // 23. Media manager: visibility levels + assignment file tracking
+    await client.query(`ALTER TABLE videos ADD COLUMN IF NOT EXISTS visibility VARCHAR(10) NOT NULL DEFAULT 'course'`);
+    await client.query(`ALTER TABLE videos ADD COLUMN IF NOT EXISTS assignment_id UUID REFERENCES assignments(id) ON DELETE SET NULL`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_videos_visibility ON videos(visibility)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_videos_assignment ON videos(assignment_id) WHERE assignment_id IS NOT NULL`);
+
+    // Seed default "Assignments" and "Lectures" folders per existing course
+    await client.query(`
+      INSERT INTO media_folders (course_id, name, created_by)
+      SELECT c.id, f.name,
+        (SELECT id FROM users WHERE is_active=true ORDER BY created_at LIMIT 1)
+      FROM courses c
+      CROSS JOIN (VALUES ('Assignments'), ('Lectures')) AS f(name)
+      WHERE NOT EXISTS (
+        SELECT 1 FROM media_folders mf
+        WHERE mf.course_id = c.id AND mf.name = f.name AND mf.parent_id IS NULL
+      )
+    `);
+
+    // Add media module to permissions catalog
+    await client.query(`
+      INSERT INTO permissions (module, action)
+      SELECT 'media', a.action::permission_action
+      FROM (VALUES ('create'),('read'),('update'),('delete')) AS a(action)
+      ON CONFLICT (module, action) DO NOTHING
+    `);
+
+    // Grant media permissions to roles that manage media
+    await client.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT r.id, p.id, 'all'
+      FROM roles r CROSS JOIN permissions p
+      WHERE r.name = 'admin' AND p.module = 'media'
+      ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope
+    `);
+    await client.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT r.id, p.id, 'course'
+      FROM roles r CROSS JOIN permissions p
+      WHERE r.name IN ('coordinator', 'academic_guide', 'industry_mentor') AND p.module = 'media' AND p.action IN ('create','read','update')
+      ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope
+    `);
+    await client.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT r.id, p.id, 'own'
+      FROM roles r CROSS JOIN permissions p
+      WHERE r.name = 'student' AND p.module = 'media' AND p.action IN ('create','read')
+      ON CONFLICT (role_id, permission_id) DO UPDATE SET scope = EXCLUDED.scope
+    `);
+    console.log('✓  media manager: visibility, assignment_id, default folders, media permissions');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

@@ -1,10 +1,27 @@
 import { Router } from 'express';
 import { authenticate, optionalAuth } from '../../middleware/auth.js';
+import { requirePermission, isOwnScope } from '../../middleware/rbac.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok, notFound } from '../../utils/response.js';
 import { query } from '../../config/database.js';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate.js';
+
+/**
+ * Ownership guard: students (own scope) can only touch their own profile.
+ * Staff with broader grants (course/all) can manage any profile.
+ */
+const assertOwnerOrBroaderScope = (req, res, targetUserId) => {
+  if (isOwnScope(req) && req.user.id !== targetUserId) {
+    res.status(403).json({
+      success: false,
+      code: 'PERMISSION_DENIED',
+      message: 'You can only manage your own research profile.',
+    });
+    return false;
+  }
+  return true;
+};
 
 const router = Router();
 
@@ -50,7 +67,10 @@ const publicationSchema = z.object({
 router.get('/:userId', optionalAuth, asyncHandler(async (req, res) => {
   const { rows: [profile] } = await query('SELECT * FROM research_profiles WHERE user_id=$1', [req.params.userId]);
   if (!profile) return notFound(res, 'Profile not found');
-  if (!profile.is_public && (!req.user || req.user.id !== req.params.userId)) {
+  // Allow owner to see their own private profile; others only see public profiles
+  const isOwner = req.user?.id === req.params.userId;
+  const isStaff = req.user?.roles?.some((r) => !['student', 'applicant'].includes(r));
+  if (!profile.is_public && !isOwner && !isStaff) {
     return notFound(res, 'Profile not found');
   }
   const { rows: publications } = await query(
@@ -92,17 +112,13 @@ router.get('/public/:slug', asyncHandler(async (req, res) => {
  *   put:
  *     tags: [Research Profiles]
  *     summary: Upsert research profile for a user
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
  *         description: Profile saved
  */
-router.put('/:userId', authenticate, validate(profileSchema), asyncHandler(async (req, res) => {
+router.put('/:userId', authenticate, requirePermission('research_profiles', 'update'), validate(profileSchema), asyncHandler(async (req, res) => {
   const uid = req.params.userId;
+  if (!assertOwnerOrBroaderScope(req, res, uid)) return;
   const b = req.body;
   const { rows: [profile] } = await query(
     `INSERT INTO research_profiles (user_id,bio,research_interests,phd_details,current_institution,department,designation,linkedin_url,orcid,google_scholar_url,is_public,slug)
@@ -130,7 +146,8 @@ router.put('/:userId', authenticate, validate(profileSchema), asyncHandler(async
  *       201:
  *         description: Publication added
  */
-router.post('/:userId/publications', authenticate, validate(publicationSchema), asyncHandler(async (req, res) => {
+router.post('/:userId/publications', authenticate, requirePermission('research_profiles', 'update'), validate(publicationSchema), asyncHandler(async (req, res) => {
+  if (!assertOwnerOrBroaderScope(req, res, req.params.userId)) return;
   const b = req.body;
   const { rows: [pub] } = await query(
     `INSERT INTO publications (user_id,title,authors,journal,year,doi,url,publication_type)
@@ -150,7 +167,8 @@ router.post('/:userId/publications', authenticate, validate(publicationSchema), 
  *       204:
  *         description: Deleted
  */
-router.delete('/:userId/publications/:pubId', authenticate, asyncHandler(async (req, res) => {
+router.delete('/:userId/publications/:pubId', authenticate, requirePermission('research_profiles', 'update'), asyncHandler(async (req, res) => {
+  if (!assertOwnerOrBroaderScope(req, res, req.params.userId)) return;
   await query('DELETE FROM publications WHERE id=$1 AND user_id=$2', [req.params.pubId, req.params.userId]);
   res.status(204).send();
 }));

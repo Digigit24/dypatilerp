@@ -13,17 +13,25 @@ import { existsSync, createReadStream } from 'fs';
 
 export const list = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
+  const roles = req.user?.roles || [];
+  const isAdmin = roles.some((r) => ['admin', 'coordinator'].includes(r));
+
   const is_published = req.query.is_published !== undefined
     ? req.query.is_published === 'true'
-    : (req.user.roles?.includes('admin') || req.user.roles?.includes('coordinator') ? undefined : true);
+    : (isAdmin ? undefined : true);
+
   // X-Course-Id header takes precedence over query param
   const course_id = req.courseId || req.query.course_id;
+
   const { data, total } = await svc.listVideos({
     course_id,
     batch_id: req.query.batch_id,
     is_published,
     media_type: req.query.media_type,
     folder_id: req.query.folder_id,
+    // Pass visibility filter: admin overrides via query, others filtered by role
+    visibility: isAdmin ? req.query.visibility : undefined,
+    user_roles: isAdmin ? undefined : roles,
     limit,
     offset,
   });
@@ -327,6 +335,68 @@ export const requestUploadUrl = asyncHandler(async (req, res) => {
   const uploadUrl = await s3.presignedUploadUrl(objectKey, 3600, content_type || 'video/mp4');
   ok(res, { upload_url: uploadUrl, object_key: objectKey });
 });
+
+/**
+ * Student submission upload URL — creates a video entry in the Assignments
+ * folder for the course and returns a presigned PUT URL for direct-to-Zata upload.
+ * Students can ONLY use this endpoint (restricted to own submissions linked to an assignment).
+ */
+export const requestSubmissionUploadUrl = asyncHandler(async (req, res) => {
+  if (!s3.isConfigured()) {
+    return res.status(503).json({ success: false, message: 'Storage not configured' });
+  }
+  const { filename, course_id, assignment_id, content_type } = req.body;
+  if (!filename || !course_id || !assignment_id) {
+    return res.status(400).json({ success: false, message: 'filename, course_id and assignment_id are required' });
+  }
+
+  // Verify the assignment belongs to the student's course
+  const { rows: [assignment] } = await query(
+    `SELECT a.id, a.title, c.code AS course_code
+     FROM assignments a
+     JOIN batches b ON b.id = a.batch_id
+     JOIN courses c ON c.id = b.course_id
+     WHERE a.id = $1 AND c.id = $2`,
+    [assignment_id, course_id]
+  );
+  if (!assignment) {
+    return res.status(404).json({ success: false, message: 'Assignment not found in this course' });
+  }
+
+  // Ensure the "Assignments" default folder exists for this course
+  const folderId = await svc.getOrCreateDefaultFolder(course_id, 'Assignments', req.user.id);
+
+  const mediaId = crypto.randomUUID();
+  const mime = content_type || 'application/octet-stream';
+  const objectKey = s3.buildVideoKey(assignment.course_code, mediaId, filename);
+
+  // Pre-register the video entry so the DB record exists before upload completes
+  await svc.createVideo({
+    course_id,
+    folder_id: folderId,
+    assignment_id,
+    title: filename.replace(/\.[^.]+$/, ''),
+    description: `Submission file for: ${assignment.title}`,
+    object_key: objectKey,
+    file_size: 0,
+    media_type: detectMediaType(mime),
+    mime_type: mime,
+    is_published: false,
+    visibility: 'private', // only the student + admin can see submission files
+    sort_order: 0,
+  }, req.user.id);
+
+  const uploadUrl = await s3.presignedUploadUrl(objectKey, 3600, mime);
+  ok(res, { upload_url: uploadUrl, object_key: objectKey, media_id: mediaId });
+});
+
+const detectMediaType = (mime = '') => {
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('audio/')) return 'audio';
+  if (/pdf|msword|officedocument|text\/|csv|rtf|spreadsheet|presentation/.test(mime)) return 'document';
+  return 'other';
+};
 
 export const initCourseFolder = asyncHandler(async (req, res) => {
   if (!s3.isConfigured()) {

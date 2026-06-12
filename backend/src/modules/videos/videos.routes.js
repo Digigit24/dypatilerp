@@ -5,12 +5,15 @@ import * as ctrl from './videos.controller.js';
 
 const router = Router();
 
+// Roles that can manage media (create folders, upload, edit metadata)
+const MEDIA_MANAGERS = ['admin', 'coordinator', 'academic_guide', 'industry_mentor'];
+
 /**
  * @swagger
  * /videos:
  *   get:
  *     tags: [Videos]
- *     summary: List videos (filtered by course/batch, published status)
+ *     summary: List videos (filtered by course/batch, visibility, published status)
  */
 router.get('/', authenticate, requirePermission('dashboard', 'read'), ctrl.list);
 
@@ -19,13 +22,13 @@ router.get('/', authenticate, requirePermission('dashboard', 'read'), ctrl.list)
  * /videos/folders:
  *   get:
  *     tags: [Videos]
- *     summary: List media folders (filter by course_id, parent_id - use parent_id=root for top level)
+ *     summary: List media folders (filter by course_id, parent_id)
  *   post:
  *     tags: [Videos]
  *     summary: Create a media folder
  */
 router.get('/folders', authenticate, requirePermission('dashboard', 'read'), ctrl.listFolders);
-router.post('/folders', authenticate, requireRole('admin', 'coordinator'), ctrl.createFolder);
+router.post('/folders', authenticate, requireRole(...MEDIA_MANAGERS), ctrl.createFolder);
 
 /**
  * @swagger
@@ -38,8 +41,48 @@ router.post('/folders', authenticate, requireRole('admin', 'coordinator'), ctrl.
  *     summary: Delete a folder (contents move up to its parent)
  */
 router.get('/folders/:id/path', authenticate, requirePermission('dashboard', 'read'), ctrl.getFolderPath);
-router.put('/folders/:id', authenticate, requireRole('admin', 'coordinator'), ctrl.updateFolder);
+router.put('/folders/:id', authenticate, requireRole(...MEDIA_MANAGERS), ctrl.updateFolder);
 router.delete('/folders/:id', authenticate, requireRole('admin', 'coordinator'), ctrl.removeFolder);
+
+/**
+ * @swagger
+ * /videos/upload/submission-url:
+ *   post:
+ *     tags: [Videos]
+ *     summary: Student endpoint — get a presigned URL to upload a submission file to Zata
+ *     description: |
+ *       Creates a video entry in the course's Assignments folder and returns
+ *       a presigned PUT URL. The student uploads directly to Zata, then links
+ *       the returned object_key to their submission via POST /submissions.
+ */
+router.post('/upload/submission-url', authenticate, requirePermission('submissions', 'create'), ctrl.requestSubmissionUploadUrl);
+
+/**
+ * @swagger
+ * /videos/upload/request-url:
+ *   post:
+ *     tags: [Videos]
+ *     summary: Get a presigned upload URL for direct-to-Zata upload (staff only)
+ */
+router.post('/upload/request-url', authenticate, requireRole(...MEDIA_MANAGERS), ctrl.requestUploadUrl);
+
+/**
+ * @swagger
+ * /videos/upload:
+ *   post:
+ *     tags: [Videos]
+ *     summary: Proxy upload — browser posts file here, backend streams to Zata (staff only)
+ */
+router.post('/upload', authenticate, requireRole(...MEDIA_MANAGERS), ctrl.proxyUpload);
+
+/**
+ * @swagger
+ * /videos/courses/{courseId}/init-folder:
+ *   post:
+ *     tags: [Videos]
+ *     summary: Create the course folder in the Zata bucket
+ */
+router.post('/courses/:courseId/init-folder', authenticate, requireRole('admin', 'coordinator'), ctrl.initCourseFolder);
 
 /**
  * @swagger
@@ -55,18 +98,18 @@ router.get('/:id', authenticate, requirePermission('dashboard', 'read'), ctrl.ge
  * /videos:
  *   post:
  *     tags: [Videos]
- *     summary: Register a new video (admin/coordinator after uploading to Zata)
+ *     summary: Register a new video (staff after uploading to Zata)
  */
-router.post('/', authenticate, requireRole('admin', 'coordinator'), ctrl.create);
+router.post('/', authenticate, requireRole(...MEDIA_MANAGERS), ctrl.create);
 
 /**
  * @swagger
  * /videos/{id}:
  *   put:
  *     tags: [Videos]
- *     summary: Update video metadata (title, description, publish status)
+ *     summary: Update video metadata (title, description, visibility, publish status)
  */
-router.put('/:id', authenticate, requireRole('admin', 'coordinator'), ctrl.update);
+router.put('/:id', authenticate, requireRole(...MEDIA_MANAGERS), ctrl.update);
 
 /**
  * @swagger
@@ -83,7 +126,6 @@ router.delete('/:id', authenticate, requireRole('admin', 'coordinator'), ctrl.re
  *   post:
  *     tags: [Videos]
  *     summary: Create a streaming session token for a video
- *     description: Must be called before /stream. Returns a short-lived token.
  */
 router.post('/:id/session', authenticate, ctrl.createSession);
 
@@ -92,22 +134,9 @@ router.post('/:id/session', authenticate, ctrl.createSession);
  * /videos/{id}/stream:
  *   get:
  *     tags: [Videos]
- *     summary: Secure streaming proxy — pipes Zata bytes through the server
- *     parameters:
- *       - in: query
- *         name: sessionToken
- *         required: true
- *         schema: { type: string }
- *       - in: header
- *         name: Range
- *         schema: { type: string }
- *         example: "bytes=0-1048576"
- *     responses:
- *       206: { description: Partial content — video chunk }
- *       401: { description: Invalid/expired session }
- *       503: { description: Zata not configured }
+ *     summary: Secure streaming proxy
  */
-router.get('/:id/stream', ctrl.streamVideo); // No JWT middleware — validated via sessionToken query param
+router.get('/:id/stream', ctrl.streamVideo); // validated via sessionToken query param
 
 /**
  * @swagger
@@ -116,7 +145,7 @@ router.get('/:id/stream', ctrl.streamVideo); // No JWT middleware — validated 
  *     tags: [Videos]
  *     summary: Download any media file (validated via sessionToken)
  */
-router.get('/:id/download', ctrl.downloadMedia); // Validated via sessionToken query param
+router.get('/:id/download', ctrl.downloadMedia); // validated via sessionToken query param
 
 /**
  * @swagger
@@ -148,33 +177,5 @@ router.get('/:id/analytics', authenticate, requireRole('admin', 'coordinator'), 
  *     summary: Serve a JPEG thumbnail (auto-generated via ffmpeg or SVG placeholder)
  */
 router.get('/:id/thumbnail', ctrl.getThumbnail); // public — no auth needed for poster images
-
-/**
- * @swagger
- * /videos/upload:
- *   post:
- *     tags: [Videos]
- *     summary: Proxy upload — browser posts file here, backend streams to Zata
- *     description: Accepts multipart/form-data with fields file, filename, course_code, video_id
- */
-router.post('/upload', authenticate, requireRole('admin', 'coordinator'), ctrl.proxyUpload);
-
-/**
- * @swagger
- * /videos/upload/request-url:
- *   post:
- *     tags: [Videos]
- *     summary: Get a presigned upload URL for direct-to-Zata upload
- */
-router.post('/upload/request-url', authenticate, requireRole('admin', 'coordinator'), ctrl.requestUploadUrl);
-
-/**
- * @swagger
- * /videos/courses/{courseId}/init-folder:
- *   post:
- *     tags: [Videos]
- *     summary: Create the course folder in the Zata bucket
- */
-router.post('/courses/:courseId/init-folder', authenticate, requireRole('admin', 'coordinator'), ctrl.initCourseFolder);
 
 export default router;

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requirePermission, scopeBatchSQL } from '../../middleware/rbac.js';
+import { requirePermission, scopeBatchSQL, isOwnScope } from '../../middleware/rbac.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok, created, notFound } from '../../utils/response.js';
 import { query } from '../../config/database.js';
@@ -18,20 +18,16 @@ const assignGuideSchema = z.object({
 });
 
 // ─── CSV helpers ──────────────────────────────────────────────────────────────
-
-/** Escape a single cell value for CSV (RFC 4180) */
 const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-
-/** Convert an array of row-arrays to a CSV string */
 const toCSV = (rows) => rows.map((r) => r.map(csvCell).join(',')).join('\r\n');
 
-// ─── Build shared WHERE clause (used by list + export) ────────────────────────
+// ─── Build shared WHERE clause ────────────────────────────────────────────────
 const buildWhere = (q) => {
   const params = [];
   const conds  = [];
-  if (q.course_id) { params.push(q.course_id);          conds.push(`b.course_id=$${params.length}`);   }
-  if (q.batch_id)  { params.push(q.batch_id);           conds.push(`be.batch_id=$${params.length}`);   }
-  if (q.status)    { params.push(q.status);              conds.push(`be.status=$${params.length}`);     }
+  if (q.course_id) { params.push(q.course_id);  conds.push(`b.course_id=$${params.length}`);  }
+  if (q.batch_id)  { params.push(q.batch_id);   conds.push(`be.batch_id=$${params.length}`);  }
+  if (q.status)    { params.push(q.status);      conds.push(`be.status=$${params.length}`);    }
   if (q.search)    {
     params.push(`%${q.search}%`);
     conds.push(`(u.first_name ILIKE $${params.length} OR u.last_name ILIKE $${params.length} OR u.email ILIKE $${params.length})`);
@@ -40,7 +36,6 @@ const buildWhere = (q) => {
 };
 
 // ─── GET /students/export ─────────────────────────────────────────────────────
-// IMPORTANT: must be declared BEFORE /:id to avoid route shadowing
 router.get('/export', requirePermission('students', 'read'), asyncHandler(async (req, res) => {
   const course_id = req.courseId || req.query.course_id;
   const { params, where } = buildWhere({ ...req.query, course_id });
@@ -67,44 +62,28 @@ router.get('/export', requirePermission('students', 'read'), asyncHandler(async 
   ];
 
   const dataRows = rows.map((r) => [
-    r.first_name,
-    r.last_name,
-    r.email,
-    r.phone || '',
-    r.enrollment_number || '',
-    r.batch_name,
-    r.batch_code,
-    r.course_name,
-    r.status,
-    r.current_semester || 1,
+    r.first_name, r.last_name, r.email, r.phone || '',
+    r.enrollment_number || '', r.batch_name, r.batch_code, r.course_name,
+    r.status, r.current_semester || 1,
     r.enrolled_at ? new Date(r.enrolled_at).toISOString().split('T')[0] : '',
   ]);
 
   const csv = toCSV([HEADERS, ...dataRows]);
   const filename = `students-${new Date().toISOString().slice(0, 10)}.csv`;
-
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.send('﻿' + csv); // UTF-8 BOM so Excel opens it correctly
+  res.send('﻿' + csv);
 }));
 
 // ─── POST /students/import ────────────────────────────────────────────────────
-/**
- * Bulk-import students from the frontend's mapped JSON.
- * Body: { students: [{ first_name, last_name, email, phone?, batch_code,
- *                      enrollment_number?, status?, current_semester? }] }
- * Response: { imported, skipped, errors: [{row, email, error}] }
- */
 router.post('/import', requirePermission('students', 'create'), asyncHandler(async (req, res) => {
   const students = Array.isArray(req.body.students) ? req.body.students : [];
   if (students.length === 0) {
     return res.status(400).json({ success: false, message: 'No student rows provided' });
   }
 
-  // Fetch the student role_id once
   const { rows: [studentRole] } = await query(`SELECT id FROM roles WHERE name='student'`);
-
   let imported = 0;
   let skipped  = 0;
   const errors = [];
@@ -113,30 +92,24 @@ router.post('/import', requirePermission('students', 'create'), asyncHandler(asy
     const s = students[i];
     const rowNum = i + 1;
 
-    // ── Basic validation ───────────────────────────────────────────────────
     if (!s.first_name?.trim() || !s.last_name?.trim() || !s.email?.trim()) {
       errors.push({ row: rowNum, email: s.email || '—', error: 'Missing required field (first_name, last_name or email)' });
-      skipped++;
-      continue;
+      skipped++; continue;
     }
     if (!s.batch_code?.trim()) {
       errors.push({ row: rowNum, email: s.email, error: 'Missing batch_code' });
-      skipped++;
-      continue;
+      skipped++; continue;
     }
 
     try {
-      // ── Resolve batch ──────────────────────────────────────────────────
       const { rows: [batch] } = await query(
         `SELECT id FROM batches WHERE LOWER(code)=LOWER($1)`, [s.batch_code.trim()]
       );
       if (!batch) {
         errors.push({ row: rowNum, email: s.email, error: `Batch code "${s.batch_code}" not found` });
-        skipped++;
-        continue;
+        skipped++; continue;
       }
 
-      // ── Find or create user ────────────────────────────────────────────
       let userId;
       const { rows: [existing] } = await query(
         `SELECT id FROM users WHERE LOWER(email)=LOWER($1)`, [s.email.trim()]
@@ -152,8 +125,6 @@ router.post('/import', requirePermission('students', 'create'), asyncHandler(asy
           [s.email.trim().toLowerCase(), s.first_name.trim(), s.last_name.trim(), s.phone?.trim() || null]
         );
         userId = newUser.id;
-
-        // Assign student role
         if (studentRole) {
           await query(
             `INSERT INTO user_roles (user_id, role_id, batch_id, assigned_by)
@@ -163,33 +134,24 @@ router.post('/import', requirePermission('students', 'create'), asyncHandler(asy
         }
       }
 
-      // ── Check for duplicate enrollment ────────────────────────────────
       const { rows: [existingEnroll] } = await query(
         `SELECT id FROM batch_enrollments WHERE user_id=$1 AND batch_id=$2`, [userId, batch.id]
       );
       if (existingEnroll) {
         errors.push({ row: rowNum, email: s.email, error: `Already enrolled in batch "${s.batch_code}"` });
-        skipped++;
-        continue;
+        skipped++; continue;
       }
 
-      // ── Generate enrollment number if blank ────────────────────────────
       const enrNum = s.enrollment_number?.trim() || `ENR-${Date.now()}-${rowNum}`;
-
-      // ── Create enrollment ──────────────────────────────────────────────
       await query(
         `INSERT INTO batch_enrollments
            (batch_id, user_id, enrollment_number, status, current_semester, enrolled_at, enrolled_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          batch.id, userId, enrNum,
-          s.status || 'active',
-          parseInt(s.current_semester, 10) || 1,
-          s.enrolled_at ? new Date(s.enrolled_at) : new Date(),
-          req.user.id,
-        ]
+        [batch.id, userId, enrNum, s.status || 'active',
+         parseInt(s.current_semester, 10) || 1,
+         s.enrolled_at ? new Date(s.enrolled_at) : new Date(),
+         req.user.id]
       );
-
       imported++;
     } catch (err) {
       errors.push({ row: rowNum, email: s.email || '—', error: err.message });
@@ -201,46 +163,41 @@ router.post('/import', requirePermission('students', 'create'), asyncHandler(asy
 }));
 
 // ─── POST /students/bulk-action ───────────────────────────────────────────────
-/**
- * Perform a bulk action on a set of students (by user_id).
- * Body: { ids: [user_id, ...], action: 'activate' | 'deactivate' | 'suspend' }
- */
 router.post('/bulk-action', requirePermission('students', 'update'), asyncHandler(async (req, res) => {
   const { ids, action } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ success: false, message: 'No student IDs provided' });
   }
-
-  const STATUS_MAP = {
-    activate:   'active',
-    deactivate: 'inactive',
-    suspend:    'suspended',
-  };
-
+  const STATUS_MAP = { activate: 'active', deactivate: 'inactive', suspend: 'suspended' };
   const newStatus = STATUS_MAP[action];
   if (!newStatus) {
     return res.status(400).json({ success: false, message: `Unknown action: ${action}` });
   }
-
-  // Parameterised IN clause
   const placeholders = ids.map((_, i) => `$${i + 2}`).join(', ');
   const { rowCount } = await query(
     `UPDATE batch_enrollments SET status=$1 WHERE user_id IN (${placeholders})`,
     [newStatus, ...ids]
   );
-
   ok(res, { updated: rowCount, status: newStatus });
 }));
 
 // ─── GET /students ────────────────────────────────────────────────────────────
 router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  // X-Course-Id header takes precedence over query param
   const course_id = req.courseId || req.query.course_id;
   const { params, where } = buildWhere({ ...req.query, course_id });
-  // Batch-scoped roles (coordinators / guides) only see their own batches
+
+  // Own-scope: students can only see their own enrollment record
+  let ownFrag = '';
+  if (isOwnScope(req)) {
+    params.push(req.user.id);
+    ownFrag = `AND be.user_id=$${params.length}`;
+  }
+
   const scopeFrag = scopeBatchSQL(req, 'be.batch_id');
-  const scopedWhere = where ? `${where} ${scopeFrag}` : (scopeFrag ? `WHERE TRUE ${scopeFrag}` : '');
+  const scopedWhere = where
+    ? `${where} ${ownFrag} ${scopeFrag}`
+    : (ownFrag || scopeFrag) ? `WHERE TRUE ${ownFrag} ${scopeFrag}` : '';
 
   const { rows: data } = await query(
     `SELECT be.*, u.first_name, u.last_name, u.email, u.phone, u.avatar_url,
@@ -263,6 +220,10 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
 
 // ─── GET /students/:id ────────────────────────────────────────────────────────
 router.get('/:id', requirePermission('students', 'read'), asyncHandler(async (req, res) => {
+  // Own-scope: students can only read their own profile
+  if (isOwnScope(req) && req.user.id !== req.params.id) {
+    return res.status(403).json({ success: false, code: 'PERMISSION_DENIED', message: 'You can only view your own profile.' });
+  }
   const { rows: [student] } = await query(
     `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.avatar_url,
             be.enrollment_number, be.status, be.current_semester, be.enrolled_at, be.batch_id,

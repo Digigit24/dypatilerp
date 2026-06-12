@@ -127,3 +127,16 @@ export const getVideoAnalytics = async (videoId) => {
   const { data: res } = await http.get(`/videos/${videoId}/analytics`)
   return ok(res.data)
 }
+
+// ─── Student submission upload ────────────────────────────────────────────────
+
+/**
+ * Request a presigned Zata PUT URL for a student file submission.
+ * The file is stored in the course's "Assignments" media folder, linked to the assignment.
+ * Returns { upload_url, object_key, media_id }.
+ */
+export const requestSubmissionUploadUrl = async (payload) => {
+  if (USE_MOCK) return ok({ upload_url: '#', object_key: `mock/${Date.now()}/file`, media_id: `mid_${Date.now()}` })
+  const { data: res } = await http.post('/videos/upload/submission-url', payload)
+  return ok(res.data)
+}

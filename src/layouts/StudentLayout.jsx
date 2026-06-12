@@ -1,4 +1,4 @@
-import { Bell, BookOpen, ClipboardList, FileDown, FileText, FlaskConical, Home, IndianRupee, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PenLine, PlayCircle, Settings, UserCircle } from 'lucide-react'
+import { Bell, BookOpen, ClipboardList, FileDown, FileText, FlaskConical, Home, IndianRupee, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PlayCircle, Settings, UserCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -36,7 +36,6 @@ export default function StudentLayout() {
     title: 'STUDENT',
     items: [
       { to: '/student/dashboard', label: 'Dashboard', icon: Home },
-      { to: '/student/submit', label: 'Submit Title', icon: PenLine },
       { to: '/student/assignments', label: 'Assignments', icon: ClipboardList },
       { to: '/student/submissions', label: 'My Submissions', icon: FileText },
       { to: '/student/formats', label: 'Formats', icon: FileDown },

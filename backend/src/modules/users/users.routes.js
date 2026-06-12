@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requirePermission, requireRole } from '../../middleware/rbac.js';
+import { requirePermission, requireRole, isOwnScope } from '../../middleware/rbac.js';
 import { randomBytes } from 'crypto';
 import { sendLoginCredentials } from '../email/email.service.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -43,7 +43,7 @@ router.get('/me/preferences', asyncHandler(async (req, res) => {
 
 // ─── PATCH /users/me/preferences ─────────────────────────────────────────────
 router.patch('/me/preferences', asyncHandler(async (req, res) => {
-  const patch = req.body; // e.g. { theme: 'dark', primaryColor: '#...' }
+  const patch = req.body;
   const { rows: [user] } = await query(
     `UPDATE users
      SET preferences = COALESCE(preferences, '{}') || $1::jsonb,
@@ -55,27 +55,9 @@ router.patch('/me/preferences', asyncHandler(async (req, res) => {
   ok(res, user?.preferences || {}, 'Preferences saved');
 }));
 
-/**
- * @swagger
- * /users:
- *   get:
- *     tags: [Users]
- *     summary: List all users (admin only)
- *     parameters:
- *       - in: query
- *         name: search
- *         schema: { type: string }
- *       - in: query
- *         name: role
- *         schema: { type: string }
- *     responses:
- *       200:
- *         description: Paginated user list
- */
 // ─── Credentials helpers ──────────────────────────────────────────────────────
 const genPassword = () => randomBytes(6).toString('base64url').slice(0, 10);
 
-/** Resolve the user's course (via active enrollment) for the email sender */
 const courseOfUser = async (userId) => {
   const { rows: [row] } = await query(
     `SELECT b.course_id FROM batch_enrollments be
@@ -87,7 +69,6 @@ const courseOfUser = async (userId) => {
 
 const isStaff = (roles = []) => (roles || []).some((r) => !['student', 'applicant'].includes(r));
 
-/** Rotate one user's password and email the fresh credentials. */
 const rotateAndSend = async (userId) => {
   const { rows: [user] } = await query(
     `SELECT u.id, u.email, u.first_name, u.last_name,
@@ -122,10 +103,7 @@ const rotateAndSend = async (userId) => {
   };
 };
 
-/**
- * POST /users/me/password — change my own password.
- * Body: { current_password, new_password }
- */
+// ─── POST /users/me/password ──────────────────────────────────────────────────
 router.post('/me/password', asyncHandler(async (req, res) => {
   const { current_password, new_password } = req.body;
   if (!current_password || !new_password) {
@@ -142,10 +120,7 @@ router.post('/me/password', asyncHandler(async (req, res) => {
   ok(res, null, 'Password changed');
 }));
 
-/**
- * POST /users/bulk-send-credentials — rotate + email credentials in bulk.
- * Body: { user_ids: [] }  (the frontend resolves audiences to user ids)
- */
+// ─── POST /users/bulk-send-credentials ───────────────────────────────────────
 router.post('/bulk-send-credentials', requireRole('admin'), asyncHandler(async (req, res) => {
   const ids = [...new Set(req.body.user_ids || [])];
   if (!ids.length) return res.status(400).json({ success: false, message: 'user_ids is required' });
@@ -160,19 +135,14 @@ router.post('/bulk-send-credentials', requireRole('admin'), asyncHandler(async (
   ok(res, { total: ids.length, emails_sent: sent, results }, `Credentials sent to ${sent}/${ids.length} user(s)`);
 }));
 
-/**
- * POST /users/:id/send-credentials — one-click: rotate password + email it.
- */
+// ─── POST /users/:id/send-credentials ────────────────────────────────────────
 router.post('/:id/send-credentials', requireRole('admin', 'coordinator'), asyncHandler(async (req, res) => {
   const result = await rotateAndSend(req.params.id);
   if (!result.ok) return res.status(404).json({ success: false, message: result.error });
   ok(res, result, result.email_sent ? 'Credentials emailed' : `Password reset but email failed: ${result.email_error}`);
 }));
 
-/**
- * POST /users/:id/reset-password — admin sets or generates a password.
- * Body: { password?, send_email? } — returns the plain password ONCE.
- */
+// ─── POST /users/:id/reset-password ──────────────────────────────────────────
 router.post('/:id/reset-password', requireRole('admin'), asyncHandler(async (req, res) => {
   const { rows: [user] } = await query('SELECT id, email, first_name, last_name FROM users WHERE id=$1', [req.params.id]);
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
@@ -191,6 +161,7 @@ router.post('/:id/reset-password', requireRole('admin'), asyncHandler(async (req
   ok(res, { password, email_sent }, 'Password reset');
 }));
 
+// ─── GET /users ───────────────────────────────────────────────────────────────
 router.get('/', requirePermission('users', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   const params = [];
@@ -215,17 +186,12 @@ router.get('/', requirePermission('users', 'read'), asyncHandler(async (req, res
   res.json({ success: true, data, pagination: buildPaginationMeta(parseInt(total), page, limit) });
 }));
 
-/**
- * @swagger
- * /users/{id}:
- *   get:
- *     tags: [Users]
- *     summary: Get user by ID
- *     responses:
- *       200:
- *         description: User detail
- */
+// ─── GET /users/:id ───────────────────────────────────────────────────────────
 router.get('/:id', requirePermission('users', 'read'), asyncHandler(async (req, res) => {
+  // Own-scope users (students) can only read their own record
+  if (isOwnScope(req) && req.user.id !== req.params.id) {
+    return res.status(403).json({ success: false, code: 'PERMISSION_DENIED', message: 'You can only view your own profile.' });
+  }
   const { rows: [user] } = await query(
     `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.avatar_url, u.is_active, u.last_login_at, u.created_at,
             array_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL) as roles
@@ -236,16 +202,7 @@ router.get('/:id', requirePermission('users', 'read'), asyncHandler(async (req, 
   ok(res, user);
 }));
 
-/**
- * @swagger
- * /users:
- *   post:
- *     tags: [Users]
- *     summary: Create a new user (admin only)
- *     responses:
- *       201:
- *         description: User created
- */
+// ─── POST /users ──────────────────────────────────────────────────────────────
 router.post('/', requireRole('admin'), validate(createUserSchema), asyncHandler(async (req, res) => {
   const hash = await bcrypt.hash(req.body.password, 12);
   const { rows: [user] } = await query(
@@ -259,17 +216,15 @@ router.post('/', requireRole('admin'), validate(createUserSchema), asyncHandler(
   created(res, user, 'User created');
 }));
 
-/**
- * @swagger
- * /users/{id}:
- *   put:
- *     tags: [Users]
- *     summary: Update a user
- *     responses:
- *       200:
- *         description: Updated
- */
+// ─── PUT /users/:id ───────────────────────────────────────────────────────────
 router.put('/:id', requirePermission('users', 'update'), validate(updateUserSchema), asyncHandler(async (req, res) => {
+  // Own-scope users (students) can only update their own record, and cannot change is_active
+  if (isOwnScope(req)) {
+    if (req.user.id !== req.params.id) {
+      return res.status(403).json({ success: false, code: 'PERMISSION_DENIED', message: 'You can only update your own profile.' });
+    }
+    delete req.body.is_active; // students cannot activate/deactivate themselves
+  }
   const fields = [];
   const params = [];
   const allowed = ['first_name','last_name','phone','avatar_url','is_active'];
@@ -285,27 +240,7 @@ router.put('/:id', requirePermission('users', 'update'), validate(updateUserSche
   ok(res, user, 'Updated');
 }));
 
-/**
- * @swagger
- * /users/{id}/roles:
- *   post:
- *     tags: [Users]
- *     summary: Assign a role to a user
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [role_name]
- *             properties:
- *               role_name: { type: string }
- *               course_id: { type: string, format: uuid }
- *               batch_id: { type: string, format: uuid }
- *     responses:
- *       200:
- *         description: Role assigned
- */
+// ─── POST /users/:id/roles ────────────────────────────────────────────────────
 router.post('/:id/roles', requireRole('admin', 'coordinator'), asyncHandler(async (req, res) => {
   const { role_name, course_id, batch_id } = req.body;
   const { rows: [role] } = await query('SELECT id FROM roles WHERE name=$1', [role_name]);
@@ -317,16 +252,7 @@ router.post('/:id/roles', requireRole('admin', 'coordinator'), asyncHandler(asyn
   ok(res, null, 'Role assigned');
 }));
 
-/**
- * @swagger
- * /users/{id}:
- *   delete:
- *     tags: [Users]
- *     summary: Deactivate a user (soft delete)
- *     responses:
- *       204:
- *         description: Deactivated
- */
+// ─── DELETE /users/:id ────────────────────────────────────────────────────────
 router.delete('/:id', requireRole('admin'), asyncHandler(async (req, res) => {
   await query('UPDATE users SET is_active=false, updated_at=NOW() WHERE id=$1', [req.params.id]);
   noContent(res);

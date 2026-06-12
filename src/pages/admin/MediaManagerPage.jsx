@@ -543,11 +543,12 @@ function FolderModal({ modal, onClose, onSubmit }) {
 
 // ─── Upload drawer (multi-file queue) ─────────────────────────────────────────────
 function UploadDrawer({ course, folderId, folderName, initialFiles, onClose, addToast }) {
-  const [queue, setQueue]     = useState(() => (initialFiles || []).map(toQueueItem))
-  const [batches, setBatches] = useState([])
-  const [batchId, setBatchId] = useState('')
-  const [publish, setPublish] = useState(false)
-  const [busy, setBusy]       = useState(false)
+  const [queue, setQueue]         = useState(() => (initialFiles || []).map(toQueueItem))
+  const [batches, setBatches]     = useState([])
+  const [batchId, setBatchId]     = useState('')
+  const [visibility, setVisibility] = useState('course')
+  const [publish, setPublish]     = useState(false)
+  const [busy, setBusy]           = useState(false)
   const [didUpload, setDidUpload] = useState(false)
   const fileRef = useRef(null)
 
@@ -606,6 +607,7 @@ function UploadDrawer({ course, folderId, folderName, initialFiles, onClose, add
           duration_sec: 0,
           sort_order: 0,
           is_published: publish,
+          visibility,
         })
         patchItem(item.key, { status: 'done', pct: 100 })
         okCount += 1
@@ -706,15 +708,22 @@ function UploadDrawer({ course, folderId, folderName, initialFiles, onClose, add
                 {batches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </label>
-            <div className="flex items-end pb-1">
-              <label className="flex cursor-pointer items-center gap-2.5">
-                <button type="button" disabled={busy} onClick={() => setPublish((v) => !v)}
-                  className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${publish ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}>
-                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${publish ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </button>
-                <span className="text-sm font-semibold text-[color:var(--text)]">Publish immediately</span>
-              </label>
-            </div>
+            <label className="block">
+              <span className="text-sm font-semibold text-[color:var(--text)]">Visibility</span>
+              <select className="input mt-1.5 w-full" value={visibility} onChange={(e) => setVisibility(e.target.value)} disabled={busy}>
+                <option value="course">Course — all enrolled students</option>
+                <option value="batch">Batch — specific batch only</option>
+                <option value="public">Public — anyone with link</option>
+                <option value="private">Private — staff only (draft)</option>
+              </select>
+            </label>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <button type="button" disabled={busy} onClick={() => setPublish((v) => !v)}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${publish ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}>
+              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${publish ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+            <span className="text-sm font-semibold text-[color:var(--text)]">Publish immediately</span>
           </div>
         </div>
 
@@ -743,6 +752,7 @@ function EditDrawer({ media, allFolders, onClose, addToast }) {
     batch_id: media.batch_id || '',
     sort_order: media.sort_order || 0,
     is_published: !!media.is_published,
+    visibility: media.visibility || 'course',
   })
   const [saving, setSaving] = useState(false)
 
@@ -756,6 +766,7 @@ function EditDrawer({ media, allFolders, onClose, addToast }) {
         folder_id: form.folder_id || null,
         sort_order: Number(form.sort_order) || 0,
         is_published: form.is_published,
+        visibility: form.visibility,
       })
       addToast({ type: 'success', title: 'Saved.' })
       onClose(true)
@@ -795,6 +806,14 @@ function EditDrawer({ media, allFolders, onClose, addToast }) {
               </F>
               <F label="Sort Order"><input className="input w-full" type="number" min={0} value={form.sort_order} onChange={(e) => setForm((p) => ({ ...p, sort_order: e.target.value }))} /></F>
             </div>
+            <F label="Visibility">
+              <select className="input w-full" value={form.visibility} onChange={(e) => setForm((p) => ({ ...p, visibility: e.target.value }))}>
+                <option value="course">Course — all enrolled students</option>
+                <option value="batch">Batch — specific batch only</option>
+                <option value="public">Public — anyone with link</option>
+                <option value="private">Private — staff only (draft)</option>
+              </select>
+            </F>
             <div className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
               <div>
                 <p className="text-sm font-semibold text-[color:var(--text)]">Published</p>
