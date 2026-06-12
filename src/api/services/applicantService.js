@@ -49,6 +49,26 @@ export const getApplicantById = async (id) => {
   return ok(normalize(res.data))
 }
 
+/** Bulk-import applicants (mapped rows from the import wizard) into a course */
+export const importApplicants = async (applicants, courseId) => {
+  if (USE_MOCK) {
+    await delay(400, 800)
+    return { data: { imported: applicants.length, skipped: 0, errors: [], total: applicants.length } }
+  }
+  const { data: res } = await http.post('/applicants/import', { applicants, course_id: courseId })
+  return { data: res.data }
+}
+
+/** Fetch ALL applicants for export (course-scoped via header, no pagination cap) */
+export const exportApplicants = async (filters = {}) => {
+  if (USE_MOCK) {
+    await delay()
+    return ok([...APPLICANTS])
+  }
+  const { data: res } = await http.get('/applicants/export', { params: filters })
+  return ok(res.data.map(normalize))
+}
+
 export const createApplicant = async (payload) => {
   if (USE_MOCK) {
     await delay(300, 600)

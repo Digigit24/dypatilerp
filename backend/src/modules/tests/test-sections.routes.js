@@ -57,6 +57,19 @@ router.patch('/:sectionId', authenticate, requirePermission('tests', 'update'), 
     [title || null, description || null, order_index ?? null, req.params.sectionId, req.params.testId]
   );
   if (!section) return notFound(res, 'Section not found');
+
+  // pick_count: how many questions to randomly serve from this section's bank.
+  // Explicitly settable to null/0 = serve all questions.
+  if (Object.prototype.hasOwnProperty.call(req.body, 'pick_count')) {
+    const pc = parseInt(req.body.pick_count, 10);
+    const value = Number.isFinite(pc) && pc > 0 ? pc : null;
+    const { rows: [updated] } = await query(
+      'UPDATE test_sections SET pick_count=$1 WHERE id=$2 AND test_id=$3 RETURNING *',
+      [value, req.params.sectionId, req.params.testId]
+    );
+    return ok(res, updated);
+  }
+
   ok(res, section);
 }));
 

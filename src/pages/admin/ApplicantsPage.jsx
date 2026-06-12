@@ -1,10 +1,13 @@
 import {
-  Award, CheckCircle2, Clock3, GraduationCap, Pencil, RotateCcw,
-  Save, Search, Send, UserCheck, UserMinus, UserPlus, XCircle, ClipboardList,
+  Award, CheckCircle2, Clock3, Download, GraduationCap, Loader2, Pencil, RotateCcw,
+  Save, Search, Send, Upload, UserCheck, UserMinus, UserPlus, XCircle, ClipboardList,
 } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createApplicant, getApplicants, shortlistApplicant, updateApplicantDetails, updateApplicantStatus } from '../../api/services/applicantService.js'
+import { createApplicant, exportApplicants, getApplicants, shortlistApplicant, updateApplicantDetails, updateApplicantStatus } from '../../api/services/applicantService.js'
+import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
+import { buildApplicantImportConfig } from '../../components/admin/applicantImportConfig.js'
 import { getBatches } from '../../api/services/batchService.js'
 import { getCourses } from '../../api/services/courseService.js'
 import { useCourseStore } from '../../store/courseStore.js'
@@ -194,18 +197,67 @@ export default function ApplicantsPage() {
   const [editSaving, setEditSaving] = useState(false)
   const [query,      setQuery]      = useState('')
   const [status,     setStatus]     = useState('all')
+  const [showImport, setShowImport] = useState(false)
+  const [exporting,  setExporting]  = useState(false)
   const addToast = useUiStore((s) => s.addToast)
-  useScrollLock(Boolean(selected || addOpen))
+  useScrollLock(Boolean(selected || addOpen || showImport))
 
   // Re-fetch when active course changes; X-Course-Id header is added automatically
-  useEffect(() => {
+  const loadApplicants = () => {
     setItems(null)
     setSelected(null)
-    Promise.all([getApplicants(), getCourses()]).then(([r, c]) => {
+    Promise.all([getApplicants({ limit: 100 }), getCourses()]).then(([r, c]) => {
       setItems(r.data)
       setCourses(c.data || [])
     })
-  }, [currentCourse?.id])
+  }
+  useEffect(() => { loadApplicants() }, [currentCourse?.id])
+
+  // ── Excel export (course-filtered, honours the status filter) ──────────────
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const r = await exportApplicants(status !== 'all' ? { status } : {})
+      const list = r.data || []
+      if (!list.length) {
+        addToast({ type: 'info', title: 'No applicants to export for the current filter.' })
+        return
+      }
+      const rows = list.map((a) => ({
+        'First Name':           a.personal?.first_name || a.first_name || '',
+        'Last Name':            a.personal?.last_name || a.last_name || '',
+        'Email':                a.personal?.email || a.email || '',
+        'Phone':                a.personal?.phone || a.phone || '',
+        'Status':               a.status || '',
+        'Applied At':           a.applied_at ? new Date(a.applied_at).toLocaleDateString('en-IN') : '',
+        'Batch':                a.batch_code || a.batch_name || '',
+        'University':           a.academic?.university !== '—' ? (a.academic?.university || '') : '',
+        'Highest Degree':       a.academic?.highest_degree || '',
+        'PhD Discipline':       a.academic?.phd_discipline || '',
+        'PhD Research Title':   a.academic?.phd_research_title || '',
+        'PhD Completion Year':  a.academic?.phd_completion_year || '',
+        'Scopus Publications':  a.academic?.scopus_publications ?? '',
+        'State / Country':      a.personal?.state_country || '',
+        'Test Score':           a.test_score ?? '',
+        'Test Max Score':       a.test_max_score ?? '',
+        'Test Submitted At':    a.test_submitted_at ? new Date(a.test_submitted_at).toLocaleString('en-IN') : '',
+        'Research Statement':   a.research_statement || '',
+      }))
+      const ws = XLSX.utils.json_to_sheet(rows)
+      ws['!cols'] = Object.keys(rows[0]).map((k) => ({
+        wch: Math.min(40, Math.max(k.length + 2, ...rows.slice(0, 50).map((row) => String(row[k] ?? '').length + 2))),
+      }))
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Applicants')
+      const stamp = new Date().toISOString().slice(0, 10)
+      XLSX.writeFile(wb, `applicants-${currentCourse?.code || 'all-courses'}${status !== 'all' ? `-${status}` : ''}-${stamp}.xlsx`)
+      addToast({ type: 'success', title: `Exported ${rows.length} applicant${rows.length === 1 ? '' : 's'} to Excel.` })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Export failed', message: err.response?.data?.message || err.message })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   // When course in form changes, fetch batches for that course
   useEffect(() => {
@@ -364,9 +416,32 @@ export default function ApplicantsPage() {
         title="Applications"
         subtitle="Review applicant profiles, test outcomes, and shortlist candidates for enrollment."
         action={
-          <button className="btn-primary inline-flex items-center gap-2" onClick={openAdd}>
-            <UserPlus size={17} /> Add Applicant
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
+              onClick={handleExport}
+              disabled={exporting}
+              title={`Export ${currentCourse ? currentCourse.code + ' ' : ''}applicants to Excel`}
+            >
+              {exporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+              Export
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
+              onClick={() => {
+                if (!currentCourse?.id) {
+                  addToast({ type: 'error', title: 'Select a course from the header first — imported applicants are added to that course.' })
+                  return
+                }
+                setShowImport(true)
+              }}
+            >
+              <Upload size={15} /> Import
+            </button>
+            <button className="btn-primary inline-flex items-center gap-2" onClick={openAdd}>
+              <UserPlus size={17} /> Add Applicant
+            </button>
+          </div>
         }
       />
 
@@ -738,6 +813,15 @@ export default function ApplicantsPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* ── Import wizard (upload → map columns → review) ── */}
+      {showImport && (
+        <ImportDrawer
+          config={buildApplicantImportConfig(currentCourse)}
+          onClose={() => setShowImport(false)}
+          onImported={loadApplicants}
+        />
       )}
     </div>
   )

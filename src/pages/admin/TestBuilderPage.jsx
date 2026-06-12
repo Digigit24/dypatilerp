@@ -1,7 +1,7 @@
 import {
   ChevronDown, ChevronRight, Clock, FilePlus2, Loader2,
   Plus, Save, Send, Trash2, Users, X, Copy, Eye, EyeOff, CheckCircle2, Mail, MailCheck,
-  RefreshCw, Link2, Search, ExternalLink, ClipboardList, Target, AlignLeft,
+  RefreshCw, Link2, Search, ExternalLink, ClipboardList, Target, AlignLeft, Shuffle,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -541,6 +541,12 @@ export default function TestBuilderPage() {
 
   const totalMarks = allQuestions.reduce((s, q) => s + (Number(q.marks) || 0), 0)
 
+  // How many questions a candidate will actually receive (random sampling per section)
+  const deliveredCount = sections.reduce((sum, sec) => {
+    const bank = allQuestions.filter((q) => q.section_id === sec.id).length
+    return sum + (sec.pick_count && sec.pick_count > 0 ? Math.min(sec.pick_count, bank) : bank)
+  }, 0) + allQuestions.filter((q) => !q.section_id).length
+
   return (
     <div className="fade-page">
       <PageHeader
@@ -658,7 +664,11 @@ export default function TestBuilderPage() {
                   to pass
                 </label>
                 <span className="text-xs text-[color:var(--secondary)]">
-                  {allQuestions.length} questions · {totalMarks} marks
+                  {deliveredCount === allQuestions.length
+                    ? <>{allQuestions.length} questions · {totalMarks} marks</>
+                    : <span className="inline-flex items-center gap-1 font-semibold text-[color:var(--accent)]">
+                        <Shuffle size={11} /> serves {deliveredCount} of {allQuestions.length} (random)
+                      </span>}
                 </span>
                 <button
                   onClick={() => setShowInstructions((v) => !v)}
@@ -760,8 +770,9 @@ export default function TestBuilderPage() {
                         <span className={`text-xs font-semibold ${active ? 'text-[color:var(--accent)]' : 'text-[color:var(--secondary)]'}`}>
                           {sec.title}
                         </span>
-                        <span className={`rounded-md px-1 text-[10px] font-bold ${active ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--surface)] text-[color:var(--muted)]'}`}>
-                          {count}
+                        <span className={`rounded-md px-1 text-[10px] font-bold ${active ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--surface)] text-[color:var(--muted)]'}`}
+                          title={sec.pick_count ? `Randomly serves ${Math.min(sec.pick_count, count)} of ${count} questions` : `${count} questions`}>
+                          {sec.pick_count && sec.pick_count > 0 ? `${Math.min(sec.pick_count, count)}/${count}` : count}
                         </span>
                         <button
                           onClick={(e) => { e.stopPropagation(); removeSection(sec.id) }}
@@ -791,7 +802,35 @@ export default function TestBuilderPage() {
                       onBlur={(e) => updateSection(activeTestId, activeSectionId, { title: e.target.value })}
                       title="Click to rename section"
                     />
-                    <span className="text-xs text-[color:var(--secondary)]">{sectionQs.length} question{sectionQs.length === 1 ? '' : 's'}</span>
+                    <label
+                      className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-[color:var(--secondary)]"
+                      title="Randomly serve this many questions from this section's bank to each candidate. Leave blank to serve all."
+                    >
+                      <Shuffle size={12} className={sections.find((sec) => sec.id === activeSectionId)?.pick_count ? 'text-[color:var(--accent)]' : ''} />
+                      Serve
+                      <input
+                        type="number"
+                        min={1}
+                        max={sectionQs.length || undefined}
+                        placeholder="all"
+                        className="input h-7 w-16 px-2 text-xs"
+                        value={sections.find((sec) => sec.id === activeSectionId)?.pick_count ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setSections((xs) => xs.map((sec) => sec.id === activeSectionId ? { ...sec, pick_count: v === '' ? null : Number(v) } : sec))
+                        }}
+                        onBlur={async (e) => {
+                          const v = e.target.value === '' ? null : Math.max(1, Number(e.target.value))
+                          try {
+                            await updateSection(activeTestId, activeSectionId, { pick_count: v })
+                            addToast({ type: 'success', title: v ? `Will randomly serve ${Math.min(v, sectionQs.length)} of ${sectionQs.length} questions.` : 'Section will serve all questions.' })
+                          } catch {
+                            addToast({ type: 'error', title: 'Failed to save question sampling' })
+                          }
+                        }}
+                      />
+                      of {sectionQs.length} · random per candidate
+                    </label>
                   </div>
                 )}
 

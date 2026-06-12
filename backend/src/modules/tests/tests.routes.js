@@ -68,6 +68,8 @@ router.get('/', authenticate, requirePermission('tests', 'read'), asyncHandler(a
 }));
 
 // ── Get test by ID (with sections + questions) ─────────────────────────────────
+// Admins receive the full question bank. Candidates (test-scoped JWT) receive
+// ONLY their frozen random question set, with correct answers stripped.
 router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
   const { rows: [test] } = await query('SELECT * FROM tests WHERE id=$1', [req.params.id]);
   if (!test) return notFound(res, 'Test not found');
@@ -79,10 +81,57 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
     `SELECT * FROM test_questions WHERE test_id=$1 ORDER BY order_index ASC`,
     [test.id]
   );
-  // Nest questions inside their sections
+
+  const bankCount = (s) => questions.filter((q) => q.section_id === s.id).length;
+  const effectiveCount = (s) => {
+    const bank = bankCount(s);
+    return s.pick_count && s.pick_count > 0 ? Math.min(s.pick_count, bank) : bank;
+  };
+
+  const isCandidate = !!req.user?.test_scope;
+
+  if (isCandidate) {
+    const sanitize = (q) => {
+      const { correct_answer, ...cfg } = q.config || {};
+      return { ...q, config: cfg };
+    };
+
+    const { rows: [attempt] } = await query(
+      'SELECT question_set FROM test_attempts WHERE test_id=$1 AND user_id=$2', [test.id, req.user.id]
+    );
+    const set = attempt?.question_set;
+
+    if (Array.isArray(set) && set.length) {
+      // Attempt exists — serve exactly the frozen sampled set, in its random order
+      const pos = new Map(set.map((id, i) => [id, i]));
+      const chosen = questions
+        .filter((q) => pos.has(q.id))
+        .sort((a, b) => pos.get(a.id) - pos.get(b.id))
+        .map(sanitize);
+      const sectionsWithQ = sections.map((sec) => {
+        const qs = chosen.filter((q) => q.section_id === sec.id);
+        return { ...sec, questions: qs, effective_question_count: qs.length };
+      });
+      return ok(res, { ...test, sections: sectionsWithQ, questions: chosen });
+    }
+
+    // No attempt yet (instructions screen) — counts only, never the question bank
+    const sectionsMeta = sections.map((sec) => ({
+      ...sec, questions: [], effective_question_count: effectiveCount(sec),
+    }));
+    return ok(res, {
+      ...test,
+      sections: sectionsMeta,
+      questions: [],
+      question_count: sectionsMeta.reduce((sum, sec) => sum + sec.effective_question_count, 0),
+    });
+  }
+
+  // Admin / builder view — full bank
   const sectionsWithQ = sections.map((s) => ({
     ...s,
     questions: questions.filter((q) => q.section_id === s.id),
+    effective_question_count: effectiveCount(s),
   }));
   ok(res, { ...test, sections: sectionsWithQ, questions });
 }));
@@ -230,10 +279,38 @@ router.post('/:id/start', authenticate, asyncHandler(async (req, res) => {
   const applicantId = req.user.applicant_id || null;
   const tokenId     = req.user.token_id     || null;
 
+  // ── Build the per-candidate question set ──────────────────────────────────
+  // For each section: shuffle the bank, take pick_count (or all). The set is
+  // frozen on the attempt so resume, scoring and results all use the same
+  // questions even though every candidate gets a different random selection.
+  const { rows: sections } = await query(
+    'SELECT id, pick_count FROM test_sections WHERE test_id=$1 ORDER BY order_index ASC', [req.params.id]
+  );
+  const { rows: bank } = await query(
+    'SELECT id, section_id FROM test_questions WHERE test_id=$1 ORDER BY order_index ASC', [req.params.id]
+  );
+  const shuffle = (arr) => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+  const questionSet = [];
+  for (const s of sections) {
+    const sectionBank = bank.filter((q) => q.section_id === s.id);
+    const shuffled = shuffle(sectionBank);
+    const picked = s.pick_count && s.pick_count > 0 ? shuffled.slice(0, s.pick_count) : shuffled;
+    questionSet.push(...picked.map((q) => q.id));
+  }
+  // Section-less questions are always included (not sampled)
+  questionSet.push(...bank.filter((q) => !q.section_id).map((q) => q.id));
+
   const { rows: [attempt] } = await query(
-    `INSERT INTO test_attempts (test_id, user_id, applicant_id, token_id)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [req.params.id, req.user.id, applicantId, tokenId]
+    `INSERT INTO test_attempts (test_id, user_id, applicant_id, token_id, question_set)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [req.params.id, req.user.id, applicantId, tokenId, JSON.stringify(questionSet)]
   );
   created(res, attempt, 'Attempt started');
 }));
@@ -324,8 +401,13 @@ router.post('/:id/submit', authenticate, asyncHandler(async (req, res) => {
   );
   const responseMap = Object.fromEntries(responses.map((r) => [r.question_id, r]));
 
+  // Only the candidate's frozen question set counts toward the score
+  const allowedSet = Array.isArray(attempt.question_set) && attempt.question_set.length
+    ? new Set(attempt.question_set) : null;
+
   let totalScore = 0;
   for (const q of questions) {
+    if (allowedSet && !allowedSet.has(q.id)) continue;
     if (q.question_type !== 'mcq') continue;
     const resp = responseMap[q.id];
     if (!resp) continue;
@@ -375,16 +457,36 @@ router.get('/:id/results/:applicantId', authenticate, requirePermission('applica
     );
     if (!attempt) return notFound(res, 'No submitted attempt found for this applicant');
 
-    const { rows: responses } = await query(
-      `SELECT tr.*, q.question_text, q.question_type, q.marks, q.config, q.order_index,
-              s.title AS section_title, s.order_index AS section_order
-       FROM test_responses tr
-       JOIN test_questions q ON q.id = tr.question_id
-       LEFT JOIN test_sections s ON s.id = q.section_id
-       WHERE tr.attempt_id=$1
-       ORDER BY s.order_index ASC NULLS LAST, q.order_index ASC`,
-      [attempt.id]
-    );
+    const set = Array.isArray(attempt.question_set) && attempt.question_set.length
+      ? attempt.question_set : null;
+
+    let responses;
+    if (set) {
+      // Sampled test: show every question the candidate was served,
+      // including unanswered ones (LEFT JOIN on responses)
+      ({ rows: responses } = await query(
+        `SELECT q.id AS question_id, q.question_text, q.question_type, q.marks, q.config, q.order_index,
+                s.title AS section_title, s.order_index AS section_order,
+                tr.id, tr.attempt_id, tr.response_data, tr.marks_awarded
+         FROM test_questions q
+         LEFT JOIN test_sections s ON s.id = q.section_id
+         LEFT JOIN test_responses tr ON tr.question_id = q.id AND tr.attempt_id = $1
+         WHERE q.id = ANY($2::uuid[])
+         ORDER BY s.order_index ASC NULLS LAST, array_position($2::uuid[], q.id)`,
+        [attempt.id, set]
+      ));
+    } else {
+      ({ rows: responses } = await query(
+        `SELECT tr.*, q.question_text, q.question_type, q.marks, q.config, q.order_index,
+                s.title AS section_title, s.order_index AS section_order
+         FROM test_responses tr
+         JOIN test_questions q ON q.id = tr.question_id
+         LEFT JOIN test_sections s ON s.id = q.section_id
+         WHERE tr.attempt_id=$1
+         ORDER BY s.order_index ASC NULLS LAST, q.order_index ASC`,
+        [attempt.id]
+      ));
+    }
 
     // Build section-level summary
     const sectionMap = {};

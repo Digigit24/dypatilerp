@@ -176,6 +176,15 @@ const run = async () => {
     await client.query(`UPDATE videos SET media_type = 'video' WHERE media_type IS NULL`);
     console.log('\u2713  videos media columns added (media_type, mime_type, folder_id)');
 
+    // 16. Random question sampling per section (Test Builder)
+    await client.query(`
+      ALTER TABLE test_sections ADD COLUMN IF NOT EXISTS pick_count INTEGER
+    `);
+    await client.query(`
+      ALTER TABLE test_attempts ADD COLUMN IF NOT EXISTS question_set JSONB
+    `);
+    console.log('\u2713  test_sections.pick_count + test_attempts.question_set added');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

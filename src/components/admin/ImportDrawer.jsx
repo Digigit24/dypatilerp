@@ -49,9 +49,9 @@ const FIELD_ALIASES = {
   enrolled_at:       ['enrolled', 'enrolled date', 'enrollment date', 'join date', 'date'],
 }
 
-const autoDetect = (header) => {
+const autoDetect = (header, aliasMap = FIELD_ALIASES) => {
   const h = header.toLowerCase().trim()
-  for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
+  for (const [field, aliases] of Object.entries(aliasMap)) {
     if (aliases.includes(h)) return field
     if (aliases.some((a) => h.includes(a))) return field
   }
@@ -66,13 +66,13 @@ const TEMPLATE_ROWS = [
   ['Priya', 'Patel', 'priya.patel@example.com', '9876543211', 'CS2024', 'ENR-002', 'active', '1'],
 ]
 
-const downloadTemplate = () => {
-  const csv = TEMPLATE_ROWS.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
+const downloadTemplate = (rows = TEMPLATE_ROWS, filename = 'students-import-template.csv') => {
+  const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv' })
   const url  = URL.createObjectURL(blob)
   const a    = document.createElement('a')
   a.href     = url
-  a.download = 'students-import-template.csv'
+  a.download = filename
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -89,9 +89,26 @@ const validateRow = (row, idx) => {
   return errs.length ? { row: idx + 1, email: row.email || '—', errors: errs } : null
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Default config: students (backwards compatible) ─────────────────────────
 
-export default function ImportDrawer({ onClose, onImported }) {
+const STUDENT_CONFIG = {
+  label: 'Students',
+  singular: 'Student',
+  fields: STUDENT_FIELDS,
+  aliases: FIELD_ALIASES,
+  templateRows: TEMPLATE_ROWS,
+  templateFilename: 'students-import-template.csv',
+  validateRow,
+  importFn: importStudents,
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+// Pass a `config` prop (same shape as STUDENT_CONFIG) to import any entity.
+
+export default function ImportDrawer({ onClose, onImported, config }) {
+  const cfg = config || STUDENT_CONFIG
+  const FIELDS = cfg.fields
+  const REQUIRED = FIELDS.filter((f) => f.required).map((f) => f.key)
   const [step,      setStep]      = useState(1)           // 1 | 2 | 3 | 'done'
   const [file,      setFile]      = useState(null)        // File object
   const [rawRows,   setRawRows]   = useState([])          // array of arrays from SheetJS
@@ -122,7 +139,7 @@ export default function ImportDrawer({ onClose, onImported }) {
         // Auto-detect mapping
         const autoMap = {}
         hdrs.forEach((h, i) => {
-          const detected = autoDetect(h)
+          const detected = autoDetect(h, cfg.aliases)
           autoMap[i] = detected || ''
         })
 
@@ -162,7 +179,7 @@ export default function ImportDrawer({ onClose, onImported }) {
 
   // ── Proceed to review ───────────────────────────────────────────────────────
   const goReview = () => {
-    const mapped = REQUIRED_FIELDS.filter(
+    const mapped = REQUIRED.filter(
       (f) => !Object.values(mapping).includes(f)
     )
     if (mapped.length > 0) {
@@ -177,7 +194,7 @@ export default function ImportDrawer({ onClose, onImported }) {
     setImporting(true)
     try {
       const rows = buildRows()
-      const res  = await importStudents(rows)
+      const res  = await cfg.importFn(rows)
       setResult(res.data)
       setStep('done')
       if (res.data.imported > 0) onImported?.()
@@ -190,15 +207,15 @@ export default function ImportDrawer({ onClose, onImported }) {
 
   // ── Derived values ──────────────────────────────────────────────────────────
   const mappedCount = Object.values(mapping).filter(Boolean).length
-  const requiredMapped = REQUIRED_FIELDS.every((f) => Object.values(mapping).includes(f))
+  const requiredMapped = REQUIRED.every((f) => Object.values(mapping).includes(f))
 
   const previewRows = buildRows().slice(0, 10)
   const allRows     = buildRows()
-  const validationErrors = allRows.map((r, i) => validateRow(r, i)).filter(Boolean)
+  const validationErrors = allRows.map((r, i) => cfg.validateRow(r, i)).filter(Boolean)
   const validCount  = allRows.length - validationErrors.length
 
   // ── Mapped fields for preview table header ──────────────────────────────────
-  const mappedFields = STUDENT_FIELDS.filter((f) => Object.values(mapping).includes(f.key))
+  const mappedFields = FIELDS.filter((f) => Object.values(mapping).includes(f.key))
 
   return (
     <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose}>
@@ -213,7 +230,7 @@ export default function ImportDrawer({ onClose, onImported }) {
               {step === 1 ? 'Upload File' : step === 2 ? 'Step 2 of 3 — Map Columns' : step === 3 ? 'Step 3 of 3 — Review & Import' : 'Import Complete'}
             </p>
             <h2 className="mt-1 text-xl font-semibold text-[color:var(--text)]">
-              {step === 1 ? 'Import Students' : step === 2 ? 'Map your columns' : step === 3 ? 'Review & confirm' : '✓ Done'}
+              {step === 1 ? `Import ${cfg.label}` : step === 2 ? 'Map your columns' : step === 3 ? 'Review & confirm' : '✓ Done'}
             </h2>
             {step !== 1 && step !== 'done' && (
               <p className="mt-0.5 text-sm text-[color:var(--secondary)]">
@@ -279,7 +296,7 @@ export default function ImportDrawer({ onClose, onImported }) {
                 </div>
               </div>
               <button
-                onClick={downloadTemplate}
+                onClick={() => downloadTemplate(cfg.templateRows, cfg.templateFilename)}
                 className="inline-flex items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white transition"
               >
                 <Download size={14} /> Template
@@ -290,7 +307,7 @@ export default function ImportDrawer({ onClose, onImported }) {
             <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-5">
               <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)] mb-3">Import Fields</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {STUDENT_FIELDS.map((f) => (
+                {FIELDS.map((f) => (
                   <div key={f.key} className="flex items-center gap-2">
                     <span className={`h-2 w-2 rounded-full ${f.required ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`} />
                     <span className="text-xs font-mono text-[color:var(--secondary)]">{f.key}</span>
@@ -313,7 +330,7 @@ export default function ImportDrawer({ onClose, onImported }) {
             }`}>
               {requiredMapped ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               {mappedCount} of {headers.length} columns mapped ·{' '}
-              {requiredMapped ? 'All required fields mapped ✓' : `Required: ${REQUIRED_FIELDS.filter(f => !Object.values(mapping).includes(f)).join(', ')}`}
+              {requiredMapped ? 'All required fields mapped ✓' : `Required: ${REQUIRED.filter(f => !Object.values(mapping).includes(f)).join(', ')}`}
             </div>
 
             {/* Mapping table */}
@@ -330,7 +347,7 @@ export default function ImportDrawer({ onClose, onImported }) {
                   {headers.map((h, i) => {
                     const preview = String(rawRows[0]?.[i] ?? '').slice(0, 30)
                     const selected = mapping[i] || ''
-                    const isAutoDetected = autoDetect(h) === selected && selected !== ''
+                    const isAutoDetected = autoDetect(h, cfg.aliases) === selected && selected !== ''
                     return (
                       <tr key={i} className="border-b border-[color:var(--border)] last:border-0">
                         <td className="px-5 py-3">
@@ -348,7 +365,7 @@ export default function ImportDrawer({ onClose, onImported }) {
                             className="input py-1.5 text-xs w-full min-w-[180px]"
                           >
                             <option value="">— Skip this column —</option>
-                            {STUDENT_FIELDS.map((f) => (
+                            {FIELDS.map((f) => (
                               <option key={f.key} value={f.key}>
                                 {f.label}{f.required ? ' *' : ''}
                               </option>
@@ -518,7 +535,7 @@ export default function ImportDrawer({ onClose, onImported }) {
               >
                 {importing
                   ? <><Loader2 size={16} className="animate-spin" /> Importing…</>
-                  : <><FileText size={16} /> Import {validCount} Student{validCount !== 1 ? 's' : ''}</>}
+                  : <><FileText size={16} /> Import {validCount} {cfg.singular}{validCount !== 1 ? 's' : ''}</>}
               </button>
             </>
           )}

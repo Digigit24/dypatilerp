@@ -70,7 +70,7 @@ export default function TestInstructionsPage() {
     )
   }
 
-  const totalQ = test?.sections?.reduce((sum, s) => sum + (s.questions?.length || 0), 0) || 0
+  const totalQ = test?.sections?.reduce((sum, s) => sum + (s.effective_question_count ?? s.questions?.length ?? 0), 0) || 0
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[color:var(--bg)] p-4">
@@ -117,7 +117,7 @@ export default function TestInstructionsPage() {
                     <div className="flex-1">
                       <p className="text-sm font-semibold text-[color:var(--text)]">{sec.title}</p>
                     </div>
-                    <span className="text-xs text-[color:var(--secondary)]">{sec.questions?.length || 0} Q</span>
+                    <span className="text-xs text-[color:var(--secondary)]">{sec.effective_question_count ?? sec.questions?.length ?? 0} Q</span>
                   </div>
                 ))}
               </div>
