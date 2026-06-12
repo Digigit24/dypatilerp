@@ -8,6 +8,8 @@ import Sidebar from '../components/shared/Sidebar.jsx'
 import { roleLabel } from '../lib/utils.js'
 import { useAuthStore } from '../store/authStore.js'
 import { useCourseStore } from '../store/courseStore.js'
+import { useLabelStore, useLabels } from '../store/labelStore.js'
+import { usePermStore } from '../store/permStore.js'
 import { useUiStore } from '../store/uiStore.js'
 import useScrollLock from '../hooks/useScrollLock.js'
 import { logout } from '../api/services/userService.js'
@@ -24,7 +26,15 @@ export default function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const navigate = useNavigate()
+  const labels = useLabels()
+  const loadLabels = useLabelStore((s) => s.loadLabels)
   useScrollLock(mobileOpen)
+
+  const can = usePermStore((s) => s.can)
+  const loadPermissions = usePermStore((s) => s.loadPermissions)
+
+  // Load DB-driven UI labels + my permissions once
+  useEffect(() => { loadLabels(); loadPermissions() }, [])
 
   // Load courses into store on mount
   useEffect(() => {
@@ -47,35 +57,39 @@ export default function AdminLayout() {
     : 'User'
   const initials = displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 
-  const sections = [
+  // module key per nav item — items hidden when read permission is missing
+  const sectionsRaw = [
     {
-      title: 'STUDENTS',
+      title: labels.studentPlural.toUpperCase(),
       items: [
-        { to: '/admin/applicants', label: 'Applicants',       icon: Users },
-        { to: '/admin/students',   label: 'Students',         icon: UserCog },
-        { to: '/admin/batches',    label: 'Batches',          icon: Layers },
-        { to: '/admin/progress',   label: 'Progress Reports', icon: BookOpen },
+        { to: '/admin/applicants', label: 'Applicants',       icon: Users,   perm: 'applicants' },
+        { to: '/admin/students',   label: labels.studentPlural, icon: UserCog, perm: 'students' },
+        { to: '/admin/batches',    label: 'Batches',          icon: Layers,  perm: 'batches' },
+        { to: '/admin/formats',    label: 'Formats',          icon: FileText, perm: 'formats' },
+        { to: '/admin/progress',   label: 'Progress Reports', icon: BookOpen, perm: 'progress_reports' },
       ],
     },
     {
       title: 'ACADEMIC',
       items: [
-        { to: '/admin/approvals', label: 'Approvals', icon: ClipboardCheck },
-        { to: '/admin/fees',      label: 'Fees',      icon: IndianRupee },
+        { to: '/admin/assignments', label: 'Assignments', icon: ClipboardCheck, perm: 'assignments' },
+        { to: '/admin/approvals', label: 'Approvals', icon: ClipboardCheck, perm: 'approvals' },
+        { to: '/admin/fees',      label: 'Fees',      icon: IndianRupee, perm: 'fees' },
       ],
     },
     {
       title: 'TOOLS',
       items: [
-        { to: '/admin/lectures',      label: 'Media',         icon: PlayCircle },
-        { to: '/admin/test-builder',  label: 'Test Builder',  icon: FileText },
-        { to: '/admin/notifications', label: 'Notifications', icon: Bell },
+        { to: '/admin/lectures',      label: 'Media',         icon: PlayCircle, perm: 'lectures' },
+        { to: '/admin/test-builder',  label: 'Test Builder',  icon: FileText,   perm: 'tests' },
+        { to: '/admin/notifications', label: 'Notifications', icon: Bell,       perm: 'notifications' },
       ],
     },
     ...(role === 'admin' ? [{
       title: 'SYSTEM',
       items: [
         { to: '/admin/courses',    label: 'Courses',             icon: GraduationCap },
+        { to: '/admin/team',       label: 'Team Assignments',    icon: Users },
         { to: '/admin/users',      label: 'Users',               icon: Users },
         { to: '/admin/roles',      label: 'Roles & Permissions', icon: Shield },
         { to: '/admin/audit-logs', label: 'Audit Logs',          icon: Activity },
@@ -83,6 +97,11 @@ export default function AdminLayout() {
       ],
     }] : []),
   ]
+
+  // Hide items the user can't read; drop empty groups
+  const sections = sectionsRaw
+    .map((g) => ({ ...g, items: g.items.filter((it) => !it.perm || can(it.perm, 'read')) }))
+    .filter((g) => g.items.length > 0)
 
   return (
     <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>

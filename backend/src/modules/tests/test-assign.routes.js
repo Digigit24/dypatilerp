@@ -50,7 +50,7 @@ router.post('/', authenticate, requirePermission('tests', 'update'), asyncHandle
   if (req.body.assign_all) {
     if (req.body.course_id) {
       const { rows } = await query(
-        `SELECT id FROM applicants WHERE course_id = $1 AND status IN ('submitted','test_pending','approved')`,
+        `SELECT id FROM applicants WHERE course_id = $1 AND status IN ('shortlisted_test','test_pending')`,
         [req.body.course_id]
       );
       applicantIds = rows.map((r) => r.id);
@@ -58,7 +58,7 @@ router.post('/', authenticate, requirePermission('tests', 'update'), asyncHandle
       const { rows } = await query(
         `SELECT a.id FROM applicants a
          JOIN batch_students bs ON bs.student_id = a.user_id
-         WHERE bs.batch_id = $1 AND a.status IN ('submitted','test_pending','approved')`,
+         WHERE bs.batch_id = $1 AND a.status IN ('shortlisted_test','test_pending')`,
         [req.body.batch_id]
       );
       applicantIds = rows.map((r) => r.id);
@@ -140,7 +140,7 @@ router.post('/', authenticate, requirePermission('tests', 'update'), asyncHandle
     );
 
     // ── Update applicant status to test_pending ──
-    if (applicant.status === 'submitted') {
+    if (applicant.status === 'submitted' || applicant.status === 'shortlisted_test') {
       await query(`UPDATE applicants SET status = 'test_pending' WHERE id = $1`, [applicantId]);
     }
 

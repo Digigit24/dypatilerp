@@ -45,7 +45,7 @@ export const updateApplicantDetailsSchema = z.object({
 });
 
 export const updateApplicantStatusSchema = z.object({
-  status: z.enum(['submitted','test_pending','test_completed','shortlisted','rejected','enrolled']),
+  status: z.enum(['submitted','shortlisted_test','test_pending','test_completed','shortlisted','rejected','enrolled']),
   batch_id: z.string().uuid().optional(),
 });
 

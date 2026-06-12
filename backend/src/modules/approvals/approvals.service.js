@@ -66,10 +66,14 @@ export const takeAction = async (approvalId, action, reviewerId, comments) => {
   return approval;
 };
 
-export const listApprovals = async ({ submission_id, stage, status, limit, offset }) => {
+export const listApprovals = async ({ submission_id, stage, status, allowed_batch_ids, limit, offset }) => {
   const params = [];
   const conditions = [];
   if (submission_id) { params.push(submission_id); conditions.push(`a.submission_id=$${params.length}`); }
+  if (allowed_batch_ids) {
+    params.push(allowed_batch_ids);
+    conditions.push(`s.batch_id = ANY($${params.length}::uuid[])`);
+  }
   if (stage) { params.push(stage); conditions.push(`a.stage=$${params.length}`); }
   if (status) { params.push(status); conditions.push(`a.status=$${params.length}`); }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -80,6 +84,7 @@ export const listApprovals = async ({ submission_id, stage, status, limit, offse
      ${where} ORDER BY a.created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
     [...params, limit, offset]
   );
-  const { rows: [{ total }] } = await query(`SELECT COUNT(*) AS total FROM approvals a ${where}`, params);
+  const { rows: [{ total }] } = await query(
+    `SELECT COUNT(*) AS total FROM approvals a JOIN submissions s ON s.id=a.submission_id ${where}`, params);
   return { data: rows, total: parseInt(total) };
 };

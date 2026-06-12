@@ -26,6 +26,11 @@ import LoginPage from './pages/auth/LoginPage.jsx'
 import LecturesGalleryPage from './pages/student/LecturesGalleryPage.jsx'
 import LecturePlayerPage from './pages/student/LecturePlayerPage.jsx'
 import MediaManagerPage from './pages/admin/MediaManagerPage.jsx'
+import FormatsPage from './pages/admin/FormatsPage.jsx'
+import AssignmentsPage from './pages/admin/AssignmentsPage.jsx'
+import TeamAssignmentsPage from './pages/admin/TeamAssignmentsPage.jsx'
+import StudentFormatsPage from './pages/student/FormatsPage.jsx'
+import StudentAssignmentsPage from './pages/student/AssignmentsPage.jsx'
 import AdminLectureDetailPage from './pages/admin/AdminLectureDetailPage.jsx'
 import AuditLogsPage from './pages/admin/AuditLogsPage.jsx'
 import ApplyPage from './pages/public/ApplyPage.jsx'
@@ -94,6 +99,8 @@ export default function App() {
           <Route path="profile" element={<ProfilePage />} />
           <Route path="profile/research" element={<ResearchProfilePage />} />
           <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="formats" element={<StudentFormatsPage />} />
+          <Route path="assignments" element={<StudentAssignmentsPage />} />
           <Route path="lectures" element={<LecturesGalleryPage />} />
           <Route path="lectures/:id" element={<LecturePlayerPage />} />
         </Route>
@@ -121,12 +128,15 @@ export default function App() {
           <Route path="test-builder" element={<TestBuilderPage />} />
           <Route path="applicants/:applicantId/test-results" element={<ApplicantTestResultsPage />} />
           <Route path="notifications" element={<AdminNotificationsPage />} />
+          <Route path="formats" element={<FormatsPage />} />
+          <Route path="assignments" element={<AssignmentsPage />} />
           <Route path="lectures" element={<MediaManagerPage />} />
           <Route path="lectures/:id" element={<AdminLectureDetailPage />} />
           <Route path="courses" element={<CoursesPage />} />
           <Route path="courses/:id/settings" element={<CourseSettingsPage />} />
           <Route path="users" element={<UserManagementPage />} />
           <Route path="roles" element={<RolesPage />} />
+          <Route path="team" element={<TeamAssignmentsPage />} />
           <Route path="audit-logs" element={<AuditLogsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

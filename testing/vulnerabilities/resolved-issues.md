@@ -59,7 +59,7 @@ plus a **Resolution** and **Resolved date**.
 
 ---
 
-## ISSUE-007 — Test-takers served the FULL question bank (and answer keys) instead of the sampled set
+## ISSUE-007 — Test-take endpoint served the FULL question bank (and answer keys) instead of a randomized sample
 
 - **Date found:** 2026-06-12
 - **Severity:** High (exam integrity — over-serving questions **and** leaking answer keys)
@@ -71,26 +71,39 @@ plus a **Resolution** and **Resolved date**.
   `undefined` → `isStaff = !!req.user && !req.user.test_scope` was `true` →
   candidate fell into the staff/full-bank branch, which also skipped
   `sanitize()`, exposing `correct_answer`.
+- **Requirement (revised mid-fix):** *"Even for staff, only randomised selected
+  questions. Never all questions on test UI."* So the take-test endpoint must
+  never return the full bank to **any** role, and never any answer keys.
 - **Resolution (code-only — in-progress attempts self-heal, no DB writes):**
   - Extracted a shared `mapTokenToUser(user, payload)` helper in `auth.js`, now
     used by **both** `authenticate` and `optionalAuth`, so the claim mapping
     (`roles`, `scope`, and test-scoped `applicant_id`/`token_id`/`test_scope`)
     can no longer drift. `optionalAuth` now populates `test_scope`/`scope`.
-  - `tests.routes.js GET /:id` now derives staff from a **positive** signal —
-    `isStaff = !!req.user && req.user.scope !== 'test_only'` — instead of the
-    absence of `test_scope`.
-  - The staff/full-bank branch now strips `correct_answer` via the shared
-    `sanitize()` unless the requester is an **admin** AND passes the explicit
-    `?includeAnswers=1` override. Candidates are always sanitized.
-- **Tests added:**
+  - `GET /api/tests/:id` (the take-test endpoint) now **always** returns the
+    randomized, **sanitized** sample — no `correct_answer` for any role:
+    - **candidate** (test-scoped token) → their frozen attempt `question_set`;
+    - **staff** (non-test-scoped token) → a freshly sampled set via the shared
+      `buildQuestionSet` using the same per-section `pick_count`;
+    - **unauthenticated / pre-attempt** → counts only, no questions.
+  - Added a separate RBAC-gated endpoint **`GET /api/tests/:id/admin-bank`**
+    (`requirePermission('tests','read')`) that returns the full bank **with**
+    answer keys — the only place answers are served. The admin test builder
+    (`getTestById` in `src/api/services/testService.js`, used by
+    `TestBuilderPage.jsx`) was migrated to consume it.
+- **Tests:**
   - `backend/tests/auth.middleware.test.js` (6) — `mapTokenToUser` + `optionalAuth`
-    now map `test_scope`; parity with `authenticate`.
-  - `backend/tests/tests.routes.test.js` (7) — candidate gets exactly the frozen
-    sampled set (25/50/25 = 100) with no `correct_answer`; admin gets full bank
-    sanitized by default; answer keys only with admin + `?includeAnswers=1`;
-    non-admin staff never sees answers; unauthenticated gets counts only.
-- **Verification:** backend 23/23 + frontend 27/27 vitest passing. Live E2E on the
+    map `test_scope`; parity with `authenticate`.
+  - `backend/tests/tests.routes.test.js` (8) — candidate → frozen 100 (25/50/25),
+    no answers; **staff (admin & coordinator) → sampled 100, no answers (never the
+    300 bank)**; unauthenticated → counts only; regression 3×(25/50/25)=100;
+    `admin-bank` → full 300 **with** answer keys.
+- **Verification:** backend 24/24 + frontend 27/27 vitest passing. Live E2E on the
   take-test route not run (would require creating an applicant attempt = DB write,
   disallowed); covered by the API integration tests above.
-- **Fix commit:** `ae6b4bb`
+- **Frontend audit:** take-test UI (`TestPage.jsx`, `TestInstructionsPage.jsx`)
+  uses `getTestForTaking` → sampled `GET /tests/:id` (good). The only full-bank
+  consumer was the admin **test builder** (`TestBuilderPage.jsx`), now pointed at
+  `/admin-bank`. `getTestQuestions` in the service is dead (no callers).
+- **Fix commits:** `ae6b4bb` (initial leak fix + optionalAuth helper) → superseded by
+  `__COMMIT_SHA__` (always-sample-on-take-endpoint + admin-bank split).
 - **Resolved date:** 2026-06-12

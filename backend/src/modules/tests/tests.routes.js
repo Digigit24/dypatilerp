@@ -117,33 +117,52 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
     return s.pick_count && s.pick_count > 0 ? Math.min(s.pick_count, bank) : bank;
   };
 
-  // Strip the answer key from a question's config. Applied to candidate
-  // responses ALWAYS, and to staff responses unless an admin explicitly opts in.
+  // The take-test endpoint NEVER returns answer keys to anyone. Full bank +
+  // answers live on the RBAC-gated GET /:id/admin-bank route.
   const sanitize = (q) => {
     const { correct_answer, ...cfg } = q.config || {};
     return { ...q, config: cfg };
   };
 
-  // Staff = authenticated with a NON-test-scoped token (positive signal).
-  // A test-scoped token (scope === 'test_only'), and unauthenticated requests,
-  // are candidates and never receive the full bank. Deriving this from the
-  // presence of scope (not the absence of test_scope) is what closes ISSUE-007.
-  const isStaff = !!req.user && req.user.scope !== 'test_only';
+  // Build sections+questions from an ordered set of question ids, sanitized.
+  const assembleFromSet = (set) => {
+    const pos = new Map(set.map((id, i) => [id, i]));
+    const chosen = questions
+      .filter((q) => pos.has(q.id))
+      .sort((a, b) => pos.get(a.id) - pos.get(b.id))
+      .map(sanitize);
+    const sectionsWithQ = sections.map((sec) => {
+      const qs = chosen.filter((q) => q.section_id === sec.id);
+      return { ...sec, questions: qs, effective_question_count: qs.length };
+    });
+    return { ...test, sections: sectionsWithQ, questions: chosen };
+  };
 
-  // Answer keys are only ever returned when an admin explicitly asks for them.
-  const includeAnswers = ['1', 'true', 'yes'].includes(
-    String(req.query.includeAnswers || '').toLowerCase()
-  );
-  const canSeeAnswers = isStaff && includeAnswers && (req.user.roles || []).includes('admin');
+  // Counts only — no questions at all (instructions screen / unauthenticated).
+  const countsOnly = () => {
+    const sectionsMeta = sections.map((sec) => ({
+      ...sec, questions: [], effective_question_count: effectiveCount(sec),
+    }));
+    return {
+      ...test,
+      sections: sectionsMeta,
+      questions: [],
+      question_count: sectionsMeta.reduce((sum, sec) => sum + sec.effective_question_count, 0),
+    };
+  };
+
+  // Unauthenticated → counts only, never any questions.
+  if (!req.user) return ok(res, countsOnly());
+
+  // Positive signal: a test-scoped token is a candidate; anything else is staff.
+  const isStaff = req.user.scope !== 'test_only';
 
   if (!isStaff) {
-    let attempt = null;
-    if (req.user) {
-      ({ rows: [attempt] } = await query(
-        'SELECT id, question_set, status FROM test_attempts WHERE test_id=$1 AND user_id=$2', [test.id, req.user.id]
-      ));
-    }
-
+    // Candidate — serve EXACTLY their frozen sampled set, sanitized.
+    const { rows: attemptRows } = await query(
+      'SELECT id, question_set, status FROM test_attempts WHERE test_id=$1 AND user_id=$2', [test.id, req.user.id]
+    );
+    const attempt = attemptRows[0] || null;
     let set = attempt?.question_set;
 
     // Lazy backfill: attempts started before sampling existed get a set now,
@@ -153,42 +172,46 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
       await query('UPDATE test_attempts SET question_set=$1 WHERE id=$2', [JSON.stringify(set), attempt.id]);
     }
 
-    if (Array.isArray(set) && set.length) {
-      // Attempt exists — serve exactly the frozen sampled set, in its random order
-      const pos = new Map(set.map((id, i) => [id, i]));
-      const chosen = questions
-        .filter((q) => pos.has(q.id))
-        .sort((a, b) => pos.get(a.id) - pos.get(b.id))
-        .map(sanitize);
-      const sectionsWithQ = sections.map((sec) => {
-        const qs = chosen.filter((q) => q.section_id === sec.id);
-        return { ...sec, questions: qs, effective_question_count: qs.length };
-      });
-      return ok(res, { ...test, sections: sectionsWithQ, questions: chosen });
-    }
+    if (Array.isArray(set) && set.length) return ok(res, assembleFromSet(set));
 
-    // No attempt yet (instructions screen) — counts only, never the question bank
-    const sectionsMeta = sections.map((sec) => ({
-      ...sec, questions: [], effective_question_count: effectiveCount(sec),
-    }));
-    return ok(res, {
-      ...test,
-      sections: sectionsMeta,
-      questions: [],
-      question_count: sectionsMeta.reduce((sum, sec) => sum + sec.effective_question_count, 0),
-    });
+    // No attempt yet (instructions screen) — counts only, never the question bank.
+    return ok(res, countsOnly());
   }
 
-  // Admin / builder view — full bank. Answer keys are stripped unless an admin
-  // explicitly opts in via ?includeAnswers=1 (defense in depth — a future
-  // mis-classification must not be able to leak correct answers).
-  const present = (q) => (canSeeAnswers ? q : sanitize(q));
+  // Staff (admin/coordinator/etc.) previewing via the take-test endpoint receive
+  // a FRESHLY sampled set using the same per-section pick_count — NEVER the full
+  // bank, and always sanitized (no answer keys). Full bank + answers is the
+  // separate, RBAC-gated GET /:id/admin-bank route below.
+  const staffSet = await buildQuestionSet(test.id);
+  ok(res, assembleFromSet(staffSet));
+}));
+
+// ── Admin/QA: full question bank WITH answer keys ───────────────────────────────
+// This is the ONLY endpoint that returns the complete bank and the correct
+// answers, and it is gated on a real `tests:read` permission. The test-taking UI
+// must never consume this — it uses GET /:id, which only ever returns the
+// randomized, sanitized sample.
+router.get('/:id/admin-bank', authenticate, requirePermission('tests', 'read'), asyncHandler(async (req, res) => {
+  const { rows: [test] } = await query('SELECT * FROM tests WHERE id=$1', [req.params.id]);
+  if (!test) return notFound(res, 'Test not found');
+
+  const { rows: sections } = await query(
+    'SELECT * FROM test_sections WHERE test_id=$1 ORDER BY order_index ASC', [test.id]
+  );
+  const { rows: questions } = await query(
+    'SELECT * FROM test_questions WHERE test_id=$1 ORDER BY order_index ASC', [test.id]
+  );
+
+  const effectiveCount = (s) => {
+    const bank = questions.filter((q) => q.section_id === s.id).length;
+    return s.pick_count && s.pick_count > 0 ? Math.min(s.pick_count, bank) : bank;
+  };
   const sectionsWithQ = sections.map((s) => ({
     ...s,
-    questions: questions.filter((q) => q.section_id === s.id).map(present),
+    questions: questions.filter((q) => q.section_id === s.id),
     effective_question_count: effectiveCount(s),
   }));
-  ok(res, { ...test, sections: sectionsWithQ, questions: questions.map(present) });
+  ok(res, { ...test, sections: sectionsWithQ, questions });
 }));
 
 // ── Create test ────────────────────────────────────────────────────────────────

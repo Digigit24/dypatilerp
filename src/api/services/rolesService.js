@@ -20,10 +20,35 @@ export const getRolePermissions = async (roleId) => {
   return ok(res.data)
 }
 
-export const updateRolePermissions = async (roleId, permissionIds) => {
+export const updateRolePermissions = async (roleId, grants) => {
   if (USE_MOCK) return ok(null)
-  const { data: res } = await http.put(`/roles/${roleId}/permissions`, { permission_ids: permissionIds })
+  const { data: res } = await http.put(`/roles/${roleId}/permissions`, { grants })
   return ok(res.data)
+}
+
+export const getMyPermissions = async () => {
+  if (USE_MOCK) return ok({ roles: [], permissions: [] })
+  const { data: res } = await http.get('/roles/my-permissions')
+  return ok(res.data)
+}
+
+// ── Team assignments ──────────────────────────────────────────────────────────
+export const getAssignments = async (courseId) => {
+  if (USE_MOCK) return ok([])
+  const { data: res } = await http.get('/roles/assignments', { params: courseId ? { course_id: courseId } : {} })
+  return ok(res.data)
+}
+
+export const createAssignment = async (payload) => {
+  if (USE_MOCK) return ok({})
+  const { data: res } = await http.post('/roles/assignments', payload)
+  return ok(res.data)
+}
+
+export const removeAssignment = async (id) => {
+  if (USE_MOCK) return ok(null)
+  await http.delete(`/roles/assignments/${id}`)
+  return ok(null)
 }
 
 export const assignUserRole = async (userId, roleName, courseId = null, batchId = null) => {

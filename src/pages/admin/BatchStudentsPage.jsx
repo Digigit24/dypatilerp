@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getBatchById, getBatches, updateBatch } from '../../api/services/batchService.js'
 import { getStudents } from '../../api/services/studentService.js'
 import { getUsers } from '../../api/services/userService.js'
+import { useLabels } from '../../store/labelStore.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
@@ -11,6 +12,7 @@ import { formatDate } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 export default function BatchStudentsPage() {
+  const labels = useLabels()
   const { batchId } = useParams()
   const navigate = useNavigate()
   const addToast = useUiStore((s) => s.addToast)
@@ -107,7 +109,7 @@ export default function BatchStudentsPage() {
           <div className="card p-6">
             <h2 className="text-xl font-semibold text-[color:var(--text)]">Snapshot</h2>
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <Metric icon={Users} label="Students" value={`${students.length}/${form.max_students}`} />
+              <Metric icon={Users} label={labels.studentPlural} value={`${students.length}/${form.max_students}`} />
               <Metric icon={CalendarDays} label="Capacity" value={`${fill}%`} />
             </div>
             <div className="mt-5 h-2 overflow-hidden rounded-full bg-[color:var(--surface-strong)]">

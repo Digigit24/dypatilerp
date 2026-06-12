@@ -1,4 +1,5 @@
-import { BookOpen, GraduationCap, Layers, PenLine, Plus, Trash2, XCircle } from 'lucide-react'
+import { AlertTriangle, BookOpen, GraduationCap, Layers, Loader2, PenLine, Plus, Trash2, XCircle } from 'lucide-react'
+import { useAuthStore } from '../../store/authStore.js'
 import { useEffect, useState } from 'react'
 import { createCourse, deleteCourse, getCourses, updateCourse } from '../../api/services/courseService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
@@ -17,6 +18,9 @@ const BLANK = {
 }
 
 export default function CoursesPage() {
+  const isAdmin = useAuthStore((s) => s.role) === 'admin'
+  const [deleteTarget, setDeleteTarget] = useState(null)   // course pending deletion
+  const [deleting, setDeleting] = useState(false)
   const [courses, setCourses] = useState(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editing, setEditing] = useState(null) // null = add, course = edit
@@ -77,15 +81,17 @@ export default function CoursesPage() {
     } finally { setSaving(false) }
   }
 
-  const handleDelete = async (course) => {
-    if (!confirm(`Delete course "${course.name}"? This cannot be undone.`)) return
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      await deleteCourse(course.id)
-      setCourses((cs) => cs.filter((c) => c.id !== course.id))
-      addToast({ type: 'success', title: 'Course deleted.' })
+      await deleteCourse(deleteTarget.id)
+      setCourses((cs) => cs.filter((c) => c.id !== deleteTarget.id))
+      addToast({ type: 'success', title: `Course "${deleteTarget.name}" and all its data deleted.` })
+      setDeleteTarget(null)
     } catch (err) {
-      addToast({ type: 'error', title: 'Cannot delete course', message: err.response?.data?.message || 'Remove batches first.' })
-    }
+      addToast({ type: 'error', title: 'Delete failed', message: err.response?.data?.message || 'Something went wrong' })
+    } finally { setDeleting(false) }
   }
 
   const f = (key) => ({
@@ -120,10 +126,12 @@ export default function CoursesPage() {
                   className="grid h-8 w-8 place-items-center rounded-full hover:bg-[color:var(--surface)] text-[color:var(--secondary)]"
                   onClick={() => openEdit(course)} title="Edit course"
                 ><PenLine size={14} /></button>
-                <button
-                  className="grid h-8 w-8 place-items-center rounded-full hover:bg-red-50 text-[color:var(--muted)] hover:text-red-500"
-                  onClick={() => handleDelete(course)} title="Delete course"
-                ><Trash2 size={14} /></button>
+                {isAdmin && (
+                  <button
+                    className="grid h-8 w-8 place-items-center rounded-full hover:bg-red-50 text-[color:var(--muted)] hover:text-red-500"
+                    onClick={() => setDeleteTarget(course)} title="Delete course (admin only)"
+                  ><Trash2 size={14} /></button>
+                )}
               </div>
             </div>
 
@@ -237,6 +245,58 @@ export default function CoursesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Danger: cascade delete confirmation (admin only) ── */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={() => !deleting && setDeleteTarget(null)}>
+          <div className="w-full max-w-lg rounded-[24px] bg-[color:var(--card)] p-7 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-4">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-red-50 text-red-500">
+                <AlertTriangle size={22} />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-xl font-semibold text-[color:var(--text)]">Delete "{deleteTarget.name}"?</h2>
+                <p className="mt-1 text-sm text-[color:var(--secondary)]">
+                  This permanently deletes the course <strong>and everything inside it</strong>, in one go:
+                </p>
+              </div>
+            </div>
+
+            <ul className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-2xl bg-red-50/60 p-4 text-xs font-semibold text-red-700">
+              <li>• {deleteTarget.batch_count ?? 0} batch(es) &amp; enrollments</li>
+              <li>• {deleteTarget.student_count ?? 0} enrolled student(s)</li>
+              <li>• All applicants &amp; test links</li>
+              <li>• All tests, questions &amp; attempts</li>
+              <li>• All submissions &amp; approvals</li>
+              <li>• All fees &amp; payments</li>
+              <li>• All assignments &amp; formats</li>
+              <li>• All media &amp; progress reports</li>
+            </ul>
+
+            <p className="mt-3 text-xs text-[color:var(--secondary)]">
+              This action cannot be undone. User accounts are kept, but they lose all enrollment and role links to this course.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--surface)]"
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60"
+                disabled={deleting}
+                onClick={confirmDelete}
+              >
+                {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                Delete Everything
+              </button>
+            </div>
           </div>
         </div>
       )}

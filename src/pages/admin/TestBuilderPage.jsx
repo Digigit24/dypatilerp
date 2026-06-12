@@ -60,7 +60,9 @@ function AssignModal({ test, courseId: testCourseId, onClose, addToast }) {
       .finally(() => setLoadingApplicants(false))
   }, [mode, testCourseId])
 
+  const [showAllStatuses, setShowAllStatuses] = useState(false)
   const filteredApplicants = applicantList.filter((a) => {
+    if (!showAllStatuses && !['shortlisted_test', 'test_pending'].includes(a.status)) return false
     const name = `${a.first_name ?? a.personal?.first_name ?? ''} ${a.last_name ?? a.personal?.last_name ?? ''}`.toLowerCase()
     const email = (a.email ?? a.personal?.email ?? '').toLowerCase()
     const q = applicantSearch.toLowerCase()
@@ -122,7 +124,7 @@ function AssignModal({ test, courseId: testCourseId, onClose, addToast }) {
             {/* Mode selector */}
             <div className="flex gap-2 flex-wrap">
               {[
-                { key: 'course', label: 'All in Course' },
+                { key: 'course', label: 'All Shortlisted' },
                 { key: 'batch',  label: 'By Batch' },
                 { key: 'select', label: 'Select Applicants' },
               ].map(({ key, label }) => (
@@ -136,7 +138,7 @@ function AssignModal({ test, courseId: testCourseId, onClose, addToast }) {
             {/* Mode-specific input */}
             {mode === 'course' && (
               <div className="rounded-xl bg-[color:var(--surface)] p-3 text-sm text-[color:var(--secondary)]">
-                Will assign to all applicants in this test&apos;s course with status <strong>submitted</strong>, <strong>test_pending</strong>, or <strong>approved</strong>.
+                Sends the test to every applicant in this course who is <strong>shortlisted for test</strong> (plus re-sends to anyone already in <strong>test pending</strong>). Shortlist applicants first in the Applicants pipeline.
               </div>
             )}
             {mode === 'batch' && (
@@ -158,6 +160,10 @@ function AssignModal({ test, courseId: testCourseId, onClose, addToast }) {
                     onChange={(e) => setApplicantSearch(e.target.value)}
                   />
                 </div>
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-[color:var(--secondary)]">
+                  <input type="checkbox" className="h-3.5 w-3.5 accent-[color:var(--accent)]" checked={showAllStatuses} onChange={(e) => setShowAllStatuses(e.target.checked)} />
+                  Show all applicants (default: only shortlisted &amp; test-pending)
+                </label>
                 <div className="max-h-48 overflow-y-auto rounded-xl border border-[color:var(--border)] divide-y divide-[color:var(--border)]">
                   {loadingApplicants && (
                     <div className="flex items-center justify-center py-6">
@@ -204,7 +210,7 @@ function AssignModal({ test, courseId: testCourseId, onClose, addToast }) {
               </div>
               <div>
                 <p className="text-sm font-semibold text-[color:var(--text)]">Send credentials via email</p>
-                <p className="text-[11px] text-[color:var(--secondary)]">Each candidate receives their unique login link (valid 5 days) + username + password</p>
+                <p className="text-[11px] text-[color:var(--secondary)]">Each candidate receives their unique login link (valid 5 days) + username + password, sent from this course&apos;s configured sender</p>
               </div>
             </label>
 

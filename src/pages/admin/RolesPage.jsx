@@ -9,11 +9,19 @@ const PROTECTED_ROLES = ['admin'] // admin always has all perms — don't allow 
 const ACTION_COLORS = { create: 'text-emerald-600', read: 'text-blue-600', update: 'text-amber-600', delete: 'text-red-500' }
 const ACTION_BG    = { create: 'bg-emerald-50', read: 'bg-blue-50', update: 'bg-amber-50', delete: 'bg-red-50' }
 
+// Scope ladder: how far a granted permission reaches
+const SCOPES = [
+  { value: 'all',    label: 'All',    hint: 'Everything, everywhere' },
+  { value: 'course', label: 'Course', hint: 'Only courses this user is assigned to' },
+  { value: 'batch',  label: 'Batch',  hint: 'Only batches this user is assigned to' },
+  { value: 'own',    label: 'Own',    hint: "Only the user's own records" },
+]
+
 export default function RolesPage() {
   const [roles, setRoles] = useState(null)
   const [allPerms, setAllPerms] = useState({}) // { module: [{id, module, action}] }
   const [selected, setSelected] = useState(null) // current role being edited
-  const [granted, setGranted] = useState(new Set()) // permission IDs granted to selected role
+  const [granted, setGranted] = useState(new Map()) // permission ID -> scope
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
@@ -29,14 +37,24 @@ export default function RolesPage() {
     setSelected(role)
     setDirty(false)
     const r = await getRolePermissions(role.id)
-    setGranted(new Set((r.data || []).map((p) => p.id)))
+    setGranted(new Map((r.data || []).map((p) => [p.id, p.scope || 'all'])))
   }
 
   const toggle = (permId) => {
     if (PROTECTED_ROLES.includes(selected?.name)) return
     setGranted((prev) => {
-      const next = new Set(prev)
-      next.has(permId) ? next.delete(permId) : next.add(permId)
+      const next = new Map(prev)
+      next.has(permId) ? next.delete(permId) : next.set(permId, 'all')
+      return next
+    })
+    setDirty(true)
+  }
+
+  const setScope = (permId, scope) => {
+    if (PROTECTED_ROLES.includes(selected?.name)) return
+    setGranted((prev) => {
+      const next = new Map(prev)
+      next.set(permId, scope)
       return next
     })
     setDirty(true)
@@ -47,8 +65,8 @@ export default function RolesPage() {
     const ids = modulePerms.map((p) => p.id)
     const allGranted = ids.every((id) => granted.has(id))
     setGranted((prev) => {
-      const next = new Set(prev)
-      allGranted ? ids.forEach((id) => next.delete(id)) : ids.forEach((id) => next.add(id))
+      const next = new Map(prev)
+      allGranted ? ids.forEach((id) => next.delete(id)) : ids.forEach((id) => { if (!next.has(id)) next.set(id, 'all') })
       return next
     })
     setDirty(true)
@@ -58,7 +76,8 @@ export default function RolesPage() {
     if (!selected) return
     setSaving(true)
     try {
-      await updateRolePermissions(selected.id, [...granted])
+      const grants = [...granted.entries()].map(([permission_id, scope]) => ({ permission_id, scope }))
+      await updateRolePermissions(selected.id, grants)
       addToast({ type: 'success', title: `Permissions saved for ${selected.display_name}.` })
       setDirty(false)
     } catch (err) {
@@ -138,20 +157,36 @@ export default function RolesPage() {
                       <div className="flex flex-wrap gap-2">
                         {perms.map((perm) => {
                           const isGranted = granted.has(perm.id)
+                          const scope = granted.get(perm.id) || 'all'
+                          const locked = PROTECTED_ROLES.includes(selected.name)
                           return (
-                            <button
-                              key={perm.id}
-                              onClick={() => toggle(perm.id)}
-                              disabled={PROTECTED_ROLES.includes(selected.name)}
-                              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition ${
-                                isGranted
-                                  ? `${ACTION_BG[perm.action]} ${ACTION_COLORS[perm.action]}`
-                                  : 'bg-[color:var(--surface)] text-[color:var(--muted)] opacity-50'
-                              }`}
-                            >
-                              {isGranted && <Check size={10} />}
-                              {perm.action}
-                            </button>
+                            <span key={perm.id} className={`flex items-center overflow-hidden rounded-full text-xs font-semibold transition ${
+                              isGranted
+                                ? `${ACTION_BG[perm.action]} ${ACTION_COLORS[perm.action]}`
+                                : 'bg-[color:var(--surface)] text-[color:var(--muted)] opacity-50'
+                            }`}>
+                              <button
+                                onClick={() => toggle(perm.id)}
+                                disabled={locked}
+                                className="flex items-center gap-1.5 px-3 py-1"
+                              >
+                                {isGranted && <Check size={10} />}
+                                {perm.action}
+                              </button>
+                              {isGranted && !locked && (
+                                <select
+                                  value={scope}
+                                  onChange={(e) => setScope(perm.id, e.target.value)}
+                                  title={SCOPES.find((s) => s.value === scope)?.hint}
+                                  className="cursor-pointer border-l border-black/10 bg-transparent py-1 pl-1.5 pr-1 text-[10px] font-bold uppercase outline-none"
+                                >
+                                  {SCOPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                </select>
+                              )}
+                              {isGranted && locked && (
+                                <span className="border-l border-black/10 py-1 pl-1.5 pr-2 text-[10px] font-bold uppercase">{scope}</span>
+                              )}
+                            </span>
                           )
                         })}
                       </div>

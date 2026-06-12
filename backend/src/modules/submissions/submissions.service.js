@@ -1,17 +1,23 @@
 import { query, getClient } from '../../config/database.js';
 
-export const listSubmissions = async ({ batch_id, student_user_id, status, limit, offset }) => {
+export const listSubmissions = async ({ batch_id, student_user_id, status, allowed_batch_ids, limit, offset }) => {
   const params = [];
   const conditions = [];
   if (batch_id) { params.push(batch_id); conditions.push(`s.batch_id=$${params.length}`); }
+  if (allowed_batch_ids) {
+    params.push(allowed_batch_ids);
+    conditions.push(`s.batch_id = ANY($${params.length}::uuid[])`);
+  }
   if (student_user_id) { params.push(student_user_id); conditions.push(`s.student_user_id=$${params.length}`); }
   if (status) { params.push(status); conditions.push(`s.status=$${params.length}`); }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const { rows: data } = await query(
-    `SELECT s.*, u.first_name, u.last_name, u.email, b.name as batch_name
+    `SELECT s.*, u.first_name, u.last_name, u.email, b.name as batch_name,
+            a.title AS assignment_title, a.is_mandatory AS assignment_mandatory
      FROM submissions s
      JOIN users u ON u.id=s.student_user_id
      JOIN batches b ON b.id=s.batch_id
+     LEFT JOIN assignments a ON a.id = s.assignment_id
      ${where} ORDER BY s.created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
     [...params, limit, offset]
   );
@@ -33,11 +39,21 @@ export const getSubmissionById = async (id) => {
 };
 
 export const createSubmission = async (payload, studentId) => {
+  // One submission per assignment per student (also enforced by a DB unique index)
+  if (payload.assignment_id) {
+    const { rows: [dup] } = await query(
+      'SELECT id FROM submissions WHERE assignment_id=$1 AND student_user_id=$2',
+      [payload.assignment_id, studentId]
+    );
+    if (dup) {
+      throw Object.assign(new Error('You have already created a submission for this assignment.'), { status: 400 });
+    }
+  }
   const { rows } = await query(
-    `INSERT INTO submissions (batch_id,student_user_id,title,submission_type,semester,content,file_urls)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    `INSERT INTO submissions (batch_id,student_user_id,title,submission_type,semester,content,file_urls,assignment_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
     [payload.batch_id, studentId, payload.title, payload.submission_type, payload.semester,
-     payload.content||null, JSON.stringify(payload.file_urls||[])]
+     payload.content||null, JSON.stringify(payload.file_urls||[]), payload.assignment_id||null]
   );
   return rows[0];
 };
@@ -70,18 +86,30 @@ export const submitForReview = async (id, studentId) => {
     );
     if (!sub) throw Object.assign(new Error('Cannot submit — not found or wrong status'), { status: 400 });
 
-    // 2. Load the batch's approval_config
+    // 2. Determine the approval depth from the linked assignment (if any):
+    //    optional assignment  → ONE layer (coordinator only)
+    //    mandatory / no link  → the batch's configured chain or classic 3 layers
+    let isOptionalAssignment = false;
+    if (sub.assignment_id) {
+      const { rows: [asg] } = await client.query(
+        'SELECT is_mandatory FROM assignments WHERE id=$1', [sub.assignment_id]
+      );
+      isOptionalAssignment = asg ? asg.is_mandatory === false : false;
+    }
+
+    // 3. Build stage list
     const { rows: [batch] } = await client.query(
       'SELECT approval_config FROM batches WHERE id=$1', [sub.batch_id]
     );
     const configStages = batch?.approval_config?.stages || [];
 
-    // 3. Fall back to the classic three-stage chain if no config is set
-    const stages = configStages.length > 0 ? configStages : [
-      { name: 'coordinator',    type: 'role', role: 'coordinator',    order_index: 1 },
-      { name: 'academic_guide', type: 'student_guide', guide_type: 'academic', order_index: 2 },
-      { name: 'industry_mentor',type: 'student_guide', guide_type: 'industry', order_index: 3 },
-    ];
+    const stages = isOptionalAssignment
+      ? [{ name: 'coordinator', type: 'role', role: 'coordinator', order_index: 1 }]
+      : (configStages.length > 0 ? configStages : [
+          { name: 'coordinator',    type: 'role', role: 'coordinator',    order_index: 1 },
+          { name: 'academic_guide', type: 'student_guide', guide_type: 'academic', order_index: 2 },
+          { name: 'industry_mentor',type: 'student_guide', guide_type: 'industry', order_index: 3 },
+        ]);
 
     // 4. Delete any previous pending approvals for this submission (e.g. resubmission)
     await client.query(

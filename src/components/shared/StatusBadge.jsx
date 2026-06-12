@@ -5,6 +5,7 @@ const colors = {
   shortlisted: 'bg-emerald-50 text-emerald-700 border-emerald-100',
   pending: 'bg-amber-50 text-amber-700 border-amber-100',
   test_pending: 'bg-amber-50 text-amber-700 border-amber-100',
+  shortlisted_test: 'bg-indigo-50 text-indigo-700 border-indigo-100',
   in_progress: 'bg-blue-50 text-blue-700 border-blue-100',
   test_completed: 'bg-blue-50 text-blue-700 border-blue-100',
   needs_revision: 'bg-orange-50 text-orange-700 border-orange-100',

@@ -17,6 +17,7 @@ import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useCourseStore } from '../../store/courseStore.js'
+import { useLabels } from '../../store/labelStore.js'
 
 const STATUS_TABS = ['all', 'active', 'inactive']
 
@@ -27,6 +28,7 @@ const BULK_ACTIONS = [
 ]
 
 export default function StudentsPage() {
+  const labels = useLabels()
   const [items,          setItems]          = useState(null)
   const [users,          setUsers]          = useState([])
   const [selected,       setSelected]       = useState(null)        // row detail drawer
@@ -148,7 +150,7 @@ export default function StudentsPage() {
   return (
     <div className="fade-page">
       <PageHeader
-        title="Students"
+        title={labels.studentPlural}
         subtitle="Enrollment, guides, and progress across the active batch."
         action={
           <div className="flex items-center gap-2">

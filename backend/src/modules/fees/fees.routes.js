@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requirePermission } from '../../middleware/rbac.js';
+import { requirePermission, isOwnScope, allowedBatchIds } from '../../middleware/rbac.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok, created } from '../../utils/response.js';
 import * as svc from './fees.service.js';
@@ -46,11 +46,13 @@ router.get('/', requirePermission('fees', 'read'), asyncHandler(async (req, res)
   // X-Course-Id header takes precedence over query param
   const course_id = req.courseId || req.query.course_id;
   const filters = { ...req.query, course_id, limit, offset };
-  if (req.user.roles.includes('student')) {
+  if (isOwnScope(req) || req.user.roles.includes('student')) {
     filters.student_user_id = req.user.id;
   } else if (filters.student_user_id && !uuidRe.test(filters.student_user_id)) {
     return res.status(400).json({ success: false, message: 'Invalid student_user_id — must be a UUID' });
   }
+  const ab = allowedBatchIds(req);
+  if (ab) filters.allowed_batch_ids = ab;
   const { data, total } = await svc.listFees(filters);
   res.json({ success: true, data, pagination: buildPaginationMeta(total, page, limit) });
 }));

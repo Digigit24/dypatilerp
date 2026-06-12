@@ -49,7 +49,8 @@ export const listApplicants = async ({ course_id, status, search, limit, offset 
             ta.score          AS test_score,
             ta.submitted_at   AS test_submitted_at,
             ta.time_taken_secs AS test_time_taken_secs,
-            t.total_marks     AS test_max_score
+            t.total_marks     AS test_max_score,
+            t.passing_marks   AS test_passing_marks
      FROM applicants a
      LEFT JOIN batches b ON b.id = a.batch_id
      LEFT JOIN LATERAL (

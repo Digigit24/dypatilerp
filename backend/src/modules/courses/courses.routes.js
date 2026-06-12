@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requirePermission } from '../../middleware/rbac.js';
+import { requirePermission, requireRole } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import * as ctrl from './courses.controller.js';
 import { createCourseSchema, updateCourseSchema } from './courses.schema.js';
@@ -124,6 +124,6 @@ router.put('/:id', requirePermission('courses', 'update'), validate(updateCourse
  *       204:
  *         description: Deleted
  */
-router.delete('/:id', requirePermission('courses', 'delete'), ctrl.remove);
+router.delete('/:id', requireRole('admin'), ctrl.remove);
 
 export default router;

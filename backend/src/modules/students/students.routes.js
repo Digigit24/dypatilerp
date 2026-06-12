@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requirePermission } from '../../middleware/rbac.js';
+import { requirePermission, scopeBatchSQL } from '../../middleware/rbac.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok, created, notFound } from '../../utils/response.js';
 import { query } from '../../config/database.js';
@@ -238,6 +238,9 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
   // X-Course-Id header takes precedence over query param
   const course_id = req.courseId || req.query.course_id;
   const { params, where } = buildWhere({ ...req.query, course_id });
+  // Batch-scoped roles (coordinators / guides) only see their own batches
+  const scopeFrag = scopeBatchSQL(req, 'be.batch_id');
+  const scopedWhere = where ? `${where} ${scopeFrag}` : (scopeFrag ? `WHERE TRUE ${scopeFrag}` : '');
 
   const { rows: data } = await query(
     `SELECT be.*, u.first_name, u.last_name, u.email, u.phone, u.avatar_url,
@@ -246,14 +249,14 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
      JOIN users u ON u.id=be.user_id
      JOIN batches b ON b.id=be.batch_id
      JOIN courses c ON c.id=b.course_id
-     ${where} ORDER BY be.enrolled_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
+     ${scopedWhere} ORDER BY be.enrolled_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
     [...params, limit, offset]
   );
   const { rows: [{ total }] } = await query(
     `SELECT COUNT(*) AS total FROM batch_enrollments be
      JOIN users u ON u.id=be.user_id
      JOIN batches b ON b.id=be.batch_id
-     ${where}`, params
+     ${scopedWhere}`, params
   );
   res.json({ success: true, data, pagination: buildPaginationMeta(parseInt(total), page, limit) });
 }));

@@ -8,6 +8,7 @@ import { env } from './config/env.js';
 import { swaggerSpec } from './config/swagger.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js'
 import { courseScope } from './middleware/courseScope.js';
+import { auditTrail } from './middleware/auditTrail.js';
 
 // Routes
 import authRoutes from './modules/auth/auth.routes.js';
@@ -27,6 +28,8 @@ import notificationRoutes from './modules/notifications/notifications.routes.js'
 import researchProfileRoutes from './modules/research-profiles/research-profiles.routes.js';
 import dashboardRoutes from './modules/dashboard/dashboard.routes.js';
 import videoRoutes from './modules/videos/videos.routes.js';
+import formatRoutes from './modules/formats/formats.routes.js';
+import assignmentRoutes from './modules/assignments/assignments.routes.js';
 import auditLogRoutes from './modules/audit-logs/audit-logs.routes.js';
 import settingsRoutes from './modules/settings/settings.routes.js';
 import emailRoutes from './modules/email/email.routes.js';
@@ -81,6 +84,9 @@ app.use(express.urlencoded({ extended: true }));
 // Course-scope context: reads X-Course-Id header → req.courseId
 app.use(courseScope);
 
+// Global audit trail — every successful create/update/delete on every module
+app.use('/api', auditTrail);
+
 // Health check (no auth)
 app.get('/health', (req, res) => res.json({ status: 'ok', env: env.NODE_ENV }));
 
@@ -108,6 +114,8 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/research-profiles', researchProfileRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/videos', videoRoutes);
+app.use('/api/formats', formatRoutes);
+app.use('/api/assignments', assignmentRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/settings',   settingsRoutes);
 app.use('/api/email',      emailRoutes);

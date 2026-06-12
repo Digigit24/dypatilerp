@@ -153,6 +153,27 @@ const getBrevoConfig = async () => {
 
 export const bustBrevoCache = () => { _cachedBrevoConfig = null; };
 
+/**
+ * Resolve the sender for a given course.
+ * course.preferences.email.{senderName,senderEmail} (set in Course Settings UI)
+ * wins; otherwise global saved settings; otherwise env defaults.
+ * All senders must be verified in Brevo.
+ */
+export const getCourseSender = async (courseId) => {
+  let coursePrefs = {};
+  if (courseId) {
+    try {
+      const { rows: [course] } = await query('SELECT preferences FROM courses WHERE id=$1', [courseId]);
+      coursePrefs = course?.preferences?.email || {};
+    } catch { /* fall through to globals */ }
+  }
+  const db = await getBrevoConfig();
+  return {
+    name:  coursePrefs.senderName  || db.senderName  || env.BREVO_SENDER_NAME,
+    email: coursePrefs.senderEmail || db.senderEmail || env.BREVO_SENDER_EMAIL,
+  };
+};
+
 // ─── HTML base template ────────────────────────────────────────────────────────
 
 const base = (body, courseName = 'DY Patil ERP') => `<!DOCTYPE html>
@@ -395,6 +416,7 @@ export const sendTestCredentials = async ({
   courseId,
 }) => {
   const sectionStr = sections?.map((s) => s.title || s).join(', ') || null;
+  const sender = await getCourseSender(courseId);
   const { subject, html } = templates.test_credentials({
     firstName: applicant.first_name,
     testTitle: test.title,
@@ -442,6 +464,7 @@ export const sendTestCredentials = async ({
     subject,
     html,
     text,
+    sender,
   });
 };
 

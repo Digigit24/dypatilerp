@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const createSubmissionSchema = z.object({
   batch_id: z.string().uuid(),
+  assignment_id: z.string().uuid().optional().nullable(),
   title: z.string().min(2).max(500),
   submission_type: z.enum(['research_paper','progress_report','thesis_chapter','assignment','other']),
   semester: z.number().int().min(1).default(1),

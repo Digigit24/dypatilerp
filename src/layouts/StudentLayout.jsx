@@ -1,11 +1,12 @@
-import { Bell, BookOpen, FileText, FlaskConical, Home, IndianRupee, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PenLine, PlayCircle, Settings, UserCircle } from 'lucide-react'
-import { useState } from 'react'
+import { Bell, BookOpen, ClipboardList, FileDown, FileText, FlaskConical, Home, IndianRupee, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PenLine, PlayCircle, Settings, UserCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
 import NotificationBell from '../components/shared/NotificationBell.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
 import useScrollLock from '../hooks/useScrollLock.js'
 import { useAuthStore } from '../store/authStore.js'
+import { useLabelStore, useLabels } from '../store/labelStore.js'
 import { logout } from '../api/services/userService.js'
 
 export default function StudentLayout() {
@@ -14,7 +15,10 @@ export default function StudentLayout() {
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const labels = useLabels()
+  const loadLabels = useLabelStore((s) => s.loadLabels)
   useScrollLock(mobileOpen)
+  useEffect(() => { loadLabels() }, [])
 
   const handleLogout = async () => {
     await logout()
@@ -24,7 +28,7 @@ export default function StudentLayout() {
 
   const displayName = currentUser
     ? `${currentUser.first_name ?? ''} ${currentUser.last_name ?? ''}`.trim()
-    : 'Student'
+    : labels.student
 
   const enrollmentNumber = currentUser?.enrollment_number ?? ''
 
@@ -33,7 +37,9 @@ export default function StudentLayout() {
     items: [
       { to: '/student/dashboard', label: 'Dashboard', icon: Home },
       { to: '/student/submit', label: 'Submit Title', icon: PenLine },
+      { to: '/student/assignments', label: 'Assignments', icon: ClipboardList },
       { to: '/student/submissions', label: 'My Submissions', icon: FileText },
+      { to: '/student/formats', label: 'Formats', icon: FileDown },
       { to: '/student/progress', label: 'Progress Reports', icon: BookOpen },
       { to: '/student/fees', label: 'Fees', icon: IndianRupee },
       { to: '/student/profile',           label: 'My Profile',       icon: UserCircle },

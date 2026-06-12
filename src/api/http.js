@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useCourseStore } from '../store/courseStore.js'
+import { useUiStore } from '../store/uiStore.js'
 
 const BASE =
     import.meta.env.VITE_API_URL ||
@@ -24,6 +25,13 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (res) => res,
   async (error) => {
+    // Global permission-denied handling: clear toast, no silent failures
+    if (error.response?.status === 403) {
+      const msg = error.response?.data?.message || 'You do not have permission to perform this action.'
+      try {
+        useUiStore.getState().addToast({ type: 'error', title: 'Permission denied', message: msg })
+      } catch { /* store not ready — ignore */ }
+    }
     const original = error.config
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true

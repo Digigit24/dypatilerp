@@ -2,13 +2,17 @@ import * as svc from './submissions.service.js';
 import { ok, created, notFound, forbidden } from '../../utils/response.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
+import { isOwnScope, allowedBatchIds } from '../../middleware/rbac.js';
 
 export const list = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   const filters = { ...req.query, limit, offset };
-  if (req.user.roles.includes('student')) {
+  // Scope enforcement: 'own' → only my submissions; 'batch' → my batches only
+  if (isOwnScope(req) || req.user.roles.includes('student')) {
     filters.student_user_id = req.user.id;
   }
+  const ab = allowedBatchIds(req);
+  if (ab) filters.allowed_batch_ids = ab;
   const { data, total } = await svc.listSubmissions(filters);
   res.json({ success: true, data, pagination: buildPaginationMeta(total, page, limit) });
 });

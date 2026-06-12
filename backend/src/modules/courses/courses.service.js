@@ -1,4 +1,4 @@
-import { query } from '../../config/database.js';
+import { query, getClient } from '../../config/database.js';
 
 export const listCourses = async ({ is_active, limit, offset }) => {
   const conditions = [];
@@ -78,8 +78,66 @@ export const updateCourse = async (id, payload) => {
   return rows[0] || null;
 };
 
+/**
+ * Cascade-delete a course and EVERYTHING under it:
+ * tests (sections/questions/attempts/responses/tokens), applicants, batches,
+ * enrollments, submissions + approvals, fees + payments, progress reports,
+ * notifications, assignments, formats, media. Wrapped in one transaction.
+ * Ordered explicitly so RESTRICT / NO ACTION constraints never fire.
+ */
 export const deleteCourse = async (id) => {
-  await query('DELETE FROM courses WHERE id = $1', [id]);
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const batchesOf = `(SELECT id FROM batches WHERE course_id = $1)`;
+    const testsOf = `(SELECT id FROM tests WHERE course_id = $1 OR batch_id IN ${batchesOf})`;
+    const applicantsOf = `(SELECT id FROM applicants WHERE course_id = $1)`;
+
+    // Test data
+    await client.query(`DELETE FROM test_responses WHERE attempt_id IN (SELECT id FROM test_attempts WHERE test_id IN ${testsOf})`, [id]);
+    await client.query(`DELETE FROM test_attempts WHERE test_id IN ${testsOf} OR applicant_id IN ${applicantsOf}`, [id]);
+    await client.query(`DELETE FROM tests WHERE course_id = $1 OR batch_id IN ${batchesOf}`, [id]);
+
+    // Submissions + approvals (approvals cascade from submissions)
+    await client.query(`DELETE FROM submissions WHERE batch_id IN ${batchesOf}`, [id]);
+
+    // Fees
+    await client.query(`DELETE FROM fee_payments WHERE fee_id IN (SELECT id FROM fees WHERE batch_id IN ${batchesOf})`, [id]);
+    await client.query(`DELETE FROM fees WHERE batch_id IN ${batchesOf}`, [id]);
+
+    // Progress reports + enrollments
+    await client.query(`DELETE FROM progress_reports WHERE batch_id IN ${batchesOf}`, [id]);
+    await client.query(`DELETE FROM batch_enrollments WHERE batch_id IN ${batchesOf} OR applicant_id IN ${applicantsOf}`, [id]);
+
+    // Notifications
+    await client.query(`DELETE FROM notification_recipients WHERE notification_id IN (SELECT id FROM notifications WHERE course_id = $1 OR batch_id IN ${batchesOf})`, [id]);
+    await client.query(`DELETE FROM notifications WHERE course_id = $1 OR batch_id IN ${batchesOf}`, [id]);
+
+    // Applicants (their access tokens cascade)
+    await client.query(`DELETE FROM applicants WHERE course_id = $1`, [id]);
+
+    // Course content (formats/media/assignments/folders cascade on course,
+    // but delete explicitly so batch-scoped rows are covered too)
+    await client.query(`DELETE FROM formats WHERE course_id = $1 OR batch_id IN ${batchesOf}`, [id]);
+    await client.query(`DELETE FROM videos WHERE course_id = $1 OR batch_id IN ${batchesOf}`, [id]);
+    await client.query(`DELETE FROM media_folders WHERE course_id = $1`, [id]);
+    await client.query(`DELETE FROM assignments WHERE course_id = $1 OR batch_id IN ${batchesOf}`, [id]);
+
+    // Role scoping rows (cascade exists; explicit for clarity)
+    await client.query(`DELETE FROM user_roles WHERE course_id = $1 OR batch_id IN ${batchesOf}`, [id]);
+    await client.query(`DELETE FROM student_guides WHERE batch_id IN ${batchesOf}`, [id]);
+
+    // Finally the batches and the course itself
+    await client.query(`DELETE FROM batches WHERE course_id = $1`, [id]);
+    await client.query(`DELETE FROM courses WHERE id = $1`, [id]);
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 };
 
 export const getCourseDashboard = async (courseId) => {

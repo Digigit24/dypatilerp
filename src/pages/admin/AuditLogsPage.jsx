@@ -16,10 +16,30 @@ const ACTION_COLORS = {
   APPROVAL: 'bg-violet-100 text-violet-700',
   SUBMIT: 'bg-blue-100 text-blue-700',
 }
+// Verb-based colors for the global audit trail (module.verb format)
+const VERB_COLORS = {
+  create: 'bg-emerald-100 text-emerald-700',
+  upload: 'bg-emerald-100 text-emerald-700',
+  import: 'bg-emerald-100 text-emerald-700',
+  update: 'bg-amber-100 text-amber-700',
+  status_change: 'bg-amber-100 text-amber-700',
+  reorder: 'bg-amber-100 text-amber-700',
+  permissions_change: 'bg-violet-100 text-violet-700',
+  delete: 'bg-red-100 text-red-600',
+  publish: 'bg-blue-100 text-blue-700',
+  assign: 'bg-indigo-100 text-indigo-700',
+  reset_test_link: 'bg-indigo-100 text-indigo-700',
+  convert: 'bg-violet-100 text-violet-700',
+  bulk_convert: 'bg-violet-100 text-violet-700',
+  submit: 'bg-blue-100 text-blue-700',
+}
+
 const actionColor = (action) => {
   for (const [prefix, cls] of Object.entries(ACTION_COLORS)) {
     if (action?.startsWith(prefix)) return cls
   }
+  const verb = action?.split('.').pop()
+  if (verb && VERB_COLORS[verb]) return VERB_COLORS[verb]
   return 'bg-[color:var(--surface)] text-[color:var(--secondary)]'
 }
 

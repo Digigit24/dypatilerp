@@ -1,5 +1,5 @@
 import {
-  Award, CheckCircle2, Clock3, Download, GraduationCap, Loader2, Pencil, RotateCcw,
+  Award, CheckCircle2, Clock3, Download, GraduationCap, Kanban, List, Loader2, Pencil, RotateCcw,
   Save, Search, Send, Upload, UserCheck, UserMinus, UserPlus, XCircle, ClipboardList,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { createApplicant, exportApplicants, getApplicants, shortlistApplicant, updateApplicantDetails, updateApplicantStatus } from '../../api/services/applicantService.js'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
 import { buildApplicantImportConfig } from '../../components/admin/applicantImportConfig.js'
+import ApplicantsKanban from '../../components/admin/ApplicantsKanban.jsx'
 import { getBatches } from '../../api/services/batchService.js'
 import { getCourses } from '../../api/services/courseService.js'
 import { useCourseStore } from '../../store/courseStore.js'
@@ -18,10 +19,10 @@ import { formatDate } from '../../lib/formatters.js'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { useUiStore } from '../../store/uiStore.js'
 
-const statusTabs = ['all', 'submitted', 'test_pending', 'test_completed', 'shortlisted', 'rejected']
+const statusTabs = ['all', 'submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'enrolled', 'rejected']
 
 // Ordered stages for the pipeline indicator (rejected is a side-branch)
-const PIPELINE = ['submitted', 'test_pending', 'test_completed', 'shortlisted']
+const PIPELINE = ['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'enrolled']
 
 const makeBlankForm = (courseId = '') => ({
   course_id: courseId,
@@ -133,20 +134,31 @@ function DrawerActions({ item, onAct, onConvert, busy }) {
     )
   }
 
-  // submitted | test_pending | test_completed
-  const canSendTest  = status === 'submitted'
+  // submitted | shortlisted_test | test_pending | test_completed
+  const canShortlistTest = status === 'submitted'
+  const canSendTest  = status === 'shortlisted_test'
   const canMarkDone  = status === 'test_pending'
-  const canShortlist = status !== 'shortlisted'
+  const canShortlist = status === 'test_completed'
 
   return (
     <div className="grid grid-cols-2 gap-2">
+      {canShortlistTest && (
+        <button
+          disabled={busy}
+          onClick={() => onAct(item, 'shortlisted_test')}
+          className="btn-primary flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+        >
+          <UserCheck size={14} /> Shortlist for Test
+        </button>
+      )}
       {canSendTest && (
         <button
           disabled={busy}
           onClick={() => onAct(item, 'test_pending')}
           className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-50"
+          title="Marks as test sent — use the Kanban Send Test Link button to also email credentials"
         >
-          <Send size={13} /> Send Test
+          <Send size={13} /> Mark Test Sent
         </button>
       )}
       {canMarkDone && (
@@ -164,13 +176,13 @@ function DrawerActions({ item, onAct, onConvert, busy }) {
           onClick={() => onAct(item, 'shortlisted')}
           className="btn-primary flex items-center justify-center gap-2 text-sm disabled:opacity-50"
         >
-          <UserCheck size={14} /> Shortlist
+          <UserCheck size={14} /> Final Shortlist
         </button>
       )}
       <button
         disabled={busy}
         onClick={() => onAct(item, 'rejected')}
-        className={`mobile-compact-button flex items-center justify-center rounded-[14px] bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50 ${!canSendTest && !canMarkDone && !canShortlist ? 'col-span-2' : ''}`}
+        className={`mobile-compact-button flex items-center justify-center rounded-[14px] bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50 ${!canShortlistTest && !canSendTest && !canMarkDone && !canShortlist ? 'col-span-2' : ''}`}
       >
         Reject
       </button>
@@ -199,6 +211,7 @@ export default function ApplicantsPage() {
   const [status,     setStatus]     = useState('all')
   const [showImport, setShowImport] = useState(false)
   const [exporting,  setExporting]  = useState(false)
+  const [view,       setView]       = useState('kanban')   // 'kanban' | 'list'
   const addToast = useUiStore((s) => s.addToast)
   useScrollLock(Boolean(selected || addOpen || showImport))
 
@@ -210,6 +223,9 @@ export default function ApplicantsPage() {
       setItems(r.data)
       setCourses(c.data || [])
     })
+    if (currentCourse?.id) {
+      getBatches({ course_id: currentCourse.id }).then((r) => setBatches(r.data || [])).catch(() => {})
+    }
   }
   useEffect(() => { loadApplicants() }, [currentCourse?.id])
 
@@ -461,8 +477,43 @@ export default function ApplicantsPage() {
         ))}
       </div>
 
+      {/* ── View toggle ── */}
+      <div className="mt-6 mb-4 flex items-center justify-between gap-3">
+        <div className="flex gap-1 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-1">
+          <button
+            onClick={() => setView('kanban')}
+            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-sm font-semibold transition ${view === 'kanban' ? 'bg-[color:var(--card)] text-[color:var(--text)] shadow-sm' : 'text-[color:var(--secondary)] hover:text-[color:var(--text)]'}`}
+          >
+            <Kanban size={14} /> Pipeline
+          </button>
+          <button
+            onClick={() => setView('list')}
+            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-sm font-semibold transition ${view === 'list' ? 'bg-[color:var(--card)] text-[color:var(--text)] shadow-sm' : 'text-[color:var(--secondary)] hover:text-[color:var(--text)]'}`}
+          >
+            <List size={14} /> List
+          </button>
+        </div>
+        {view === 'kanban' && (
+          <p className="hidden text-xs text-[color:var(--secondary)] sm:block">
+            Applied → Shortlist → Send Test → Submitted → Final Shortlist → Enrolled
+          </p>
+        )}
+      </div>
+
+      {/* ── Kanban pipeline ── */}
+      {view === 'kanban' && (
+        <ApplicantsKanban
+          items={items}
+          courseId={currentCourse?.id}
+          batches={batches}
+          onSelect={(a) => setSelected(a)}
+          onChanged={loadApplicants}
+        />
+      )}
+
       {/* ── Table card ── */}
-      <div className="card mt-6 overflow-hidden">
+      {view === 'list' && (
+      <div className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[color:var(--border)] p-5">
           <div>
             <h2 className="text-lg font-semibold text-[color:var(--text)]">Applicant Review Queue</h2>
@@ -531,6 +582,7 @@ export default function ApplicantsPage() {
           </table>
         </div>
       </div>
+      )}
 
       {/* ── Detail drawer ── */}
       {selected && (
@@ -545,6 +597,28 @@ export default function ApplicantsPage() {
                 </p>
                 <h2 className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{selected.personal.full_name}</h2>
                 <p className="mt-1 text-sm text-[color:var(--secondary)]"><StatusBadge status={selected.status} /></p>
+                {/* Stage strip — where this applicant sits in the pipeline */}
+                {selected.status !== 'rejected' && (
+                  <div className="mt-3 flex flex-wrap items-center gap-1">
+                    {PIPELINE.map((stage, i) => {
+                      const cur = PIPELINE.indexOf(selected.status)
+                      const done = i < cur
+                      const active = i === cur
+                      return (
+                        <span key={stage} className="flex items-center gap-1">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            active ? 'bg-[color:var(--accent)] text-white'
+                            : done ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-[color:var(--surface)] text-[color:var(--muted)]'
+                          }`}>
+                            {stage === 'submitted' ? 'Applied' : stage === 'shortlisted_test' ? 'Shortlisted' : stage === 'test_pending' ? 'Test Sent' : stage === 'test_completed' ? 'Test Done' : stage === 'shortlisted' ? 'Final' : 'Enrolled'}
+                          </span>
+                          {i < PIPELINE.length - 1 && <span className={`h-px w-2 ${done ? 'bg-emerald-300' : 'bg-[color:var(--border)]'}`} />}
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {!editing && (

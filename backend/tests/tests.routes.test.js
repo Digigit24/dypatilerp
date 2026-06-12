@@ -131,27 +131,35 @@ describe('GET /api/tests/:id — unauthenticated', () => {
 });
 
 describe('GET /api/tests/:id — staff (non-test-scoped token)', () => {
-  it('returns the full bank but WITHOUT correct_answer by default', async () => {
+  it('returns a randomized SAMPLE (100), never the full 300 bank', async () => {
     const res = await request(app).get(`/api/tests/${TEST_ID}`)
       .set('x-test-userid', 'admin-1').set('x-test-roles', 'admin');
     expect(res.status).toBe(200);
-    expect(res.body.data.questions).toHaveLength(300);
+    expect(res.body.data.questions).toHaveLength(100);
+    expect(res.body.data.sections.map((s) => s.questions.length)).toEqual([25, 50, 25]);
+  });
+
+  it('never includes correct_answer for staff on the take-test endpoint', async () => {
+    const res = await request(app).get(`/api/tests/${TEST_ID}`)
+      .set('x-test-userid', 'admin-1').set('x-test-roles', 'admin');
     expect(hasAnswerKey(res.body.data.questions)).toBe(false);
   });
 
-  it('returns answer keys only for an admin with explicit ?includeAnswers=1', async () => {
+  it('also samples for a coordinator (no full bank for any staff role)', async () => {
     const res = await request(app).get(`/api/tests/${TEST_ID}`)
-      .query({ includeAnswers: 1 })
+      .set('x-test-userid', 'coord-1').set('x-test-roles', 'coordinator');
+    expect(res.body.data.questions).toHaveLength(100);
+    expect(hasAnswerKey(res.body.data.questions)).toBe(false);
+  });
+});
+
+describe('GET /api/tests/:id/admin-bank — full bank for editing/QA (RBAC-gated)', () => {
+  it('returns the full 300-question bank WITH answer keys', async () => {
+    const res = await request(app).get(`/api/tests/${TEST_ID}/admin-bank`)
       .set('x-test-userid', 'admin-1').set('x-test-roles', 'admin');
+    expect(res.status).toBe(200);
     expect(res.body.data.questions).toHaveLength(300);
     expect(res.body.data.questions.every((q) => q.config.correct_answer === 'A')).toBe(true);
-  });
-
-  it('does NOT leak answer keys for a non-admin staff member even with includeAnswers=1', async () => {
-    const res = await request(app).get(`/api/tests/${TEST_ID}`)
-      .query({ includeAnswers: 1 })
-      .set('x-test-userid', 'coord-1').set('x-test-roles', 'coordinator');
-    expect(res.body.data.questions).toHaveLength(300);
-    expect(hasAnswerKey(res.body.data.questions)).toBe(false);
+    expect(res.body.data.sections.map((s) => s.questions.length)).toEqual([100, 100, 100]);
   });
 });

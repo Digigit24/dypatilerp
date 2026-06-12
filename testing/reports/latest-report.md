@@ -15,13 +15,24 @@ pill `…/100`, footer `0/300`.
 **Verdict: CODE bug — not config, not data, not cache.** → **RESOLVED 2026-06-12**
 (see `../vulnerabilities/resolved-issues.md`, ISSUE-007).
 
-**Resolution summary:** extracted a shared `mapTokenToUser` helper so
-`optionalAuth` and `authenticate` can't drift (`optionalAuth` now sets
-`test_scope`); `GET /api/tests/:id` now uses a positive staff signal
-(`req.user.scope !== 'test_only'`); the staff branch now strips `correct_answer`
-unless an admin passes `?includeAnswers=1`. Covered by 13 new backend tests
-(`auth.middleware.test.js`, `tests.routes.test.js`). Code-only — in-progress
-attempts self-heal via their existing frozen `question_set`; no DB writes.
+**Resolution summary (revised per "even staff get only the randomized sample,
+never the full bank on the test UI"):**
+- Shared `mapTokenToUser` helper so `optionalAuth`/`authenticate` can't drift
+  (`optionalAuth` now sets `test_scope`/`scope`).
+- `GET /api/tests/:id` (take-test) **always** returns the randomized, sanitized
+  sample — candidate → frozen attempt set; staff → fresh sample via the same
+  `buildQuestionSet` (same `pick_count`); unauth/pre-attempt → counts only. **No
+  `correct_answer` for any role on this endpoint.**
+- New RBAC-gated `GET /api/tests/:id/admin-bank` (`tests:read`) returns the full
+  bank **with** answers — the admin builder (`getTestById`/`TestBuilderPage.jsx`)
+  was migrated to it.
+- Covered by 14 new backend tests. Code-only — in-progress attempts self-heal via
+  their existing frozen `question_set`; no DB writes.
+
+**Frontend audit:** take-test UI (`TestPage.jsx`, `TestInstructionsPage.jsx`) →
+`getTestForTaking` → sampled endpoint (good). Only full-bank consumer was the
+admin **test builder**, now pointed at `/admin-bank`. `getTestQuestions` in the
+service is dead code (no callers) — flagged, not changed in this PR.
 
 **Data flow traced (applicant take-test):**
 - Frontend `src/pages/public/TestPage.jsx` → `getTestForTaking(testId)`

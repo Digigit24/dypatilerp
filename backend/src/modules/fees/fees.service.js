@@ -1,9 +1,10 @@
 import { query } from '../../config/database.js';
 
-export const listFees = async ({ batch_id, student_user_id, status, course_id, limit, offset }) => {
+export const listFees = async ({ batch_id, student_user_id, status, course_id, allowed_batch_ids, limit, offset }) => {
   const params = [];
   const conds = [];
   if (course_id)        { params.push(course_id);        conds.push(`b.course_id=$${params.length}`);         }
+  if (allowed_batch_ids){ params.push(allowed_batch_ids); conds.push(`f.batch_id = ANY($${params.length}::uuid[])`); }
   if (batch_id)         { params.push(batch_id);         conds.push(`f.batch_id=$${params.length}`);          }
   if (student_user_id)  { params.push(student_user_id);  conds.push(`f.student_user_id=$${params.length}`);   }
   if (status)           { params.push(status);           conds.push(`f.status=$${params.length}`);            }
@@ -15,7 +16,8 @@ export const listFees = async ({ batch_id, student_user_id, status, course_id, l
      ${where} ORDER BY f.due_date ASC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
     [...params, limit, offset]
   );
-  const { rows: [{ total }] } = await query(`SELECT COUNT(*) FROM fees f ${where}`, params);
+  const { rows: [{ total }] } = await query(
+    `SELECT COUNT(*) FROM fees f JOIN batches b ON b.id=f.batch_id ${where}`, params);
   return { data, total: parseInt(total) };
 };
 

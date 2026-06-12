@@ -34,6 +34,18 @@ router.get('/', requireRole('admin'), asyncHandler(async (req, res) => {
   ok(res, rows);
 }));
 
+// ─── GET /settings/ui-labels ──────────────────────────────────────────────────
+// Readable by ANY authenticated user (students included) — drives UI wording
+// like "Scholar" instead of "Student". Defaults applied server-side.
+router.get('/ui-labels', asyncHandler(async (req, res) => {
+  const { rows: [row] } = await query(`SELECT value FROM app_settings WHERE key='ui_labels'`);
+  ok(res, {
+    student: 'Student',
+    studentPlural: 'Students',
+    ...(row?.value || {}),
+  });
+}));
+
 // ─── GET /settings/email/effective ────────────────────────────────────────────
 // What the server will ACTUALLY use to send email (env + DB merged). Admin-only.
 router.get('/email/effective', requireRole('admin'), asyncHandler(async (req, res) => {

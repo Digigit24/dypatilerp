@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requirePermission } from '../../middleware/rbac.js';
+import { requirePermission, allowedBatchIds } from '../../middleware/rbac.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import * as svc from './approvals.service.js';
 import { ok } from '../../utils/response.js';
@@ -31,7 +31,10 @@ router.use(authenticate);
  */
 router.get('/', requirePermission('approvals', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const { data, total } = await svc.listApprovals({ ...req.query, limit, offset });
+  const filters = { ...req.query, limit, offset };
+  const ab = allowedBatchIds(req);
+  if (ab) filters.allowed_batch_ids = ab;
+  const { data, total } = await svc.listApprovals(filters);
   res.json({ success: true, data, pagination: buildPaginationMeta(total, page, limit) });
 }));
 

@@ -12,9 +12,12 @@ export const getTests = async (filters = {}) => {
   return ok(res.data, { total: res.pagination?.total || 0 })
 }
 
+// Admin/builder fetch — uses the RBAC-gated admin-bank endpoint that returns the
+// FULL question bank with answer keys. The candidate take path (getTestForTaking)
+// uses GET /tests/:id, which only ever returns the randomized, sanitized sample.
 export const getTestById = async (id) => {
   if (USE_MOCK) { await delay(); const test = byId(TESTS, id); return test ? ok(test) : notFound() }
-  const { data: res } = await http.get(`/tests/${id}`)
+  const { data: res } = await http.get(`/tests/${id}/admin-bank`)
   return ok(res.data)
 }
 
@@ -159,6 +162,7 @@ export const testLogin = async ({ token, username, password }) => {
 }
 
 // ── Admin results ──────────────────────────────────────────────────────────────
+
 export const getApplicantTestResults = async (testId, applicantId) => {
   const { data: res } = await http.get(`/tests/${testId}/results/${applicantId}`)
   return ok(res.data)

@@ -73,7 +73,7 @@ router.get('/export', authenticate, requirePermission('applicants', 'read'), asy
  *     summary: Bulk-import applicants from the mapped JSON array produced by the import wizard
  *     description: "Body: { applicants: [...], course_id }. Returns { imported, skipped, errors, total }."
  */
-const IMPORT_STATUSES = new Set(['submitted', 'test_pending', 'test_completed', 'shortlisted', 'rejected', 'enrolled']);
+const IMPORT_STATUSES = new Set(['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'rejected', 'enrolled']);
 
 router.post('/import', authenticate, requirePermission('applicants', 'create'), asyncHandler(async (req, res) => {
   const rows = Array.isArray(req.body.applicants) ? req.body.applicants : [];

@@ -36,7 +36,8 @@ Coverage: `npm run test:coverage` (frontend) / `cd backend && npm run test:cover
 | `GET /api/fees/:id` | — | ⛔ Not yet (not in current diff) |
 | `POST /api/fees` | — | ⛔ Not yet (not in current diff) |
 | `POST /api/fees/:id/payments` | — | ⛔ Not yet (not in current diff) |
-| `GET /api/tests/:id` (take-test) | candidate → frozen 100 (25/50/25), no answer keys; admin → full bank sanitized; admin `?includeAnswers=1` → keys; non-admin staff → no keys; unauth → counts only | ✅ 7 tests |
+| `GET /api/tests/:id` (take-test) | candidate → frozen 100 (25/50/25) no keys; **staff (admin & coordinator) → sampled 100, no keys, never full bank**; unauth → counts only; regression 3×(25/50/25)=100 | ✅ 8 tests |
+| `GET /api/tests/:id/admin-bank` (RBAC `tests:read`) | full 300 bank **with** answer keys for editing/QA | ✅ (covered above) |
 | auth middleware (`optionalAuth`/`authenticate`/`mapTokenToUser`) | test_scope mapping parity; missing-token paths | ✅ 6 tests |
 
 ## Components Covered

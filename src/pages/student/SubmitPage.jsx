@@ -1,9 +1,11 @@
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { ArrowRight, CheckCircle2, Clock3, FileText, Info, Paperclip, RotateCcw, UploadCloud, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { createSubmission } from '../../api/services/submissionService.js'
+import { useSearchParams } from 'react-router-dom'
+import { createSubmission, submitForReview } from '../../api/services/submissionService.js'
+import { getMyAssignments } from '../../api/services/assignmentService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { useAuthStore } from '../../store/authStore.js'
@@ -15,11 +17,24 @@ const history = [
 ]
 
 export default function SubmitPage() {
+  const [searchParams] = useSearchParams()
+  const assignmentId = searchParams.get('assignment')
+  const [assignment, setAssignment] = useState(null)
   const [file, setFile] = useState(null)
   const [confirm, setConfirm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
   const currentUser = useAuthStore((s) => s.currentUser)
+
+  // When arriving from the Assignments page, load the linked assignment
+  useEffect(() => {
+    if (!assignmentId) return
+    getMyAssignments().then((r) => {
+      const found = (r.data || []).find((a) => a.id === assignmentId)
+      if (found) setAssignment(found)
+    }).catch(() => {})
+  }, [assignmentId])
+
   const editor = useEditor({
     extensions: [StarterKit],
     content: '<p>CRISPR Screening for Biomarker Discovery</p>',
@@ -42,22 +57,37 @@ export default function SubmitPage() {
 
   const title = editor?.getText().trim() || ''
   const validTitle = title.length >= 20 && title.length <= 200
-  const canSubmit = validTitle && file && !submitting
+  const canSubmit = validTitle && file && !submitting && !(assignment && assignment.my_submission_id)
 
   const submit = async () => {
     setSubmitting(true)
-    await createSubmission({
-      student_id: currentUser?.id,
-      batch_id: currentUser?.batch_id,
-      report_period: 2,
-      title,
-      presentation_filename: file?.name,
-      presentation_type: file?.name?.split('.').pop() || 'pdf',
-    })
-    addToast({ type: 'success', title: 'Submission sent for approval' })
-    setSubmitting(false)
-    setConfirm(false)
+    try {
+      const created = await createSubmission({
+        batch_id: assignment?.batch_id || currentUser?.batch_id,
+        assignment_id: assignment?.id || null,
+        title,
+        submission_type: assignment ? 'assignment' : 'research_paper',
+        semester: assignment?.semester || 1,
+        content: title,
+        file_urls: [],
+      })
+      if (created.data?.id) await submitForReview(created.data.id)
+      addToast({
+        type: 'success',
+        title: assignment
+          ? `Submission for "${assignment.title}" sent for approval`
+          : 'Submission sent for approval',
+      })
+      if (assignment) setAssignment((a) => ({ ...a, my_submission_id: created.data?.id, my_submission_status: 'submitted' }))
+    } catch (err) {
+      addToast({ type: 'error', title: 'Submission failed', message: err.response?.data?.message || err.message })
+    } finally {
+      setSubmitting(false)
+      setConfirm(false)
+    }
   }
+
+  const alreadySubmitted = !!assignment?.my_submission_id
 
   return (
     <div className="fade-page">
@@ -66,6 +96,25 @@ export default function SubmitPage() {
         subtitle="Prepare a clean research title and upload your presentation for the approval chain."
         action={<button className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--secondary)]">Save Draft</button>}
       />
+
+      {assignment && (
+        <div className={`mb-5 flex flex-wrap items-center gap-3 rounded-3xl border p-4 ${alreadySubmitted ? 'border-emerald-200 bg-emerald-50/50' : 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]'}`}>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--muted)]">Submitting for assignment</p>
+            <p className="mt-0.5 truncate text-base font-semibold text-[color:var(--text)]">{assignment.title}</p>
+            {assignment.description && <p className="mt-0.5 line-clamp-2 text-xs text-[color:var(--secondary)]">{assignment.description}</p>}
+          </div>
+          <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${assignment.is_mandatory ? 'bg-red-100 text-red-700' : 'bg-[color:var(--surface)] text-[color:var(--secondary)]'}`}>
+            {assignment.is_mandatory ? 'Mandatory' : 'Optional'}
+          </span>
+          {assignment.due_date && (
+            <span className="shrink-0 text-xs font-semibold text-[color:var(--secondary)]">Due {new Date(assignment.due_date).toLocaleDateString('en-IN')}</span>
+          )}
+          {alreadySubmitted && (
+            <span className="shrink-0 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">Already submitted — one submission per assignment</span>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <section className="space-y-6">
@@ -138,8 +187,17 @@ export default function SubmitPage() {
             <h2 className="text-lg font-semibold text-[color:var(--text)]">Approval Chain</h2>
             <div className="mt-5 space-y-4">
               <Step icon={Clock3} title="Coordinator Review" subtitle="Initial scope and title check" />
-              <Step icon={CheckCircle2} title="Academic Guide" subtitle="Academic rigor review" />
-              <Step icon={CheckCircle2} title="Industry Mentor" subtitle="Practice relevance review" />
+              {(!assignment || assignment.is_mandatory) && (
+                <>
+                  <Step icon={CheckCircle2} title="Academic Guide" subtitle="Academic rigor review" />
+                  <Step icon={CheckCircle2} title="Industry Mentor" subtitle="Practice relevance review" />
+                </>
+              )}
+              {assignment && !assignment.is_mandatory && (
+                <p className="rounded-2xl bg-[color:var(--surface)] px-3 py-2 text-xs text-[color:var(--secondary)]">
+                  Optional assignment — only coordinator approval is required.
+                </p>
+              )}
             </div>
             <div className="mt-5 rounded-3xl bg-[color:var(--accent-tint)] p-4 text-sm leading-6 text-[color:var(--secondary)]">
               <Info size={16} className="mb-2 text-[color:var(--accent)]" />

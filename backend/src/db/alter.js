@@ -185,6 +185,112 @@ const run = async () => {
     `);
     console.log('\u2713  test_sections.pick_count + test_attempts.question_set added');
 
+    // 17. Formats module
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS formats (
+        id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        course_id   UUID REFERENCES courses(id) ON DELETE CASCADE,
+        batch_id    UUID REFERENCES batches(id) ON DELETE CASCADE,
+        title       VARCHAR(255) NOT NULL,
+        description TEXT,
+        media_id    UUID REFERENCES videos(id) ON DELETE SET NULL,
+        created_by  UUID REFERENCES users(id),
+        created_at  TIMESTAMP DEFAULT NOW(),
+        updated_at  TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('\u2713  formats table created (or already exists)');
+
+    // 18. Applicant pipeline: shortlisted_test stage
+    await client.query(`ALTER TYPE applicant_status ADD VALUE IF NOT EXISTS 'shortlisted_test'`).catch(() => {});
+    console.log('\u2713  applicant_status enum: shortlisted_test added');
+
+    // 19. Assignments module
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS assignments (
+        id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        course_id    UUID REFERENCES courses(id) ON DELETE CASCADE,
+        batch_id     UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+        title        VARCHAR(255) NOT NULL,
+        description  TEXT,
+        semester     INTEGER DEFAULT 1,
+        due_date     TIMESTAMP,
+        is_mandatory BOOLEAN DEFAULT TRUE,
+        is_published BOOLEAN DEFAULT TRUE,
+        created_by   UUID REFERENCES users(id),
+        created_at   TIMESTAMP DEFAULT NOW(),
+        updated_at   TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      ALTER TABLE submissions ADD COLUMN IF NOT EXISTS assignment_id UUID REFERENCES assignments(id) ON DELETE SET NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uniq_submission_per_assignment
+      ON submissions (assignment_id, student_user_id) WHERE assignment_id IS NOT NULL
+    `);
+    console.log('\u2713  assignments table + submissions.assignment_id + uniqueness');
+
+    // 20. UI labels (e.g. Student -> Scholar)
+    await client.query(`
+      INSERT INTO app_settings (key, value)
+      VALUES ('ui_labels', '{"student":"Scholar","studentPlural":"Scholars"}')
+      ON CONFLICT (key) DO NOTHING
+    `);
+    console.log('\u2713  ui_labels app_settings seed');
+
+    // 21. Scoped RBAC: scope column + full permission catalog + default grants
+    await client.query(`ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS scope VARCHAR(10) NOT NULL DEFAULT 'all'`);
+    await client.query(`
+      INSERT INTO permissions (module, action)
+      SELECT m.module, a.action::permission_action
+      FROM (VALUES ('applicants'),('approvals'),('batches'),('courses'),('dashboard'),
+                   ('dashboard_admin'),('dashboard_student'),('fees'),('notifications'),
+                   ('progress_reports'),('settings'),('students'),('submissions'),('tests'),
+                   ('users'),('roles'),('assignments'),('formats'),('lectures'),('audit_logs')) AS m(module)
+      CROSS JOIN (VALUES ('create'),('read'),('update'),('delete')) AS a(action)
+      ON CONFLICT (module, action) DO NOTHING
+    `);
+    // Default grants — seeded only for roles that have NO grants yet,
+    // so admin-customised matrices are never overwritten on re-run.
+    await client.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT r.id, p.id, 'all' FROM roles r CROSS JOIN permissions p
+      WHERE r.name = 'admin' AND NOT EXISTS (SELECT 1 FROM role_permissions WHERE role_id = r.id)
+    `);
+    await client.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT r.id, p.id,
+        CASE WHEN p.module IN ('students','fees','submissions','approvals','progress_reports','assignments','formats','lectures','notifications') THEN 'batch' ELSE 'course' END
+      FROM roles r CROSS JOIN permissions p
+      WHERE r.name = 'coordinator'
+        AND NOT EXISTS (SELECT 1 FROM role_permissions WHERE role_id = r.id)
+        AND ((p.module IN ('students','fees','submissions','approvals','progress_reports','assignments','formats','lectures','notifications','applicants','tests') AND p.action IN ('create','read','update'))
+          OR (p.module = 'batches' AND p.action = 'read')
+          OR (p.module IN ('dashboard','dashboard_admin') AND p.action = 'read'))
+    `);
+    await client.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT r.id, p.id, CASE WHEN p.module IN ('dashboard','dashboard_admin','batches') THEN 'course' ELSE 'batch' END
+      FROM roles r CROSS JOIN permissions p
+      WHERE r.name IN ('academic_guide','industry_mentor')
+        AND NOT EXISTS (SELECT 1 FROM role_permissions WHERE role_id = r.id)
+        AND ((p.module = 'approvals' AND p.action IN ('read','update'))
+          OR (p.module IN ('students','submissions','progress_reports','dashboard','dashboard_admin','batches') AND p.action = 'read'))
+    `);
+    await client.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT r.id, p.id, CASE WHEN p.module IN ('submissions','fees','progress_reports') THEN 'own' ELSE 'course' END
+      FROM roles r CROSS JOIN permissions p
+      WHERE r.name = 'student'
+        AND NOT EXISTS (SELECT 1 FROM role_permissions WHERE role_id = r.id)
+        AND ((p.module = 'submissions' AND p.action IN ('create','read','update'))
+          OR (p.module IN ('fees','progress_reports') AND p.action = 'read')
+          OR (p.module = 'progress_reports' AND p.action = 'create')
+          OR (p.module IN ('assignments','formats','lectures','dashboard','dashboard_student') AND p.action = 'read'))
+    `);
+    console.log('\u2713  scoped RBAC: scope column, permission catalog, default grants');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);
