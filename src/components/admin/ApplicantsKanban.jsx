@@ -135,8 +135,13 @@ export default function ApplicantsKanban({ items, courseId, batches, onSelect, o
           labels={labels}
           onClose={() => setModal(null)}
           onConfirm={async (batchId) => {
-            await convertToStudent(modal.applicant.id, batchId)
-            addToast({ type: 'success', title: `${modal.applicant.personal?.full_name} converted to ${labels.student.toLowerCase()}.` })
+            const r = await convertToStudent(modal.applicant.id, batchId, { send_credentials: true })
+            addToast({
+              type: 'success',
+              title: r.data?.credentials_emailed
+                ? `${modal.applicant.personal?.full_name} converted — login credentials emailed.`
+                : `${modal.applicant.personal?.full_name} converted to ${labels.student.toLowerCase()}.`,
+            })
             setModal(null)
             onChanged()
           }}
@@ -158,6 +163,11 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onSendTest, onReset, 
         <p className="truncate text-[11px] text-[color:var(--secondary)]">{a.personal?.email || a.email}</p>
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <span className="text-[10px] text-[color:var(--muted)]">{formatDate(a.applied_at)}</span>
+          {(a.batch_code || a.batch_name) && (
+            <span className="rounded-full bg-[color:var(--accent-tint)] px-1.5 py-0.5 text-[10px] font-bold text-[color:var(--accent)]">
+              {a.batch_code || a.batch_name}
+            </span>
+          )}
           {p && (
             <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
               p.pass === true ? 'bg-emerald-100 text-emerald-700'
@@ -302,7 +312,9 @@ function TestPickerModal({ title, cta, icon: Icon, note, applicant, courseId, on
 
 // ─── Convert modal ──────────────────────────────────────────────────────────────
 function ConvertModal({ applicant, batches, labels, onClose, onConfirm }) {
-  const [batchId, setBatchId] = useState(batches[0]?.id || '')
+  // Default to the batch the applicant applied for, falling back to the first batch
+  const appliedBatch = batches.find((b) => b.id === applicant.batch_id)
+  const [batchId, setBatchId] = useState(appliedBatch?.id || batches[0]?.id || '')
   const [busy, setBusy] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
 
@@ -321,12 +333,20 @@ function ConvertModal({ applicant, batches, labels, onClose, onConfirm }) {
         <p className="mt-0.5 text-xs text-[color:var(--secondary)]">
           {applicant.personal?.full_name} will be enrolled and get a {labels.student.toLowerCase()} account.
         </p>
+        <p className="mt-3 rounded-xl border border-[color:var(--accent)] bg-[color:var(--accent-tint)] px-3 py-2.5 text-xs font-semibold text-[color:var(--accent)]">
+          📧 An email with fresh login credentials (username + password) will be sent to the {labels.student.toLowerCase()} immediately after conversion.
+        </p>
         <label className="mt-4 block">
           <span className="text-sm font-semibold text-[color:var(--text)]">Enroll into batch</span>
           <select className="input mt-1.5 w-full" value={batchId} onChange={(e) => setBatchId(e.target.value)}>
             <option value="">Select batch…</option>
-            {batches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {batches.map((b) => <option key={b.id} value={b.id}>{b.name}{b.id === applicant.batch_id ? ' — applied for' : ''}</option>)}
           </select>
+          {appliedBatch && (
+            <p className="mt-1 text-[11px] text-[color:var(--secondary)]">
+              Pre-selected: <strong>{appliedBatch.code || appliedBatch.name}</strong> — the batch this applicant applied for.
+            </p>
+          )}
         </label>
         <div className="mt-5 flex justify-end gap-2">
           <button className="rounded-xl px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--surface)]" onClick={onClose}>Cancel</button>

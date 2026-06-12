@@ -34,10 +34,11 @@ const normalizeApplicant = (row) => {
   };
 };
 
-export const listApplicants = async ({ course_id, status, search, limit, offset }) => {
+export const listApplicants = async ({ course_id, batch_id, status, search, limit, offset }) => {
   const params = [];
   const conditions = [];
   if (course_id) { params.push(course_id); conditions.push(`a.course_id=$${params.length}`); }
+  if (batch_id)  { params.push(batch_id);  conditions.push(`a.batch_id=$${params.length}`); }
   if (status)    { params.push(status);    conditions.push(`a.status=$${params.length}`); }
   if (search) {
     params.push(`%${search}%`);
@@ -116,9 +117,9 @@ export const createApplicant = async (payload) => {
   };
 
   const { rows } = await query(
-    `INSERT INTO applicants (course_id,first_name,last_name,email,phone,phd_details,application_data)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [payload.course_id, first_name, last_name, email, phone,
+    `INSERT INTO applicants (course_id,batch_id,first_name,last_name,email,phone,phd_details,application_data)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [payload.course_id, payload.batch_id || null, first_name, last_name, email, phone,
      JSON.stringify(phd_details), JSON.stringify(application_data)]
   );
   return normalizeApplicant(rows[0]);
@@ -142,6 +143,10 @@ export const updateApplicantDetails = async (id, payload) => {
     params.push(JSON.stringify(payload.application_data));
     fields.push(`application_data=$${params.length}::jsonb`);
   }
+  if (payload.batch_id !== undefined) {
+    params.push(payload.batch_id || null);
+    fields.push(`batch_id=$${params.length}`);
+  }
   if (!fields.length) return getApplicantById(id);
   params.push(id);
   const { rows } = await query(
@@ -160,8 +165,13 @@ export const updateApplicantStatus = async (id, { status, batch_id }, reviewedBy
   return rows[0] ? normalizeApplicant(rows[0]) : null;
 };
 
-export const convertToStudent = async (applicantId, { batch_id, enrollment_number }, enrolledBy) => {
+export const convertToStudent = async (applicantId, { batch_id, enrollment_number, rotate_password = true }, enrolledBy) => {
+  const { default: bcrypt } = await import('bcryptjs');
+  const { randomBytes } = await import('crypto');
+  const genPassword = () => randomBytes(6).toString('base64url').slice(0, 10);
+
   const client = await getClient();
+  let plainPassword = null;
   try {
     await client.query('BEGIN');
     const { rows: [applicant] } = await client.query('SELECT * FROM applicants WHERE id=$1', [applicantId]);
@@ -169,13 +179,21 @@ export const convertToStudent = async (applicantId, { batch_id, enrollment_numbe
 
     let userId = applicant.user_id;
     if (!userId) {
+      // Always create with a REAL password — never the PENDING_SETUP lockout
+      plainPassword = genPassword();
+      const hash = await bcrypt.hash(plainPassword, 10);
       const { rows: [user] } = await client.query(
         `INSERT INTO users (email,password_hash,first_name,last_name,is_active,email_verified)
          VALUES ($1,$2,$3,$4,true,false) RETURNING id`,
-        [applicant.email, 'PENDING_SETUP', applicant.first_name, applicant.last_name]
+        [applicant.email, hash, applicant.first_name, applicant.last_name]
       );
       userId = user.id;
       await client.query('UPDATE applicants SET user_id=$1 WHERE id=$2', [userId, applicantId]);
+    } else if (rotate_password) {
+      // Existing account (e.g. from the test flow): issue fresh scholar credentials
+      plainPassword = genPassword();
+      const hash = await bcrypt.hash(plainPassword, 10);
+      await client.query('UPDATE users SET password_hash=$1 WHERE id=$2', [hash, userId]);
     }
 
     const enrNum = enrollment_number || `ENR-${Date.now()}`;
@@ -198,7 +216,7 @@ export const convertToStudent = async (applicantId, { batch_id, enrollment_numbe
       [batch_id, applicantId]
     );
     await client.query('COMMIT');
-    return { user_id: userId, enrollment_number: enrNum };
+    return { user_id: userId, enrollment_number: enrNum, password: plainPassword, applicant };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

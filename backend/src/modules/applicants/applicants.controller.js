@@ -1,4 +1,5 @@
 import * as svc from './applicants.service.js';
+import { notifyApplicationSubmitted } from '../notifications/notify.service.js';
 import { ok, created, notFound, noContent } from '../../utils/response.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
@@ -19,6 +20,11 @@ export const getOne = asyncHandler(async (req, res) => {
 
 export const create = asyncHandler(async (req, res) => {
   const applicant = await svc.createApplicant(req.body);
+
+  // Automated "Application Received" — receivers configured per course in the wizard
+  setImmediate(() => notifyApplicationSubmitted(applicant)
+    .catch((e) => console.error('[notify] application_submitted:', e.message)));
+
   created(res, applicant, 'Application submitted');
 });
 
@@ -35,8 +41,33 @@ export const updateStatus = asyncHandler(async (req, res) => {
 });
 
 export const convertToStudent = asyncHandler(async (req, res) => {
-  const result = await svc.convertToStudent(req.params.id, req.body, req.user.id);
-  ok(res, result, 'Applicant converted to student');
+  const sendCreds = req.body.send_credentials !== false; // default ON
+  const result = await svc.convertToStudent(
+    req.params.id,
+    { ...req.body, rotate_password: sendCreds },
+    req.user.id
+  );
+
+  // Email the fresh login credentials immediately (default behaviour)
+  let credentials_emailed = false;
+  if (sendCreds && result.password && result.applicant) {
+    const { sendLoginCredentials } = await import('../email/email.service.js');
+    const r = await sendLoginCredentials({
+      user: result.applicant,
+      password: result.password,
+      courseId: result.applicant.course_id || null,
+      portalLabel: 'Scholar Portal',
+    });
+    credentials_emailed = !!r.success;
+  }
+
+  ok(res, {
+    user_id: result.user_id,
+    enrollment_number: result.enrollment_number,
+    credentials_emailed,
+  }, credentials_emailed
+    ? 'Converted — login credentials emailed'
+    : 'Applicant converted to student');
 });
 
 export const bulkConvert = asyncHandler(async (req, res) => {

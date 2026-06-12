@@ -1,4 +1,5 @@
 import { query, getClient } from '../../config/database.js';
+import { notifyStageOpened } from '../notifications/notify.service.js';
 
 export const listSubmissions = async ({ batch_id, student_user_id, status, allowed_batch_ids, limit, offset }) => {
   const params = [];
@@ -117,6 +118,7 @@ export const submitForReview = async (id, studentId) => {
     );
 
     // 5. Resolve reviewer IDs and insert approval rows
+    let firstReviewerId = null;
     for (const s of stages) {
       let resolvedReviewerId = null;
       const roleName = s.role || null;
@@ -152,9 +154,21 @@ export const submitForReview = async (id, studentId) => {
          VALUES ($1, $2, 'pending', $3, $4, $5)`,
         [id, s.name, s.order_index, resolvedReviewerId, roleName]
       );
+      if (firstReviewerId === null && s === stages[0]) firstReviewerId = resolvedReviewerId;
     }
 
     await client.query('COMMIT');
+
+    // Automated "Approval Stage Opened" email to the first-stage reviewer
+    const first = stages[0];
+    if (first) {
+      setImmediate(() => notifyStageOpened(id, {
+        stage: first.label || first.name,
+        reviewerUserId: firstReviewerId,
+        reviewerRole: first.role || first.name,
+      }).catch(() => {}));
+    }
+
     return sub;
   } catch (err) {
     await client.query('ROLLBACK');

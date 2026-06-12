@@ -116,6 +116,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
   const [mapping,   setMapping]   = useState({})          // { colIndex: fieldKey | '' }
   const [importing, setImporting] = useState(false)
   const [result,    setResult]    = useState(null)        // { imported, skipped, errors }
+  const [fixedValues, setFixedValues] = useState({})      // { key: value } — wizard-level selectors (e.g. batch)
   const addToast = useUiStore((s) => s.addToast)
 
   // ── File parsing ────────────────────────────────────────────────────────────
@@ -194,7 +195,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
     setImporting(true)
     try {
       const rows = buildRows()
-      const res  = await cfg.importFn(rows)
+      const res  = await cfg.importFn(rows, fixedValues)
       setResult(res.data)
       setStep('done')
       if (res.data.imported > 0) onImported?.()
@@ -322,6 +323,28 @@ export default function ImportDrawer({ onClose, onImported, config }) {
         {/* ── Step 2: Map Columns ── */}
         {step === 2 && (
           <div className="flex-1 overflow-auto overscroll-contain p-6 space-y-4">
+            {/* Wizard-level fixed selectors (e.g. assign every row to a batch) */}
+            {cfg.fixedFields?.map((ff) => (
+              <div key={ff.key} className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-[color:var(--text)]">{ff.label}</p>
+                    {ff.help && <p className="mt-0.5 text-xs text-[color:var(--secondary)]">{ff.help}</p>}
+                  </div>
+                  <select
+                    className="input w-56 py-1.5 text-xs"
+                    value={fixedValues[ff.key] || ''}
+                    onChange={(e) => setFixedValues((p) => ({ ...p, [ff.key]: e.target.value }))}
+                  >
+                    <option value="">{ff.placeholder || '— None —'}</option>
+                    {ff.options.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ))}
+
             {/* Status line */}
             <div className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold ${
               requiredMapped

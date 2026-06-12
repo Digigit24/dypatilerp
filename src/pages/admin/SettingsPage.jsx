@@ -1,12 +1,13 @@
 import {
-  Check, CheckCircle2, Eye, EyeOff, Loader2, Mail, Moon,
-  Palette, RotateCcw, Save, Send, Sun,
+  Check, CheckCircle2, Eye, EyeOff, ImageIcon, Loader2, Mail, Moon,
+  Palette, RotateCcw, Save, Send, Sun, Trash2, Upload,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import { deriveThemeTokens } from '../../api/services/themeService.js'
 import { getEffectiveEmailConfig, getSettings, saveSettings, sendTestEmail } from '../../api/services/settingsService.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { useBrandingStore } from '../../store/brandingStore.js'
 
 const presets = [
   { name: 'Rose',    value: '#E54873' },
@@ -37,6 +38,82 @@ function Section({ title, subtitle, icon: Icon, children }) {
   )
 }
 
+// ─── Logo upload slot (light / dark) ─────────────────────────────────────────
+function LogoSlot({ label, hint, value, onChange, previewBg }) {
+  const addToast = useUiStore((s) => s.addToast)
+
+  const pick = (file) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      addToast({ type: 'error', title: 'Please choose an image file (PNG, JPG, SVG, WebP).' })
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target.result
+      // SVGs stay as-is; raster images get downscaled to max 800px wide
+      if (file.type === 'image/svg+xml') {
+        if (dataUrl.length > 500 * 1024) {
+          addToast({ type: 'error', title: 'Logo too large — keep it under 500KB.' })
+          return
+        }
+        onChange(dataUrl)
+        return
+      }
+      const img = new Image()
+      img.onload = () => {
+        const maxW = 800
+        const scale = Math.min(1, maxW / img.width)
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        const out = canvas.toDataURL('image/png')
+        if (out.length > 500 * 1024) {
+          addToast({ type: 'error', title: 'Logo too large even after compression — try a smaller image.' })
+          return
+        }
+        onChange(out)
+      }
+      img.onerror = () => addToast({ type: 'error', title: 'Could not read that image.' })
+      img.src = dataUrl
+    }
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-[color:var(--text)]">{label}</p>
+          <p className="text-xs text-[color:var(--secondary)]">{hint}</p>
+        </div>
+        {value && (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-xl px-2 py-1 text-xs font-semibold text-red-500 hover:bg-red-50"
+            onClick={() => onChange('')}
+          >
+            <Trash2 size={13} /> Remove
+          </button>
+        )}
+      </div>
+
+      {/* Preview on the matching background */}
+      <div className={`mt-3 grid h-24 place-items-center rounded-2xl border border-dashed border-[color:var(--border)] ${previewBg}`}>
+        {value
+          ? <img src={value} alt={label} className="max-h-20 max-w-[85%] object-contain" />
+          : <span className={`text-xs ${previewBg.includes('zinc-9') ? 'text-zinc-400' : 'text-[color:var(--muted)]'}`}>No logo uploaded</span>}
+      </div>
+
+      <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white">
+        <Upload size={14} /> {value ? 'Replace' : 'Upload'} image
+        <input type="file" accept="image/*" className="hidden" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }} />
+      </label>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   // ── Theme store ──────────────────────────────────────────────────────────
   const theme          = useUiStore((s) => s.theme)
@@ -58,6 +135,28 @@ export default function SettingsPage() {
     resetThemeConfig()
     setPrimaryColor('#4F46E5')
     addToast({ type: 'info', title: 'Theme reset to default indigo' })
+  }
+
+  // ── Branding (app logo) ──────────────────────────────────────────────────
+  const setStoreBranding = useBrandingStore((s) => s.setBranding)
+  const [branding, setBrandingState] = useState({ logoLight: '', logoDark: '' })
+  const [brandingSaving, setBrandingSaving] = useState(false)
+
+  useEffect(() => {
+    getSettings('branding')
+      .then((r) => setBrandingState({ logoLight: '', logoDark: '', ...(r.data || {}) }))
+      .catch(() => {})
+  }, [])
+
+  const saveBranding = async () => {
+    setBrandingSaving(true)
+    try {
+      await saveSettings('branding', branding)
+      setStoreBranding(branding)   // sidebar updates instantly, no reload needed
+      addToast({ type: 'success', title: 'App logo saved.' })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Failed to save logo', message: err.response?.data?.message })
+    } finally { setBrandingSaving(false) }
   }
 
   // ── Brevo config ─────────────────────────────────────────────────────────
@@ -239,6 +338,40 @@ export default function SettingsPage() {
             </div>
           </aside>
         </div>
+
+        {/* ── App Logo / Branding ── */}
+        <Section
+          title="App Logo"
+          subtitle="Shown at the top of the sidebar. Upload a version for each theme — it switches automatically with dark/light mode."
+          icon={ImageIcon}
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <LogoSlot
+              label="Light Mode Logo"
+              hint="Used on light backgrounds"
+              value={branding.logoLight}
+              onChange={(v) => setBrandingState((b) => ({ ...b, logoLight: v }))}
+              previewBg="bg-white"
+            />
+            <LogoSlot
+              label="Dark Mode Logo"
+              hint="Used on dark backgrounds"
+              value={branding.logoDark}
+              onChange={(v) => setBrandingState((b) => ({ ...b, logoDark: v }))}
+              previewBg="bg-zinc-900"
+            />
+          </div>
+          <p className="mt-3 text-xs text-[color:var(--muted)]">
+            PNG with transparent background works best. Images are auto-compressed to max 800px wide.
+            If only one logo is uploaded, it is used for both themes.
+          </p>
+          <div className="mt-4 flex justify-end">
+            <button className="btn-primary inline-flex items-center gap-2" onClick={saveBranding} disabled={brandingSaving}>
+              {brandingSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+              {brandingSaving ? 'Saving…' : 'Save Logo'}
+            </button>
+          </div>
+        </Section>
 
         {/* ── Email (Brevo) ── */}
         <Section

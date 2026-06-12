@@ -1,5 +1,19 @@
 import { NavLink } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useBrandingStore, useBranding } from '../../store/brandingStore.js'
+import { useUiStore } from '../../store/uiStore.js'
+
 export default function Sidebar({ sections, footer, width = 260, role, collapsed = false, mobileOpen = false, onClose }) {
+  const theme = useUiStore((s) => s.theme)
+  const branding = useBranding()
+  const loadBranding = useBrandingStore((s) => s.loadBranding)
+  useEffect(() => { loadBranding() }, [])
+
+  // Theme-aware logo: dark mode prefers the dark variant, falls back gracefully
+  const logoSrc = (theme === 'dark'
+    ? (branding.logoDark || branding.logoLight)
+    : (branding.logoLight || branding.logoDark)) || '/logo-new.jpg'
+
   return (
     <aside
       className={`sidebar-shell fixed bottom-5 left-5 top-5 z-40 flex flex-col rounded-[30px] p-4 transition-all duration-300 max-[900px]:bottom-3 max-[900px]:top-3 ${mobileOpen ? 'max-[900px]:translate-x-0' : 'max-[900px]:-translate-x-[115%]'}`}
@@ -8,10 +22,10 @@ export default function Sidebar({ sections, footer, width = 260, role, collapsed
     >
       <div className={`mb-8 shrink-0 px-2 pt-1 ${collapsed ? 'px-0' : ''}`}>
         {collapsed ? (
-          <img src="/logo-new.jpg" alt="DYPERF" className="mx-auto h-12 w-12 rounded-2xl object-cover object-left" />
+          <img src={logoSrc} alt="DYPERF" className="mx-auto h-12 w-12 rounded-2xl object-cover object-left" />
         ) : (
           <div>
-            <img src="/logo-new.jpg" alt="DYPERF - Dr. D. Y. Patil Education and Research Foundation" className="h-auto w-full rounded-2xl object-contain" />
+            <img src={logoSrc} alt="DYPERF - Dr. D. Y. Patil Education and Research Foundation" className="h-auto max-h-24 w-full rounded-2xl object-contain" />
             {role && <div className="mt-3 inline-flex rounded-full bg-[color:var(--accent-tint)] px-3 py-1 text-[11px] font-semibold text-[color:var(--accent)]">{role}</div>}
           </div>
         )}

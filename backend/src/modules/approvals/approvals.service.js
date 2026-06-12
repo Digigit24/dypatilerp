@@ -1,5 +1,6 @@
 import { query } from '../../config/database.js';
 import { writeAuditLog } from '../../utils/auditLog.js';
+import { notifyStageOpened, notifySubmissionOutcome } from '../notifications/notify.service.js';
 
 export const listPendingForUser = async (userId, roles) => {
   // Dynamic workflow: match by direct reviewer assignment OR by open role slot
@@ -41,6 +42,12 @@ export const takeAction = async (approvalId, action, reviewerId, comments) => {
 
   const { id: submissionId, order_index, stage } = approval;
 
+  // Resolve the approver's display name once for outgoing notifications
+  const { rows: [approver] } = await query(
+    `SELECT first_name, last_name FROM users WHERE id=$1`, [reviewerId]
+  );
+  const approverName = approver ? `${approver.first_name || ''} ${approver.last_name || ''}`.trim() : null;
+
   if (newStatus === 'approved') {
     const { rows: [next] } = await query(
       `SELECT * FROM approvals WHERE submission_id=$1 AND order_index=$2`,
@@ -48,13 +55,23 @@ export const takeAction = async (approvalId, action, reviewerId, comments) => {
     );
     if (!next) {
       await query(`UPDATE submissions SET status='approved', updated_at=NOW() WHERE id=$1`, [approval.submission_id]);
+      // Final approval → notify the scholar
+      setImmediate(() => notifySubmissionOutcome(approval.submission_id, 'approved', { approverName, comments }).catch(() => {}));
     } else {
       await query(`UPDATE submissions SET status='under_review', updated_at=NOW() WHERE id=$1`, [approval.submission_id]);
+      // Next stage just opened → notify its reviewer(s)
+      setImmediate(() => notifyStageOpened(approval.submission_id, {
+        stage: next.stage,
+        reviewerUserId: next.reviewer_user_id,
+        reviewerRole: next.reviewer_role || next.stage,
+      }).catch(() => {}));
     }
   } else if (newStatus === 'rejected') {
     await query(`UPDATE submissions SET status='rejected', updated_at=NOW() WHERE id=$1`, [approval.submission_id]);
+    setImmediate(() => notifySubmissionOutcome(approval.submission_id, 'needs_revision', { approverName, comments }).catch(() => {}));
   } else if (newStatus === 'needs_revision') {
     await query(`UPDATE submissions SET status='needs_revision', updated_at=NOW() WHERE id=$1`, [approval.submission_id]);
+    setImmediate(() => notifySubmissionOutcome(approval.submission_id, 'needs_revision', { approverName, comments }).catch(() => {}));
   }
 
   writeAuditLog({

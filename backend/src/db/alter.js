@@ -291,6 +291,28 @@ const run = async () => {
     `);
     console.log('\u2713  scoped RBAC: scope column, permission catalog, default grants');
 
+    // 22. Notification queue — durable outbox for automated event emails
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS notification_queue (
+        id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        event_key  VARCHAR(60) NOT NULL,
+        course_id  UUID REFERENCES courses(id) ON DELETE CASCADE,
+        recipient  JSONB NOT NULL DEFAULT '{}',
+        data       JSONB NOT NULL DEFAULT '{}',
+        dedupe_key TEXT,
+        run_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        status     VARCHAR(12) NOT NULL DEFAULT 'pending',
+        attempts   INTEGER NOT NULL DEFAULT 0,
+        error      TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        sent_at    TIMESTAMPTZ
+      )
+    `);
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_nq_dedupe ON notification_queue(dedupe_key) WHERE dedupe_key IS NOT NULL`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_nq_due ON notification_queue(status, run_at)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_nq_course ON notification_queue(course_id, created_at DESC)`);
+    console.log('\u2713  notification_queue table');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

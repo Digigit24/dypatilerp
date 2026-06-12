@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { notifyTestCompleted } from '../notifications/notify.service.js';
 import { authenticate, optionalAuth } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -489,6 +490,30 @@ router.post('/:id/submit', authenticate, asyncHandler(async (req, res) => {
     );
   }
 
+  // Automated "Test Completed" — receivers configured per course in the wizard
+  // (default: coordinators + admins; the candidate copy is opt-in)
+  setImmediate(async () => {
+    try {
+      const { rows: [test] } = await query(
+        'SELECT course_id, total_marks, passing_marks, title FROM tests WHERE id=$1', [req.params.id]
+      );
+      const { rows: [candidate] } = await query(
+        'SELECT email, first_name, last_name FROM users WHERE id=$1', [attempt.user_id]
+      );
+      if (test) {
+        await notifyTestCompleted({
+          courseId: test.course_id,
+          attemptId: attempt.id,
+          candidate,
+          testTitle: test.title,
+          score: totalScore,
+          total: test.total_marks || 100,
+          passing: test.passing_marks ?? Math.ceil((test.total_marks || 100) * 0.4),
+        });
+      }
+    } catch (e) { console.error('[notify] test_completed:', e.message); }
+  });
+
   ok(res, {
     attempt_id: attempt.id,
     score: totalScore,
@@ -520,6 +545,7 @@ router.get('/:id/results/:applicantId', authenticate, requirePermission('applica
       ({ rows: responses } = await query(
         `SELECT q.id AS question_id, q.question_text, q.question_type, q.marks, q.config, q.order_index,
                 s.title AS section_title, s.order_index AS section_order,
+ 
                 tr.id, tr.attempt_id, tr.response_data, tr.marks_awarded
          FROM test_questions q
          LEFT JOIN test_sections s ON s.id = q.section_id

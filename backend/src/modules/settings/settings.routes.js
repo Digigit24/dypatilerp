@@ -46,6 +46,13 @@ router.get('/ui-labels', asyncHandler(async (req, res) => {
   });
 }));
 
+// ─── GET /settings/branding ───────────────────────────────────────────────────
+// Readable by ANY authenticated user — drives the sidebar logo (light + dark).
+router.get('/branding', asyncHandler(async (req, res) => {
+  const { rows: [row] } = await query(`SELECT value FROM app_settings WHERE key='branding'`);
+  ok(res, { logoLight: '', logoDark: '', ...(row?.value || {}) });
+}));
+
 // ─── GET /settings/email/effective ────────────────────────────────────────────
 // What the server will ACTUALLY use to send email (env + DB merged). Admin-only.
 router.get('/email/effective', requireRole('admin'), asyncHandler(async (req, res) => {
@@ -101,6 +108,20 @@ router.put('/:key', requireRole('admin'), asyncHandler(async (req, res) => {
 
   // Hygiene: trim pasted credentials so stray whitespace never breaks sending
   if (key === 'brevo' && typeof value.apiKey === 'string') value.apiKey = value.apiKey.trim();
+
+  // Branding logos: must be inline data-URL images, capped at ~700KB each
+  if (key === 'branding') {
+    for (const k of ['logoLight', 'logoDark']) {
+      const v = value[k];
+      if (v === undefined || v === '' || v === null) continue;
+      if (typeof v !== 'string' || !v.startsWith('data:image/')) {
+        return res.status(400).json({ success: false, message: `${k} must be an uploaded image` });
+      }
+      if (v.length > 700 * 1024) {
+        return res.status(400).json({ success: false, message: `${k} is too large — keep logos under 500KB` });
+      }
+    }
+  }
 
   await query(
     `INSERT INTO app_settings (key, value, updated_at, updated_by)

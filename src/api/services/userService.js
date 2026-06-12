@@ -64,6 +64,30 @@ export const createUser = async (payload) => {
   return ok(res.data)
 }
 
+/** One-click: rotate the user's password and email fresh credentials */
+export const sendCredentials = async (id) => {
+  const { data: res } = await http.post(`/users/${id}/send-credentials`)
+  return { data: res.data, message: res.message }
+}
+
+/** Admin: set/generate a password; returns the plain password once */
+export const resetUserPassword = async (id, payload = {}) => {
+  const { data: res } = await http.post(`/users/${id}/reset-password`, payload)
+  return { data: res.data }
+}
+
+/** Self-service password change */
+export const changeMyPassword = async (current_password, new_password) => {
+  const { data: res } = await http.post('/users/me/password', { current_password, new_password })
+  return { data: res.data }
+}
+
+/** Admin: bulk rotate + email credentials */
+export const bulkSendCredentials = async (user_ids) => {
+  const { data: res } = await http.post('/users/bulk-send-credentials', { user_ids })
+  return { data: res.data, message: res.message }
+}
+
 export const deleteUser = async (id) => {
   if (USE_MOCK) { await delay(); return ok({ id, deleted: true }) }
   await http.delete(`/users/${id}`)

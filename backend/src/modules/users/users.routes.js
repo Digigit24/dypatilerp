@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
 import { requirePermission, requireRole } from '../../middleware/rbac.js';
+import { randomBytes } from 'crypto';
+import { sendLoginCredentials } from '../email/email.service.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok, created, notFound, noContent } from '../../utils/response.js';
 import { query } from '../../config/database.js';
@@ -70,6 +72,125 @@ router.patch('/me/preferences', asyncHandler(async (req, res) => {
  *       200:
  *         description: Paginated user list
  */
+// ─── Credentials helpers ──────────────────────────────────────────────────────
+const genPassword = () => randomBytes(6).toString('base64url').slice(0, 10);
+
+/** Resolve the user's course (via active enrollment) for the email sender */
+const courseOfUser = async (userId) => {
+  const { rows: [row] } = await query(
+    `SELECT b.course_id FROM batch_enrollments be
+     JOIN batches b ON b.id = be.batch_id
+     WHERE be.user_id = $1 AND be.status = 'active' LIMIT 1`, [userId]
+  );
+  return row?.course_id || null;
+};
+
+const isStaff = (roles = []) => (roles || []).some((r) => !['student', 'applicant'].includes(r));
+
+/** Rotate one user's password and email the fresh credentials. */
+const rotateAndSend = async (userId) => {
+  const { rows: [user] } = await query(
+    `SELECT u.id, u.email, u.first_name, u.last_name,
+            array_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL) AS roles
+     FROM users u
+     LEFT JOIN user_roles ur ON ur.user_id = u.id
+     LEFT JOIN roles r ON r.id = ur.role_id
+     WHERE u.id = $1 GROUP BY u.id`, [userId]
+  );
+  if (!user) return { ok: false, error: 'User not found' };
+
+  const password = genPassword();
+  const hash = await bcrypt.hash(password, 10);
+  await query('UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2', [hash, userId]);
+
+  const roles = Array.isArray(user.roles) ? user.roles
+    : typeof user.roles === 'string' ? user.roles.replace(/^\{|\}$/g, '').split(',').filter(Boolean) : [];
+  const courseId = await courseOfUser(userId);
+  const result = await sendLoginCredentials({
+    user,
+    password,
+    courseId,
+    portalLabel: isStaff(roles) ? 'Staff Portal' : 'Scholar Portal',
+  });
+  return {
+    ok: true,
+    user_id: userId,
+    name: `${user.first_name} ${user.last_name || ''}`.trim(),
+    email: user.email,
+    email_sent: !!result.success,
+    email_error: result.success ? null : result.error,
+  };
+};
+
+/**
+ * POST /users/me/password — change my own password.
+ * Body: { current_password, new_password }
+ */
+router.post('/me/password', asyncHandler(async (req, res) => {
+  const { current_password, new_password } = req.body;
+  if (!current_password || !new_password) {
+    return res.status(400).json({ success: false, message: 'current_password and new_password are required' });
+  }
+  if (String(new_password).length < 8) {
+    return res.status(400).json({ success: false, message: 'New password must be at least 8 characters' });
+  }
+  const { rows: [u] } = await query('SELECT password_hash FROM users WHERE id=$1', [req.user.id]);
+  const valid = u && await bcrypt.compare(current_password, u.password_hash);
+  if (!valid) return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+  const hash = await bcrypt.hash(new_password, 10);
+  await query('UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2', [hash, req.user.id]);
+  ok(res, null, 'Password changed');
+}));
+
+/**
+ * POST /users/bulk-send-credentials — rotate + email credentials in bulk.
+ * Body: { user_ids: [] }  (the frontend resolves audiences to user ids)
+ */
+router.post('/bulk-send-credentials', requireRole('admin'), asyncHandler(async (req, res) => {
+  const ids = [...new Set(req.body.user_ids || [])];
+  if (!ids.length) return res.status(400).json({ success: false, message: 'user_ids is required' });
+  if (ids.length > 300) return res.status(400).json({ success: false, message: 'Max 300 recipients per batch' });
+
+  const results = [];
+  for (const id of ids) {
+    try { results.push(await rotateAndSend(id)); }
+    catch (err) { results.push({ ok: false, user_id: id, email_sent: false, email_error: err.message }); }
+  }
+  const sent = results.filter((r) => r.email_sent).length;
+  ok(res, { total: ids.length, emails_sent: sent, results }, `Credentials sent to ${sent}/${ids.length} user(s)`);
+}));
+
+/**
+ * POST /users/:id/send-credentials — one-click: rotate password + email it.
+ */
+router.post('/:id/send-credentials', requireRole('admin', 'coordinator'), asyncHandler(async (req, res) => {
+  const result = await rotateAndSend(req.params.id);
+  if (!result.ok) return res.status(404).json({ success: false, message: result.error });
+  ok(res, result, result.email_sent ? 'Credentials emailed' : `Password reset but email failed: ${result.email_error}`);
+}));
+
+/**
+ * POST /users/:id/reset-password — admin sets or generates a password.
+ * Body: { password?, send_email? } — returns the plain password ONCE.
+ */
+router.post('/:id/reset-password', requireRole('admin'), asyncHandler(async (req, res) => {
+  const { rows: [user] } = await query('SELECT id, email, first_name, last_name FROM users WHERE id=$1', [req.params.id]);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+  const password = (req.body.password || '').trim() || genPassword();
+  if (password.length < 8) return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
+  const hash = await bcrypt.hash(password, 10);
+  await query('UPDATE users SET password_hash=$1, updated_at=NOW() WHERE id=$2', [hash, req.params.id]);
+
+  let email_sent = false;
+  if (req.body.send_email) {
+    const courseId = await courseOfUser(req.params.id);
+    const r = await sendLoginCredentials({ user, password, courseId, portalLabel: 'Portal' });
+    email_sent = !!r.success;
+  }
+  ok(res, { password, email_sent }, 'Password reset');
+}));
+
 router.get('/', requirePermission('users', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   const params = [];

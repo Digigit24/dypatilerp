@@ -43,3 +43,17 @@ export const sendNotification = async (payload) => {
   const { data: res } = await http.post('/notifications', payload)
   return ok(res.data)
 }
+
+// ─── Automation engine ─────────────────────────────────────────────────────────
+
+/** Last 50 automated (event-driven) emails for a course. */
+export const getNotificationQueue = async (courseId) => {
+  const { data: res } = await http.get('/notifications/queue', { params: courseId ? { course_id: courseId } : {} })
+  return ok(res.data)
+}
+
+/** Immediately run the fee-due / deadline-overdue scans for a course. */
+export const runNotificationScans = async (courseId) => {
+  const { data: res } = await http.post('/notifications/run-scans', courseId ? { course_id: courseId } : {})
+  return ok(res.data)
+}

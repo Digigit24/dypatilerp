@@ -52,6 +52,7 @@ export const updateApplicantStatusSchema = z.object({
 export const convertToStudentSchema = z.object({
   batch_id: z.string().uuid(),
   enrollment_number: z.string().optional(),
+  send_credentials: z.boolean().optional(),
 });
 
 export const bulkConvertSchema = z.object({

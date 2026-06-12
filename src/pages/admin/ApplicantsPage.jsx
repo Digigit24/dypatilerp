@@ -209,6 +209,7 @@ export default function ApplicantsPage() {
   const [editSaving, setEditSaving] = useState(false)
   const [query,      setQuery]      = useState('')
   const [status,     setStatus]     = useState('all')
+  const [batchFilter, setBatchFilter] = useState('all')
   const [showImport, setShowImport] = useState(false)
   const [exporting,  setExporting]  = useState(false)
   const [view,       setView]       = useState('kanban')   // 'kanban' | 'list'
@@ -290,10 +291,12 @@ export default function ApplicantsPage() {
     if (!items) return []
     return items.filter((item) => {
       const matchesStatus = status === 'all' || item.status === status
+      const matchesBatch  = batchFilter === 'all'
+        || (batchFilter === 'none' ? !item.batch_id : item.batch_id === batchFilter)
       const haystack = `${item.personal.full_name} ${item.personal.email} ${item.temp_id}`.toLowerCase()
-      return matchesStatus && haystack.includes(query.toLowerCase())
+      return matchesStatus && matchesBatch && haystack.includes(query.toLowerCase())
     })
-  }, [items, query, status])
+  }, [items, query, status, batchFilter])
 
   if (!items) return <SkeletonCard rows={8} />
 
@@ -493,17 +496,29 @@ export default function ApplicantsPage() {
             <List size={14} /> List
           </button>
         </div>
-        {view === 'kanban' && (
-          <p className="hidden text-xs text-[color:var(--secondary)] sm:block">
-            Applied → Shortlist → Send Test → Submitted → Final Shortlist → Enrolled
-          </p>
-        )}
+        <div className="flex items-center gap-3">
+          <select
+            className="input h-9 w-48 py-0 text-xs"
+            value={batchFilter}
+            onChange={(e) => setBatchFilter(e.target.value)}
+            title="Filter applicants by the batch they applied for"
+          >
+            <option value="all">All batches</option>
+            <option value="none">No batch assigned</option>
+            {batches.map((b) => <option key={b.id} value={b.id}>{b.code || b.name}</option>)}
+          </select>
+          {view === 'kanban' && (
+            <p className="hidden text-xs text-[color:var(--secondary)] xl:block">
+              Applied → Shortlist → Send Test → Submitted → Final Shortlist → Enrolled
+            </p>
+          )}
+        </div>
       </div>
 
       {/* ── Kanban pipeline ── */}
       {view === 'kanban' && (
         <ApplicantsKanban
-          items={items}
+          items={filtered}
           courseId={currentCourse?.id}
           batches={batches}
           onSelect={(a) => setSelected(a)}
@@ -555,7 +570,7 @@ export default function ApplicantsPage() {
                     </div>
                   </td>
                   <td className="px-6 text-[color:var(--secondary)]">{formatDate(a.applied_at)}</td>
-                  <td className="px-6 text-[color:var(--secondary)]">{a.batch_id?.replace('batch_', 'Batch ').replace('_', '-')}</td>
+                  <td className="px-6 text-[color:var(--secondary)]">{a.batch_code || a.batch_name || '—'}</td>
                   <td className="px-6">
                     <div className="flex items-center gap-3">
                       <div className="h-2 w-20 overflow-hidden rounded-full bg-[color:var(--surface-strong)]">
@@ -892,7 +907,7 @@ export default function ApplicantsPage() {
       {/* ── Import wizard (upload → map columns → review) ── */}
       {showImport && (
         <ImportDrawer
-          config={buildApplicantImportConfig(currentCourse)}
+          config={buildApplicantImportConfig(currentCourse, batches)}
           onClose={() => setShowImport(false)}
           onImported={loadApplicants}
         />

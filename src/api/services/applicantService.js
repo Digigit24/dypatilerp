@@ -50,12 +50,12 @@ export const getApplicantById = async (id) => {
 }
 
 /** Bulk-import applicants (mapped rows from the import wizard) into a course */
-export const importApplicants = async (applicants, courseId) => {
+export const importApplicants = async (applicants, courseId, defaultBatchId = null) => {
   if (USE_MOCK) {
     await delay(400, 800)
     return { data: { imported: applicants.length, skipped: 0, errors: [], total: applicants.length } }
   }
-  const { data: res } = await http.post('/applicants/import', { applicants, course_id: courseId })
+  const { data: res } = await http.post('/applicants/import', { applicants, course_id: courseId, default_batch_id: defaultBatchId || undefined })
   return { data: res.data }
 }
 
@@ -92,9 +92,9 @@ export const updateApplicantStatus = async (id, status, batch_id) => {
 
 export const shortlistApplicant = async (id) => updateApplicantStatus(id, 'shortlisted')
 
-export const convertToStudent = async (id, batch_id) => {
+export const convertToStudent = async (id, batch_id, extra = {}) => {
   if (USE_MOCK) { return ok({}) }
-  const { data: res } = await http.post(`/applicants/${id}/convert`, { batch_id })
+  const { data: res } = await http.post(`/applicants/${id}/convert`, { batch_id, ...extra })
   return ok(res.data)
 }
 

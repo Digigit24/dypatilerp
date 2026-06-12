@@ -294,18 +294,52 @@ const templates = {
     `),
   }),
 
-  approval_stage_opened: ({ firstName, stageName, submissionTitle, reviewerName }) => ({
-    subject: `Approval Stage: ${stageName} — Action Required`,
+  application_submitted_staff: ({ firstName, applicantName, applicantEmail, applicationId }) => ({
+    subject: `New Application Received — ${applicantName}`,
     html: base(`
-      <h2>New Approval Stage Opened</h2>
+      <h2>New Application Received</h2>
       <p>Dear ${firstName},</p>
-      <p>A new approval stage has been opened for your submission.</p>
+      <p>A new application has just been submitted.</p>
+      <div class="info-box">
+        <p><strong>Applicant:</strong> ${applicantName}</p>
+        ${applicantEmail ? `<p><strong>Email:</strong> ${applicantEmail}</p>` : ''}
+        ${applicationId ? `<p><strong>Application ID:</strong> ${applicationId}</p>` : ''}
+      </div>
+      <p>Review it in the portal under <strong>Applicants</strong>.</p>
+      <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
+    `),
+  }),
+
+  test_completed_staff: ({ firstName, candidateName, testTitle, score, total, passing }) => ({
+    subject: `Test Submitted — ${candidateName}${testTitle ? ` · ${testTitle}` : ''}`,
+    html: base(`
+      <h2>Entrance Test Submitted</h2>
+      <p>Dear ${firstName},</p>
+      <p>A candidate has just completed the entrance test.</p>
+      <div class="info-box">
+        <p><strong>Candidate:</strong> ${candidateName}</p>
+        ${testTitle ? `<p><strong>Test:</strong> ${testTitle}</p>` : ''}
+        <p><strong>Score:</strong> ${score}${total ? ` / ${total}` : ''}</p>
+        ${passing != null ? `<p><strong>Result:</strong> <span class="badge ${Number(score) >= Number(passing) ? 'badge-green' : 'badge-red'}">${Number(score) >= Number(passing) ? 'Passed' : 'Below passing marks'}</span></p>` : ''}
+      </div>
+      <p>Full answers are available in the portal under <strong>Applicants → Test Results</strong>.</p>
+      <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
+    `),
+  }),
+
+  approval_stage_opened: ({ firstName, stageName, submissionTitle, reviewerName }) => ({
+    subject: `Review Required: ${submissionTitle} — ${stageName} stage`,
+    html: base(`
+      <h2>New Submission Awaiting Your Review</h2>
+      <p>Dear ${firstName},</p>
+      <p>A submission has reached your approval stage and is waiting for your action.</p>
       <div class="info-box">
         <p><strong>Submission:</strong> ${submissionTitle}</p>
-        <p><strong>Stage:</strong> ${stageName}</p>
-        ${reviewerName ? `<p><strong>Reviewer:</strong> ${reviewerName}</p>` : ''}
+        ${reviewerName ? `<p><strong>Submitted By:</strong> ${reviewerName}</p>` : ''}
+        <p><strong>Your Stage:</strong> ${stageName}</p>
         <p><strong>Status:</strong> <span class="badge badge-yellow">Pending Review</span></p>
       </div>
+      <p>Please log in to the portal and review it under <strong>Approvals</strong>.</p>
       <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
     `),
   }),
@@ -403,6 +437,44 @@ const templates = {
 // ─── High-level helpers ───────────────────────────────────────────────────────
 
 /**
+ * Send portal login credentials (scholar or staff).
+ * Uses the course's verified sender when a courseId is resolvable.
+ */
+export const sendLoginCredentials = async ({ user, password, courseId = null, portalLabel = 'Scholar Portal' }) => {
+  const sender = await getCourseSender(courseId);
+  const loginUrl = `${env.FRONTEND_URL}/login`;
+  const subject = `Your ${portalLabel} Login Credentials — DY Patil`;
+  const html = base(`
+    <h2>Welcome to the ${portalLabel}</h2>
+    <p>Dear ${user.first_name},</p>
+    <p>Your account is ready. Use the credentials below to log in.</p>
+    <div class="cred-box">
+      <p><strong>🔗 Login:</strong></p>
+      <p style="word-break:break-all;margin:8px 0 12px"><a href="${loginUrl}" style="color:#4F46E5;font-weight:600">${loginUrl}</a></p>
+      <p><strong>👤 Username:</strong> <span class="val">${user.email}</span></p>
+      <p><strong>🔑 Password:</strong> <span class="val">${password}</span></p>
+    </div>
+    <a href="${loginUrl}" class="cta">Log In →</a>
+    <p><strong>Important:</strong> Please change your password from your Profile page after your first login.</p>
+    <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
+  `);
+  const text = [
+    `Your ${portalLabel} login credentials`,
+    '',
+    `Login: ${loginUrl}`,
+    `Username: ${user.email}`,
+    `Password: ${password}`,
+    '',
+    'Please change your password from your Profile page after your first login.',
+  ].join('\n');
+
+  return sendEmail({
+    to: { email: user.email, name: `${user.first_name} ${user.last_name || ''}`.trim() },
+    subject, html, text, sender,
+  });
+};
+
+/**
  * Send test credentials to one applicant.
  * Called by test-assign.routes.js after creating a token.
  */
@@ -494,10 +566,13 @@ export const sendNotificationEmail = async (eventKey, recipient, data = {}, cour
       }
     }
 
-    const template = templates[eventKey];
+    // data._template lets one event use audience-specific wording
+    // (e.g. test_completed → candidate copy vs. staff copy)
+    const templateKey = data._template || eventKey;
+    const template = templates[templateKey];
     if (!template) {
-      console.warn(`[email] No template for event "${eventKey}"`);
-      return { success: false, error: `No template: ${eventKey}` };
+      console.warn(`[email] No template for event "${templateKey}"`);
+      return { success: false, error: `No template: ${templateKey}` };
     }
 
     const { subject, html } = template({

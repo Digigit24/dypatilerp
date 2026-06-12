@@ -8,6 +8,7 @@ import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate.js';
 import { sendNotificationEmail } from '../email/email.service.js';
+import { runScheduledScans, processDueQueue } from './notify.service.js';
 
 const router = Router();
 router.use(authenticate);
@@ -143,6 +144,32 @@ router.put('/:id/read', requirePermission('notifications', 'read'), asyncHandler
     [req.params.id, req.user.id]
   );
   ok(res, null, 'Marked as read');
+}));
+
+// ─── GET /notifications/queue ─────────────────────────────────────────────────
+// Recent automated (event-driven) emails for a course — admin/coordinator only.
+router.get('/queue', requirePermission('notifications', 'create'), asyncHandler(async (req, res) => {
+  const course_id = req.courseId || req.query.course_id;
+  const params = [];
+  let where = '';
+  if (course_id) { params.push(course_id); where = 'WHERE course_id=$1'; }
+  const { rows } = await query(
+    `SELECT id, event_key, course_id, recipient, status, attempts, error, run_at, sent_at, created_at
+     FROM notification_queue ${where}
+     ORDER BY created_at DESC LIMIT 50`, params
+  );
+  ok(res, rows);
+}));
+
+// ─── POST /notifications/run-scans ────────────────────────────────────────────
+// "Run checks now" — immediately runs the fee-due / deadline-overdue scans
+// (ignores the configured hour; dedupe still prevents double emails).
+router.post('/run-scans', requirePermission('notifications', 'create'), asyncHandler(async (req, res) => {
+  const course_id = req.body?.course_id || req.courseId || null;
+  const summary = await runScheduledScans({ force: true, courseId: course_id });
+  // Drain whatever was just queued so results are visible immediately
+  const drained = await processDueQueue(50);
+  ok(res, { ...summary, delivered_now: drained.sent ?? 0 }, 'Scheduled checks executed');
 }));
 
 export default router;

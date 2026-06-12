@@ -78,11 +78,22 @@ const IMPORT_STATUSES = new Set(['submitted', 'shortlisted_test', 'test_pending'
 router.post('/import', authenticate, requirePermission('applicants', 'create'), asyncHandler(async (req, res) => {
   const rows = Array.isArray(req.body.applicants) ? req.body.applicants : [];
   const course_id = req.body.course_id || req.courseId;
+  const default_batch_id = req.body.default_batch_id || null;
   if (!rows.length) return res.status(400).json({ success: false, message: 'No applicant rows provided' });
   if (!course_id)    return res.status(400).json({ success: false, message: 'course_id is required — select a course first' });
 
   const { rows: [course] } = await query('SELECT id FROM courses WHERE id=$1', [course_id]);
   if (!course) return res.status(400).json({ success: false, message: 'Course not found' });
+
+  // Validate the wizard's "assign all to batch" selection (must belong to this course)
+  let defaultBatchId = null;
+  if (default_batch_id) {
+    const { rows: [db] } = await query(
+      'SELECT id FROM batches WHERE id=$1 AND course_id=$2', [default_batch_id, course_id]
+    );
+    if (!db) return res.status(400).json({ success: false, message: 'Selected batch does not belong to this course' });
+    defaultBatchId = db.id;
+  }
 
   let imported = 0;
   let skipped  = 0;
@@ -112,14 +123,15 @@ router.post('/import', authenticate, requirePermission('applicants', 'create'), 
         skipped++; continue;
       }
 
-      // Optional batch resolution by code
-      let batch_id = null;
+      // Batch resolution: a mapped batch_code column wins per row,
+      // otherwise the wizard's fixed batch selection applies to every row.
+      let batch_id = defaultBatchId;
       if (r.batch_code?.trim()) {
         const { rows: [batch] } = await query(
           'SELECT id FROM batches WHERE LOWER(code)=LOWER($1) AND course_id=$2', [r.batch_code.trim(), course_id]
         );
         if (batch) batch_id = batch.id;
-        // Unknown batch codes are non-fatal — applicant imports without a batch
+        // Unknown batch codes are non-fatal — falls back to the selected batch (or none)
       }
 
       const status = IMPORT_STATUSES.has((r.status || '').trim().toLowerCase())

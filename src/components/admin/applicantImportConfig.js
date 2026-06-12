@@ -62,7 +62,7 @@ const validateApplicantRow = (row, idx) => {
 }
 
 /** Build the ImportDrawer config bound to the active course */
-export const buildApplicantImportConfig = (course) => ({
+export const buildApplicantImportConfig = (course, batches = []) => ({
   label: 'Applicants',
   singular: 'Applicant',
   fields: APPLICANT_FIELDS,
@@ -70,5 +70,14 @@ export const buildApplicantImportConfig = (course) => ({
   templateRows: APPLICANT_TEMPLATE_ROWS,
   templateFilename: 'applicants-import-template.csv',
   validateRow: validateApplicantRow,
-  importFn: (rows) => importApplicants(rows, course?.id),
+  // Wizard-level selector: assign every imported row to one batch.
+  // A mapped "Batch Code" column still wins per row when both are present.
+  fixedFields: batches.length ? [{
+    key: 'default_batch_id',
+    label: 'Assign all applicants to batch',
+    placeholder: '— No batch / use mapped column —',
+    help: 'Optional. If you also map a "Batch Code" column, that column overrides this choice per row.',
+    options: batches.map((b) => ({ value: b.id, label: b.code ? `${b.name} (${b.code})` : b.name })),
+  }] : [],
+  importFn: (rows, fixed = {}) => importApplicants(rows, course?.id, fixed.default_batch_id || null),
 })
