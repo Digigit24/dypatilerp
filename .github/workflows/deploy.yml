@@ -1,0 +1,46 @@
+name: Deploy DYPERF Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: dyperf-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Test SSH connection
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+              -i ~/.ssh/deploy_key \
+              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+              "whoami && pwd"
+
+      - name: Deploy on server
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+              -i ~/.ssh/deploy_key \
+              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+              "set -e && \
+               cd /home/divineblisspuna/public_html/app.dyperf.com/dypatilerp && \
+               git pull origin main && \
+               npm install && \
+               VITE_API_URL=https://app.dyperf.com/api npm run build && \
+               cp -r dist/* ../ && \
+               cd backend && \
+               npm install && \
+               pm2 restart dyperf-backend --update-env && \
+               pm2 save"
