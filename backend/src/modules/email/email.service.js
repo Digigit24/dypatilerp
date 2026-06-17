@@ -153,6 +153,68 @@ const getBrevoConfig = async () => {
 
 export const bustBrevoCache = () => { _cachedBrevoConfig = null; };
 
+// ─── Editable template overrides (app_settings → 'email_templates') ────────────
+// Admins edit templates in the UI; overrides are stored as
+//   { [templateKey]: { subject, body } }
+// and rendered via simple {{variable}} substitution. When no override exists,
+// the hard-coded code templates below are used (preserving all default wording
+// and conditional logic).
+
+let _cachedTemplates = null;
+let _templatesTs = 0;
+
+const getTemplateOverrides = async () => {
+  if (_cachedTemplates && Date.now() - _templatesTs < 60_000) return _cachedTemplates;
+  try {
+    const { rows: [row] } = await query(`SELECT value FROM app_settings WHERE key='email_templates'`);
+    _cachedTemplates = row?.value || {};
+    _templatesTs = Date.now();
+  } catch {
+    _cachedTemplates = {};
+  }
+  return _cachedTemplates;
+};
+
+export const bustTemplatesCache = () => { _cachedTemplates = null; };
+
+/** Replace {{ variable }} placeholders with values from `data` (missing → ''). */
+const substitute = (str, data = {}) =>
+  String(str ?? '').replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key) => {
+    const v = data[key];
+    return v === undefined || v === null ? '' : String(v);
+  });
+
+/**
+ * Render a template by key.
+ * 1. If an admin override exists → render override subject/body via substitution,
+ *    wrapped in the shared base() layout.
+ * 2. Otherwise call `fallback(data)` if provided, else the code template.
+ * Returns { subject, html } or null when nothing can render the key.
+ */
+export const renderTemplate = async (key, data = {}, fallback = null) => {
+  const overrides = await getTemplateOverrides();
+  const ov = overrides[key];
+  if (ov && (ov.subject || ov.body)) {
+    return {
+      subject: substitute(ov.subject || '', data),
+      html: base(substitute(ov.body || '', data), data.courseName),
+    };
+  }
+  if (typeof fallback === 'function') return fallback(data);
+  const tpl = templates[key];
+  if (tpl) return tpl(data);
+  return null;
+};
+
+/**
+ * Render arbitrary (unsaved) subject/body for the live preview in the editor.
+ * Wraps the body in the shared base() layout exactly like a sent email.
+ */
+export const renderPreview = ({ subject, body, data = {}, courseName } = {}) => ({
+  subject: substitute(subject || '', data),
+  html: base(substitute(body || '', data), courseName || data.courseName),
+});
+
 /**
  * Resolve the sender for a given course.
  * course.preferences.email.{senderName,senderEmail} (set in Course Settings UI)
@@ -443,8 +505,14 @@ const templates = {
 export const sendLoginCredentials = async ({ user, password, courseId = null, portalLabel = 'Scholar Portal' }) => {
   const sender = await getCourseSender(courseId);
   const loginUrl = `${env.FRONTEND_URL}/login`;
-  const subject = `Your ${portalLabel} Login Credentials — DY Patil`;
-  const html = base(`
+
+  // Override-aware render: admin edits win, otherwise this inline fallback.
+  const { subject, html } = await renderTemplate(
+    'login_credentials',
+    { firstName: user.first_name, portalLabel, loginUrl, username: user.email, password },
+    () => ({
+      subject: `Your ${portalLabel} Login Credentials — DY Patil`,
+      html: base(`
     <h2>Welcome to the ${portalLabel}</h2>
     <p>Dear ${user.first_name},</p>
     <p>Your account is ready. Use the credentials below to log in.</p>
@@ -457,7 +525,9 @@ export const sendLoginCredentials = async ({ user, password, courseId = null, po
     <a href="${loginUrl}" class="cta">Log In →</a>
     <p><strong>Important:</strong> Please change your password from your Profile page after your first login.</p>
     <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
-  `);
+  `),
+    })
+  );
   const text = [
     `Your ${portalLabel} login credentials`,
     '',
@@ -489,7 +559,7 @@ export const sendTestCredentials = async ({
 }) => {
   const sectionStr = sections?.map((s) => s.title || s).join(', ') || null;
   const sender = await getCourseSender(courseId);
-  const { subject, html } = templates.test_credentials({
+  const { subject, html } = await renderTemplate('test_credentials', {
     firstName: applicant.first_name,
     testTitle: test.title,
     username,
@@ -569,16 +639,15 @@ export const sendNotificationEmail = async (eventKey, recipient, data = {}, cour
     // data._template lets one event use audience-specific wording
     // (e.g. test_completed → candidate copy vs. staff copy)
     const templateKey = data._template || eventKey;
-    const template = templates[templateKey];
-    if (!template) {
-      console.warn(`[email] No template for event "${templateKey}"`);
-      return { success: false, error: `No template: ${templateKey}` };
-    }
-
-    const { subject, html } = template({
+    const rendered = await renderTemplate(templateKey, {
       firstName: recipient.first_name || 'Student',
       ...data,
     });
+    if (!rendered) {
+      console.warn(`[email] No template for event "${templateKey}"`);
+      return { success: false, error: `No template: ${templateKey}` };
+    }
+    const { subject, html } = rendered;
 
     return await sendEmail({
       to: { email: recipient.email, name: `${recipient.first_name || ''} ${recipient.last_name || ''}`.trim() },

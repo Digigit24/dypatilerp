@@ -1,4 +1,4 @@
-import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, Search, Settings, Shield, Sun, UserCog, Users, Wand2 } from 'lucide-react'
+import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, Search, Settings, Shield, Sun, UserCog, Users, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -92,6 +92,7 @@ export default function AdminLayout() {
         { to: '/admin/users',      label: 'Users',               icon: Users },
         { to: '/admin/roles',      label: 'Roles & Permissions', icon: Shield },
         { to: '/admin/audit-logs', label: 'Audit Logs',          icon: Activity },
+        { to: '/admin/email-templates', label: 'Email Templates', icon: Mail },
         { to: '/admin/settings',   label: 'Settings',            icon: Settings },
       ],
     }] : []),

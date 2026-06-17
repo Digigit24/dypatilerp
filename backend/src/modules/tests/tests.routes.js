@@ -399,28 +399,57 @@ router.get('/:id/my-attempt', authenticate, asyncHandler(async (req, res) => {
   ok(res, { ...attempt, responses });
 }));
 
+// ── Batch-save responses in a SINGLE round-trip ─────────────────────────────────
+// The Neon driver issues one network round-trip per query(), so the previous
+// per-response loop meant ~100 round-trips per autosave/submit (15-60s under load,
+// causing request pile-up, pool exhaustion and "No active attempt found" races).
+// One multi-row upsert collapses that to a single round-trip.
+//
+// Responses are deduped by question_id (last value wins) because ON CONFLICT
+// DO UPDATE cannot touch the same row twice in one statement.
+const saveResponsesBatch = async (attemptId, responses) => {
+  const deduped = new Map();
+  for (const r of responses || []) {
+    if (!r || !r.question_id) continue;
+    deduped.set(r.question_id, r.selected_option ?? null);
+  }
+  if (deduped.size === 0) return 0;
+
+  const valuesSql = [];
+  const params = [];
+  let i = 1;
+  for (const [questionId, selectedOption] of deduped) {
+    valuesSql.push(`($${i++}, $${i++}, $${i++}::jsonb)`);
+    params.push(attemptId, questionId, JSON.stringify({ selected_option: selectedOption }));
+  }
+
+  await query(
+    `INSERT INTO test_responses (attempt_id, question_id, response_data)
+     VALUES ${valuesSql.join(', ')}
+     ON CONFLICT (attempt_id, question_id)
+     DO UPDATE SET response_data = EXCLUDED.response_data`,
+    params
+  );
+  return deduped.size;
+};
+
 // ── Autosave responses ─────────────────────────────────────────────────────────
 router.patch('/:id/autosave', authenticate, asyncHandler(async (req, res) => {
   const { rows: [attempt] } = await query(
-    `SELECT * FROM test_attempts WHERE test_id=$1 AND user_id=$2 AND status='in_progress'`,
+    `SELECT id, status FROM test_attempts WHERE test_id=$1 AND user_id=$2`,
     [req.params.id, req.user.id]
   );
-  if (!attempt) return badRequest(res, 'No active attempt found');
 
-  const responses = req.body.responses || [];
-  let saved = 0;
-  for (const r of responses) {
-    if (!r.question_id) continue;
-    await query(
-      `INSERT INTO test_responses (attempt_id, question_id, response_data)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (attempt_id, question_id)
-       DO UPDATE SET response_data = EXCLUDED.response_data`,
-      [attempt.id, r.question_id, JSON.stringify({ selected_option: r.selected_option })]
-    );
-    saved++;
+  // Forgiving by design — autosave must NEVER throw a hard error at a student
+  // who is mid-exam. If the attempt is already submitted (or a stale duplicate
+  // request lands after submit), respond with a soft no-op success instead of
+  // the old 400 "No active attempt found".
+  if (!attempt) return ok(res, { saved_count: 0, skipped: 'no_attempt' }, 'No active attempt');
+  if (attempt.status !== 'in_progress') {
+    return ok(res, { saved_count: 0, skipped: 'submitted' }, 'Attempt already submitted');
   }
 
+  const saved = await saveResponsesBatch(attempt.id, req.body.responses);
   await query('UPDATE test_attempts SET last_saved_at=NOW() WHERE id=$1', [attempt.id]);
   ok(res, { saved_count: saved, last_saved_at: new Date() });
 }));
@@ -428,22 +457,27 @@ router.patch('/:id/autosave', authenticate, asyncHandler(async (req, res) => {
 // ── Submit test (with MCQ auto-scoring) ───────────────────────────────────────
 router.post('/:id/submit', authenticate, asyncHandler(async (req, res) => {
   const { rows: [attempt] } = await query(
-    `SELECT * FROM test_attempts WHERE test_id=$1 AND user_id=$2 AND status='in_progress'`,
+    `SELECT * FROM test_attempts WHERE test_id=$1 AND user_id=$2`,
     [req.params.id, req.user.id]
   );
   if (!attempt) return badRequest(res, 'No active attempt found');
 
-  // Save all final responses
-  for (const r of (req.body.responses || [])) {
-    if (!r.question_id) continue;
-    await query(
-      `INSERT INTO test_responses (attempt_id, question_id, response_data)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (attempt_id, question_id)
-       DO UPDATE SET response_data = EXCLUDED.response_data`,
-      [attempt.id, r.question_id, JSON.stringify({ selected_option: r.selected_option })]
-    );
+  // Idempotent submit — if the attempt is already submitted (duplicate click,
+  // overlapping/retried request, or a network retry after a successful submit),
+  // return the stored result as SUCCESS instead of a scary 400. This is the
+  // direct fix for students who saw "No active attempt found" even though their
+  // test had actually been recorded.
+  if (attempt.status !== 'in_progress') {
+    return ok(res, {
+      attempt_id: attempt.id,
+      score: attempt.score,
+      time_taken_secs: attempt.time_taken_secs,
+      already_submitted: true,
+    }, 'Test already submitted');
   }
+
+  // Save all final responses in a SINGLE round-trip (see saveResponsesBatch).
+  await saveResponsesBatch(attempt.id, req.body.responses);
 
   // ── Auto-score MCQ questions ──
   const { rows: questions } = await query(
@@ -460,6 +494,7 @@ router.post('/:id/submit', authenticate, asyncHandler(async (req, res) => {
     ? new Set(attempt.question_set) : null;
 
   let totalScore = 0;
+  const scoreUpdates = []; // { id, award }
   for (const q of questions) {
     if (allowedSet && !allowedSet.has(q.id)) continue;
     if (q.question_type !== 'mcq') continue;
@@ -469,9 +504,24 @@ router.post('/:id/submit', authenticate, asyncHandler(async (req, res) => {
     const given   = resp.response_data?.selected_option;
     const award   = (correct && given && correct === given) ? (q.marks || 1) : 0;
     totalScore += award;
+    scoreUpdates.push({ id: resp.id, award });
+  }
+
+  // Write all marks_awarded in a SINGLE set-based UPDATE (was ~N round-trips).
+  if (scoreUpdates.length) {
+    const valuesSql = [];
+    const params = [];
+    let i = 1;
+    for (const u of scoreUpdates) {
+      valuesSql.push(`($${i++}::uuid, $${i++}::int)`);
+      params.push(u.id, u.award);
+    }
     await query(
-      'UPDATE test_responses SET marks_awarded=$1 WHERE id=$2',
-      [award, resp.id]
+      `UPDATE test_responses AS tr
+         SET marks_awarded = v.award
+       FROM (VALUES ${valuesSql.join(', ')}) AS v(id, award)
+       WHERE tr.id = v.id`,
+      params
     );
   }
 

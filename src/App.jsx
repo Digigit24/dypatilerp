@@ -17,6 +17,7 @@ import AdminNotificationsPage from './pages/admin/NotificationsPage.jsx'
 import AdminProgressReportsPage from './pages/admin/ProgressReportsPage.jsx'
 import RolesPage from './pages/admin/RolesPage.jsx'
 import SettingsPage from './pages/admin/SettingsPage.jsx'
+import EmailTemplatesPage from './pages/admin/EmailTemplatesPage.jsx'
 import StudentProfilePage from './pages/admin/StudentProfilePage.jsx'
 import StudentsPage from './pages/admin/StudentsPage.jsx'
 import TestBuilderPage from './pages/admin/TestBuilderPage.jsx'
@@ -139,6 +140,7 @@ export default function App() {
           <Route path="team" element={<Navigate to="/admin/wizard" replace />} />
           <Route path="audit-logs" element={<AuditLogsPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="email-templates" element={<EmailTemplatesPage />} />
         </Route>
       </Routes>
     </div>

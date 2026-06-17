@@ -47,6 +47,9 @@ export default function TestPage() {
   const [submitting, setSubmitting] = useState(false)
   const [offline, setOffline] = useState(false)
   const [lastSaved, setLastSaved] = useState(null)
+  const [saveError, setSaveError] = useState(false)
+  const savingRef = useRef(false)   // guards against overlapping autosaves
+  const submitLockRef = useRef(false) // guards against double-submit
   const [activeSectionIdx, setActiveSectionIdx] = useState(0)
   const [activeQIdx, setActiveQIdx] = useState(0)
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false)
@@ -116,15 +119,23 @@ export default function TestPage() {
   // ── autosave every 30s ────────────────────────────────────────────────────
   const doAutosave = useCallback(async () => {
     if (!testId || offline || submitted) return
+    if (savingRef.current) return // a previous save is still running — don't pile up
     const responses = Object.entries(answersRef.current).map(([qId, opt]) => ({
       question_id: qId,
       selected_option: opt,
     }))
     if (!responses.length) return
+    savingRef.current = true
     try {
       await autosaveResponses(testId, responses)
       setLastSaved(new Date())
-    } catch { /* silent */ }
+      setSaveError(false)
+    } catch {
+      // Surface the problem instead of failing silently, but never interrupt the exam.
+      setSaveError(true)
+    } finally {
+      savingRef.current = false
+    }
   }, [testId, offline, submitted])
 
   useEffect(() => {
@@ -134,6 +145,8 @@ export default function TestPage() {
 
   // ── submit ────────────────────────────────────────────────────────────────
   const handleSubmit = async (auto = false) => {
+    if (submitLockRef.current) return // ignore duplicate clicks / overlapping calls
+    submitLockRef.current = true
     setSubmitting(true)
     const responses = Object.entries(answersRef.current).map(([qId, opt]) => ({
       question_id: qId,
@@ -144,8 +157,19 @@ export default function TestPage() {
       setSubmitted(true)
       clear()
     } catch (e) {
-      if (!auto) alert(e?.response?.data?.message || 'Submit failed.')
+      // The submit may have already succeeded on an earlier/overlapping request.
+      // Re-check the attempt before alarming the student.
+      try {
+        const { data: a } = await getMyAttempt(testId)
+        if (a && a.status === 'submitted') {
+          setSubmitted(true)
+          clear()
+          return
+        }
+      } catch { /* ignore — fall through to the error path */ }
+      if (!auto) alert(e?.response?.data?.message || 'Submit failed. Please try again.')
     } finally {
+      submitLockRef.current = false
       setSubmitting(false)
       setShowSubmitConfirm(false)
     }
@@ -216,7 +240,12 @@ export default function TestPage() {
             <WifiOff size={13} /> Offline
           </span>
         )}
-        {lastSaved && !offline && (
+        {saveError && !offline && (
+          <span className="hidden text-xs font-semibold text-amber-600 sm:block">
+            Couldn’t save — retrying…
+          </span>
+        )}
+        {lastSaved && !saveError && !offline && (
           <span className="hidden text-xs text-[color:var(--secondary)] sm:block">
             Saved {lastSaved.toLocaleTimeString()}
           </span>

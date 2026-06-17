@@ -33,6 +33,7 @@ import assignmentRoutes from './modules/assignments/assignments.routes.js';
 import auditLogRoutes from './modules/audit-logs/audit-logs.routes.js';
 import settingsRoutes from './modules/settings/settings.routes.js';
 import emailRoutes from './modules/email/email.routes.js';
+import emailTemplateRoutes from './modules/email/email-templates.routes.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -119,6 +120,7 @@ app.use('/api/assignments', assignmentRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/settings',   settingsRoutes);
 app.use('/api/email',      emailRoutes);
+app.use('/api/email-templates', emailTemplateRoutes);
 
 // 404 + global error handler
 app.use(notFoundHandler);
