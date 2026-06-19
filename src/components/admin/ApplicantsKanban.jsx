@@ -159,7 +159,21 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onSendTest, onReset, 
   return (
     <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-2.5 transition hover:border-[color:var(--accent)] hover:shadow-sm">
       <button onClick={onOpen} className="block w-full text-left">
-        <p className="truncate text-[13px] font-semibold text-[color:var(--text)]">{name}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="truncate text-[13px] font-semibold text-[color:var(--text)]">{name}</p>
+          {a.test_in_progress && (
+            <span
+              title="Currently taking the test"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-700"
+            >
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              </span>
+              Live
+            </span>
+          )}
+        </div>
         <p className="truncate text-[11px] text-[color:var(--secondary)]">{a.personal?.email || a.email}</p>
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           <span className="text-[10px] text-[color:var(--muted)]">{formatDate(a.applied_at)}</span>
@@ -205,6 +219,9 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onSendTest, onReset, 
             <Btn primary onClick={() => onAct(a, 'shortlisted', `${name} moved to final shortlist.`)}>
               <ArrowRight size={11} /> Final Shortlist
             </Btn>
+            <Btn onClick={onReset} title="Reset answers & email a fresh test link (for accidental submissions)">
+              <RefreshCw size={11} /> Reset &amp; Resend
+            </Btn>
             <RejectBtn onClick={() => onAct(a, 'rejected')} />
           </>
         )}
@@ -223,10 +240,11 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onSendTest, onReset, 
   )
 }
 
-function Btn({ primary, onClick, children }) {
+function Btn({ primary, onClick, children, title }) {
   return (
     <button
       onClick={onClick}
+      title={title}
       className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10.5px] font-bold transition ${
         primary
           ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white'

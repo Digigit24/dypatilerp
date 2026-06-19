@@ -230,6 +230,16 @@ export default function ApplicantsPage() {
   }
   useEffect(() => { loadApplicants() }, [currentCourse?.id])
 
+  // Silent background refresh so the "Live" test indicator stays current on the
+  // pipeline board — no spinner, no drawer reset. Only polls on the Kanban view.
+  useEffect(() => {
+    if (view !== 'kanban') return
+    const id = setInterval(() => {
+      getApplicants({ limit: 100 }).then((r) => setItems(r.data)).catch(() => {})
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [view, currentCourse?.id])
+
   // ── Excel export (course-filtered, honours the status filter) ──────────────
   const handleExport = async () => {
     setExporting(true)

@@ -51,7 +51,10 @@ export const listApplicants = async ({ course_id, batch_id, status, search, limi
             ta.submitted_at   AS test_submitted_at,
             ta.time_taken_secs AS test_time_taken_secs,
             t.total_marks     AS test_max_score,
-            t.passing_marks   AS test_passing_marks
+            t.passing_marks   AS test_passing_marks,
+            la.live_started_at    AS live_attempt_started_at,
+            la.live_last_saved_at AS live_attempt_last_saved_at,
+            COALESCE(la.live_is_active, false) AS test_in_progress
      FROM applicants a
      LEFT JOIN batches b ON b.id = a.batch_id
      LEFT JOIN LATERAL (
@@ -61,6 +64,18 @@ export const listApplicants = async ({ course_id, batch_id, status, search, limi
        ORDER BY submitted_at DESC NULLS LAST LIMIT 1
      ) ta ON true
      LEFT JOIN tests t ON t.id = ta.test_id
+     LEFT JOIN LATERAL (
+       -- Live attempt = an in_progress attempt still inside its allowed time window.
+       -- Uses NOW() AT TIME ZONE 'UTC' to match started_at (stored UTC, no tz).
+       SELECT ta2.started_at    AS live_started_at,
+              ta2.last_saved_at AS live_last_saved_at,
+              ((ta2.started_at + (t2.duration_minutes * INTERVAL '1 minute'))
+                 > (NOW() AT TIME ZONE 'UTC')) AS live_is_active
+       FROM test_attempts ta2
+       JOIN tests t2 ON t2.id = ta2.test_id
+       WHERE ta2.applicant_id = a.id AND ta2.status = 'in_progress'
+       ORDER BY ta2.started_at DESC LIMIT 1
+     ) la ON true
      ${where} ORDER BY a.applied_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
     [...params, limit, offset]
   );
@@ -77,7 +92,10 @@ export const getApplicantById = async (id) => {
             ta.score          AS test_score,
             ta.submitted_at   AS test_submitted_at,
             ta.time_taken_secs AS test_time_taken_secs,
-            t.total_marks     AS test_max_score
+            t.total_marks     AS test_max_score,
+            la.live_started_at    AS live_attempt_started_at,
+            la.live_last_saved_at AS live_attempt_last_saved_at,
+            COALESCE(la.live_is_active, false) AS test_in_progress
      FROM applicants a
      LEFT JOIN batches b ON b.id = a.batch_id
      LEFT JOIN LATERAL (
@@ -87,6 +105,16 @@ export const getApplicantById = async (id) => {
        ORDER BY submitted_at DESC NULLS LAST LIMIT 1
      ) ta ON true
      LEFT JOIN tests t ON t.id = ta.test_id
+     LEFT JOIN LATERAL (
+       SELECT ta2.started_at    AS live_started_at,
+              ta2.last_saved_at AS live_last_saved_at,
+              ((ta2.started_at + (t2.duration_minutes * INTERVAL '1 minute'))
+                 > (NOW() AT TIME ZONE 'UTC')) AS live_is_active
+       FROM test_attempts ta2
+       JOIN tests t2 ON t2.id = ta2.test_id
+       WHERE ta2.applicant_id = a.id AND ta2.status = 'in_progress'
+       ORDER BY ta2.started_at DESC LIMIT 1
+     ) la ON true
      WHERE a.id=$1`, [id]
   );
   return rows[0] ? normalizeApplicant(rows[0]) : null;
