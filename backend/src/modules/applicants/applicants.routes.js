@@ -70,6 +70,53 @@ router.get('/export', authenticate, requirePermission('applicants', 'read'), asy
 
 /**
  * @swagger
+ * /applicants/stats:
+ *   get:
+ *     tags: [Applicants]
+ *     summary: Course+batch scoped applicant counts (single source of truth for the UI)
+ *     description: Returns total, per-status counts, tests_completed and avg_score. Honors X-Course-Id / X-Batch-Id.
+ */
+router.get('/stats', authenticate, requirePermission('applicants', 'read'), asyncHandler(async (req, res) => {
+  const course_id = req.courseId || req.query.course_id || null;
+  const batch_id  = req.batchId  || req.query.batch_id  || null;
+
+  const params = [];
+  const conds  = [];
+  if (course_id) { params.push(course_id); conds.push(`a.course_id = $${params.length}`); }
+  if (batch_id)  { params.push(batch_id);  conds.push(`a.batch_id = $${params.length}`); }
+  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+
+  const [byStatus, testAgg] = await Promise.all([
+    query(`SELECT status, COUNT(*)::int AS count FROM applicants a ${where} GROUP BY status`, params),
+    query(
+      `SELECT COUNT(*) FILTER (WHERE sub.submitted_at IS NOT NULL)::int AS tests_completed,
+              ROUND(AVG(sub.score)::numeric, 0) AS avg_score
+       FROM applicants a
+       LEFT JOIN LATERAL (
+         SELECT score, submitted_at FROM test_attempts
+         WHERE applicant_id = a.id AND status = 'submitted'
+         ORDER BY submitted_at DESC NULLS LAST LIMIT 1
+       ) sub ON true
+       ${where}`, params
+    ),
+  ]);
+
+  const by_status = Object.fromEntries(byStatus.rows.map((r) => [r.status, r.count]));
+  const total = byStatus.rows.reduce((s, r) => s + r.count, 0);
+
+  ok(res, {
+    course_id,
+    batch_id,
+    total,
+    by_status,
+    pending_test: by_status.test_pending || 0,
+    tests_completed: testAgg.rows[0]?.tests_completed || 0,
+    avg_score: testAgg.rows[0]?.avg_score != null ? Number(testAgg.rows[0].avg_score) : null,
+  });
+}));
+
+/**
+ * @swagger
  * /applicants/import:
  *   post:
  *     tags: [Applicants]

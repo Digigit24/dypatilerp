@@ -88,11 +88,12 @@ router.get('/admin', requirePermission('dashboard_admin', 'read'), asyncHandler(
       `SELECT COUNT(*)::int AS total,
               COUNT(*) FILTER (WHERE status = 'published')::int AS published
        FROM tests WHERE 1=1 ${courseCond}`, params),
-    // Test attempts
+    // Test attempts — scoped by the applicant's course/batch so the KPI matches
+    // the selected batch (applicants carry batch_id; tests are course-level).
     query(
       `SELECT COUNT(*)::int AS submitted, ROUND(AVG(ta.score)::numeric, 1) AS avg_score
-       FROM test_attempts ta JOIN tests t ON t.id = ta.test_id
-       WHERE ta.status = 'submitted' ${courseId ? "AND t.course_id = $1" : ''}`, params),
+       FROM test_attempts ta JOIN applicants a ON a.id = ta.applicant_id
+       WHERE ta.status = 'submitted' ${courseId ? "AND a.course_id = $1" : ''} ${batchCondPlain}`, params),
     // Assignments
     query(
       `SELECT COUNT(*)::int AS total,

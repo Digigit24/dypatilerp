@@ -43,7 +43,7 @@ const timeAgo = (d) => {
   return `${Math.floor(s / 86400)}d ago`
 }
 
-export default function ApplicantsKanban({ items, courseId, batches, onSelect, onChanged }) {
+export default function ApplicantsKanban({ items, courseId, batches, statusCounts, onSelect, onChanged }) {
   const addToast = useUiStore((s) => s.addToast)
   const labels = useLabels()
   const [busyId, setBusyId] = useState(null)
@@ -113,7 +113,7 @@ export default function ApplicantsKanban({ items, courseId, batches, onSelect, o
               <div className="mb-2 flex items-center gap-2 px-1.5">
                 <span className={`h-2 w-2 rounded-full ${col.dot}`} />
                 <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--secondary)]">{col.title}</p>
-                <span className="ml-auto rounded-full bg-[color:var(--card)] px-2 py-0.5 text-[10px] font-bold text-[color:var(--muted)]">{cards.length}</span>
+                <span className="ml-auto rounded-full bg-[color:var(--card)] px-2 py-0.5 text-[10px] font-bold text-[color:var(--muted)]">{statusCounts?.[col.key] ?? cards.length}</span>
               </div>
 
               {/* Bulk reminder for the Test Sent stage — nudges everyone who hasn't started */}

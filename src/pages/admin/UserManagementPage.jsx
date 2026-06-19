@@ -1,6 +1,6 @@
 import { Copy, KeyRound, Loader2 as Spinner, Plus, Search, Shield, ShieldCheck, UserMinus, UserPlus, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { createUser, deleteUser, getUsers, resetUserPassword, updateUser } from '../../api/services/userService.js'
+import { createUser, deleteUser, getUsers, resetUserPassword, sendCredentials, updateUser } from '../../api/services/userService.js'
 import { assignUserRole } from '../../api/services/rolesService.js'
 import { getCourses } from '../../api/services/courseService.js'
 import { getBatches } from '../../api/services/batchService.js'
@@ -13,7 +13,7 @@ import { roleLabel } from '../../lib/utils.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 const ROLES = ['admin', 'coordinator', 'academic_guide', 'industry_mentor', 'student']
-const BLANK_USER = { first_name: '', last_name: '', email: '', password: '', role: 'coordinator', is_active: true }
+const BLANK_USER = { first_name: '', last_name: '', email: '', password: '', role: 'coordinator', is_active: true, email_credentials: true }
 const BLANK_ROLE  = { role_name: 'coordinator', course_id: '', batch_id: '' }
 
 const parseRoles = (raw) => {
@@ -80,8 +80,19 @@ export default function UserManagementPage() {
     e.preventDefault()
     setSaving(true)
     try {
-      await createUser({ ...form })
-      addToast({ type: 'success', title: `${form.first_name} ${form.last_name} added.` })
+      const { email_credentials, ...payload } = form
+      const created = await createUser(payload)
+      // Optionally email fresh login credentials (rotates to a secure password).
+      if (email_credentials && created?.data?.id) {
+        try {
+          const r = await sendCredentials(created.data.id)
+          addToast({ type: r.data?.email_sent ? 'success' : 'warning', title: `${form.first_name} added.`, message: r.data?.email_sent ? 'Login credentials emailed.' : 'User created, but the credential email could not be sent.' })
+        } catch {
+          addToast({ type: 'warning', title: `${form.first_name} added.`, message: 'User created, but the credential email could not be sent.' })
+        }
+      } else {
+        addToast({ type: 'success', title: `${form.first_name} ${form.last_name} added.` })
+      }
       setAddOpen(false)
       load()
     } catch (err) {
@@ -272,6 +283,16 @@ export default function UserManagementPage() {
                   <button type="button" onClick={() => setForm((p) => ({ ...p, is_active: !p.is_active }))}
                     className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${form.is_active ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}>
                     <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${form.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+                  <div>
+                    <p className="text-sm font-semibold text-[color:var(--text)]">Email login credentials</p>
+                    <p className="mt-0.5 text-xs text-[color:var(--secondary)]">Send the user a secure password &amp; login link after creating</p>
+                  </div>
+                  <button type="button" onClick={() => setForm((p) => ({ ...p, email_credentials: !p.email_credentials }))}
+                    className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${form.email_credentials ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}>
+                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${form.email_credentials ? 'translate-x-5' : 'translate-x-0.5'}`} />
                   </button>
                 </div>
               </div>

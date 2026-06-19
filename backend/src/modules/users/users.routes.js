@@ -173,6 +173,16 @@ router.get('/', requirePermission('users', 'read'), asyncHandler(async (req, res
   if (req.query.role) {
     params.push(req.query.role);
     conds.push(`EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=u.id AND r.name=$${params.length})`);
+  } else if (req.query.include_all !== 'true') {
+    // Default view = staff only. Exclude users whose roles are only student/applicant.
+    // Role-less accounts (rare staff records) are kept so they remain manageable.
+    conds.push(`(
+      NOT EXISTS (SELECT 1 FROM user_roles ur0 WHERE ur0.user_id = u.id)
+      OR EXISTS (
+        SELECT 1 FROM user_roles ur2 JOIN roles r2 ON r2.id = ur2.role_id
+        WHERE ur2.user_id = u.id AND r2.name NOT IN ('student', 'applicant')
+      )
+    )`);
   }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
   const { rows: data } = await query(

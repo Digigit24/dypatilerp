@@ -5,7 +5,7 @@ import {
 import * as XLSX from 'xlsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createApplicant, exportApplicants, getApplicants, shortlistApplicant, updateApplicantDetails, updateApplicantStatus } from '../../api/services/applicantService.js'
+import { createApplicant, exportApplicants, getApplicants, getApplicantStats, shortlistApplicant, updateApplicantDetails, updateApplicantStatus } from '../../api/services/applicantService.js'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
 import { buildApplicantImportConfig } from '../../components/admin/applicantImportConfig.js'
 import ApplicantsKanban from '../../components/admin/ApplicantsKanban.jsx'
@@ -23,6 +23,14 @@ const statusTabs = ['all', 'submitted', 'shortlisted_test', 'test_pending', 'tes
 
 // Applicants load infinitely in pages of this size (both list & pipeline views).
 const PAGE_SIZE = 100
+
+// Merge pages without ever duplicating a row (guards against double-fired loads).
+const dedupeById = (rows) => {
+  const seen = new Set()
+  const out = []
+  for (const r of rows) { if (r && !seen.has(r.id)) { seen.add(r.id); out.push(r) } }
+  return out
+}
 
 // Ordered stages for the pipeline indicator (rejected is a side-branch)
 const PIPELINE = ['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'enrolled']
@@ -201,8 +209,11 @@ export default function ApplicantsPage() {
 
   const [items,    setItems]    = useState(null)
   const [total,    setTotal]    = useState(0)         // real total from API meta
+  const [statCounts, setStatCounts] = useState(null)   // backend counts (source of truth)
   const [loadingMore, setLoadingMore] = useState(false)
   const loadedRef  = useRef(0)                         // current loaded count (for polling)
+  const inFlightRef = useRef(false)                    // synchronous guard against double load-more
+  const requestedRef = useRef(new Set())               // offsets already requested (no duplicate calls)
   const sentinelRef = useRef(null)
   const [courses,  setCourses]  = useState([])
   const [batches,  setBatches]  = useState([])   // all batches cache
@@ -223,14 +234,27 @@ export default function ApplicantsPage() {
   const addToast = useUiStore((s) => s.addToast)
   useScrollLock(Boolean(selected || addOpen || showImport))
 
-  // Re-fetch when active course changes; X-Course-Id header is added automatically
+  // Refresh the backend counts (course+batch scoped) — source of truth for cards & columns.
+  const refreshStats = () => { getApplicantStats().then((r) => setStatCounts(r.data)).catch(() => {}) }
+
+  // The pipeline (kanban) needs every card so column counts match what's shown,
+  // so it loads the whole (course+batch scoped) set in one request. The list view
+  // pages in 100s with infinite scroll.
+  const KANBAN_LIMIT = 1000
+  const firstLimit = view === 'kanban' ? KANBAN_LIMIT : PAGE_SIZE
+
+  // Re-fetch when active course/batch (or view) changes; X-Course-Id / X-Batch-Id headers are automatic.
   const loadApplicants = () => {
     setItems(null)
     setSelected(null)
-    Promise.all([getApplicants({ limit: PAGE_SIZE, offset: 0 }), getCourses()]).then(([r, c]) => {
-      setItems(r.data)
-      setTotal(r.total ?? r.data.length)
-      loadedRef.current = r.data.length
+    inFlightRef.current = false
+    requestedRef.current = new Set([0])
+    refreshStats()
+    Promise.all([getApplicants({ limit: firstLimit, offset: 0 }), getCourses()]).then(([r, c]) => {
+      const data = dedupeById(r.data)
+      setItems(data)
+      setTotal(r.total ?? data.length)
+      loadedRef.current = data.length
       setCourses(c.data || [])
     })
     if (currentCourse?.id) {
@@ -238,52 +262,59 @@ export default function ApplicantsPage() {
     }
   }
 
-  // Append the next page of 100 (infinite scroll / "Load more")
+  // Append the next page of 100 (list view only). Guards: inFlightRef (no concurrent
+  // call) + requestedRef (each offset fetched at most once → no repeated API calls).
   const loadMore = () => {
-    if (loadingMore || !items || items.length >= total) return
+    if (inFlightRef.current || !items || items.length >= total) return
+    const offset = loadedRef.current
+    if (requestedRef.current.has(offset)) return
+    requestedRef.current.add(offset)
+    inFlightRef.current = true
     setLoadingMore(true)
-    getApplicants({ limit: PAGE_SIZE, offset: items.length })
+    getApplicants({ limit: PAGE_SIZE, offset })
       .then((r) => {
         setItems((xs) => {
-          const merged = [...(xs || []), ...r.data]
+          const merged = dedupeById([...(xs || []), ...r.data])
           loadedRef.current = merged.length
           return merged
         })
         setTotal((t) => r.total ?? t)
       })
       .catch(() => {})
-      .finally(() => setLoadingMore(false))
+      .finally(() => { inFlightRef.current = false; setLoadingMore(false) })
   }
-  // Refetch on course OR batch change — the X-Batch-Id header (attached
-  // automatically) scopes the list to the batch selected in the app header.
-  useEffect(() => { loadApplicants() }, [currentCourse?.id, currentBatch?.id])
+
+  // Refetch on course / batch / view change.
+  useEffect(() => { loadApplicants() }, [currentCourse?.id, currentBatch?.id, view]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Silent background refresh so the "Live" test indicator stays current on the
-  // pipeline board — no spinner, no drawer reset. Only polls on the Kanban view.
+  // pipeline board — refreshes counts and the full board, only on the Kanban view.
   useEffect(() => {
     if (view !== 'kanban') return
     const id = setInterval(() => {
-      // Refetch however many pages are currently loaded so appended pages aren't lost.
-      const count = Math.max(PAGE_SIZE, loadedRef.current || PAGE_SIZE)
-      getApplicants({ limit: count, offset: 0 }).then((r) => {
-        setItems(r.data)
-        setTotal(r.total ?? r.data.length)
-        loadedRef.current = r.data.length
+      getApplicants({ limit: KANBAN_LIMIT, offset: 0 }).then((r) => {
+        const data = dedupeById(r.data)
+        setItems(data)
+        setTotal(r.total ?? data.length)
+        loadedRef.current = data.length
       }).catch(() => {})
+      refreshStats()
     }, 30_000)
     return () => clearInterval(id)
-  }, [view, currentCourse?.id, currentBatch?.id])
+  }, [view, currentCourse?.id, currentBatch?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Infinite scroll — load the next page when the sentinel scrolls into view.
+  // Infinite scroll — list view only. Reconnects when the loaded count changes
+  // (not on every render), and the per-offset guard prevents repeat calls.
   useEffect(() => {
+    if (view !== 'list') return
     const el = sentinelRef.current
     if (!el) return
     const obs = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) loadMore()
-    }, { rootMargin: '300px' })
+    }, { rootMargin: '200px' })
     obs.observe(el)
     return () => obs.disconnect()
-  }, [items, total, loadingMore]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, items?.length, total]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Excel export (course-filtered, honours the status filter) ──────────────
   const handleExport = async () => {
@@ -474,12 +505,14 @@ export default function ApplicantsPage() {
     onChange: (e) => setForm((f) => ({ ...f, [key]: e.target.value })),
   })
 
+  // Counts come from the backend (course+batch scoped) so they're always correct,
+  // regardless of how many pages are currently loaded into the board.
   const stats = [
-    { label: 'Total Applications', value: total || items.length,                                     hint: `${items.length} loaded`, icon: UserPlus,     tone: 'rose'  },
-    { label: 'Tests Completed',    value: items.filter((a) => a.test_score).length,                  hint: 'Ready for review',  icon: CheckCircle2, tone: 'green' },
-    { label: 'Pending Test',       value: items.filter((a) => a.status === 'test_pending').length,   hint: 'Needs follow-up',   icon: Clock3,       tone: 'amber' },
-    { label: 'Avg. Test Score',    value: (() => { const s = items.filter((a) => a.test_score); return s.length ? `${Math.round(s.reduce((t, a) => t + a.test_score, 0) / s.length)}%` : '—' })(),
-                                                                                                      hint: '+8% this cycle',    icon: Award,        tone: 'blue'  },
+    { label: 'Total Applications', value: statCounts?.total ?? total ?? items.length,                 hint: `${items.length} loaded`, icon: UserPlus,     tone: 'rose'  },
+    { label: 'Tests Completed',    value: statCounts?.tests_completed ?? items.filter((a) => a.test_score).length, hint: 'Ready for review', icon: CheckCircle2, tone: 'green' },
+    { label: 'Pending Test',       value: statCounts?.pending_test ?? items.filter((a) => a.status === 'test_pending').length, hint: 'Needs follow-up', icon: Clock3, tone: 'amber' },
+    { label: 'Avg. Test Score',    value: statCounts?.avg_score != null ? `${statCounts.avg_score}%` : (() => { const s = items.filter((a) => a.test_score); return s.length ? `${Math.round(s.reduce((t, a) => t + a.test_score, 0) / s.length)}%` : '—' })(),
+                                                                                                      hint: 'batch average',     icon: Award,        tone: 'blue'  },
   ]
 
   return (
@@ -569,6 +602,7 @@ export default function ApplicantsPage() {
           items={filtered}
           courseId={currentCourse?.id}
           batches={batches}
+          statusCounts={statCounts?.by_status}
           onSelect={(a) => setSelected(a)}
           onChanged={loadApplicants}
         />
@@ -647,8 +681,8 @@ export default function ApplicantsPage() {
       </div>
       )}
 
-      {/* ── Infinite-scroll sentinel + Load more (both views) ── */}
-      {items.length < total && (
+      {/* ── Infinite-scroll sentinel + Load more (list view; kanban loads all) ── */}
+      {view === 'list' && items.length < total && (
         <div ref={sentinelRef} className="mt-4 flex justify-center">
           <button
             onClick={loadMore}

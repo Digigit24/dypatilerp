@@ -29,11 +29,15 @@ export const useCourseStore = create((set, get) => {
     currentBatch: saved?.currentBatch || null,
 
     setCourses: (courses) => {
-      const { currentCourse } = get()
+      const { currentCourse, currentBatch } = get()
       const found = currentCourse ? courses.find((c) => c.id === currentCourse.id) : null
       const next = found || courses[0] || null
-      save({ currentCourse: next, currentBatch: null })
-      set({ courses, currentCourse: next, currentBatch: null })
+      // Preserve the active batch when the course hasn't changed (so navigating
+      // routes / reloading keeps the header's batch selection). Only reset the
+      // batch when we actually switch to a different course.
+      const keptBatch = found && next?.id === currentCourse?.id ? currentBatch : null
+      save({ currentCourse: next, currentBatch: keptBatch })
+      set({ courses, currentCourse: next, currentBatch: keptBatch })
     },
 
     setCurrentCourse: (course) => {

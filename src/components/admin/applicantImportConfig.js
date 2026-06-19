@@ -4,13 +4,13 @@
  */
 import { importApplicants } from '../../api/services/applicantService.js'
 
+// Note: Status and Batch are chosen via the wizard-level selectors at the top of
+// the mapping step, so they are intentionally NOT mappable columns here.
 const APPLICANT_FIELDS = [
   { key: 'first_name',          label: 'First Name',          required: true  },
   { key: 'last_name',           label: 'Last Name',           required: true  },
   { key: 'email',               label: 'Email',               required: true  },
   { key: 'phone',               label: 'Phone',               required: false },
-  { key: 'status',              label: 'Status',              required: false },
-  { key: 'batch_code',          label: 'Batch Code',          required: false },
   { key: 'university',          label: 'University',          required: false },
   { key: 'highest_degree',      label: 'Highest Degree',      required: false },
   { key: 'phd_discipline',      label: 'PhD Discipline',      required: false },

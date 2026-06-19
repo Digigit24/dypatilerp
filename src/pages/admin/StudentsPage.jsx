@@ -25,6 +25,14 @@ const TAB_TO_STATUS = { active: 'active', suspended: 'suspended', archived: 'wit
 
 const PAGE_SIZE = 100
 
+// Merge pages without ever duplicating a row (guards against double-fired loads).
+const dedupeBy = (rows, key) => {
+  const seen = new Set()
+  const out = []
+  for (const r of rows) { const k = r?.[key]; if (k != null && !seen.has(k)) { seen.add(k); out.push(r) } }
+  return out
+}
+
 // Active-scholar bulk actions (the Archived tab swaps these for "Restore").
 const BULK_ACTIONS = [
   { key: 'activate', label: 'Activate', color: 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' },
@@ -38,6 +46,8 @@ export default function StudentsPage() {
   const [total,          setTotal]          = useState(0)
   const [loadingMore,    setLoadingMore]    = useState(false)
   const loadedRef        = useRef(0)
+  const inFlightRef      = useRef(false)
+  const requestedRef     = useRef(new Set())
   const sentinelRef      = useRef(null)
   const [users,          setUsers]          = useState([])
   const [selected,       setSelected]       = useState(null)        // row detail drawer
@@ -58,29 +68,38 @@ export default function StudentsPage() {
   // Status filter is applied server-side so paging + counts stay correct.
   const statusParam = () => (statusFilter === 'all' ? {} : { status: TAB_TO_STATUS[statusFilter] })
 
-  const loadStudents = () =>
-    Promise.all([getStudents({ ...statusParam(), limit: PAGE_SIZE, offset: 0 }), getUsers()])
+  const loadStudents = () => {
+    inFlightRef.current = false
+    requestedRef.current = new Set([0])
+    return Promise.all([getStudents({ ...statusParam(), limit: PAGE_SIZE, offset: 0 }), getUsers()])
       .then(([students, userRes]) => {
-        setItems(students.data)
-        setTotal(students.total ?? students.data.length)
-        loadedRef.current = students.data.length
+        const data = dedupeBy(students.data, 'id')
+        setItems(data)
+        setTotal(students.total ?? data.length)
+        loadedRef.current = data.length
         setUsers(userRes.data)
       })
+  }
 
+  // Synchronous in-flight guard prevents a rapid double-trigger appending the same page.
   const loadMore = () => {
-    if (loadingMore || !items || items.length >= total) return
+    if (inFlightRef.current || !items || items.length >= total) return
+    const offset = loadedRef.current
+    if (requestedRef.current.has(offset)) return
+    requestedRef.current.add(offset)
+    inFlightRef.current = true
     setLoadingMore(true)
-    getStudents({ ...statusParam(), limit: PAGE_SIZE, offset: items.length })
+    getStudents({ ...statusParam(), limit: PAGE_SIZE, offset })
       .then((r) => {
         setItems((xs) => {
-          const merged = [...(xs || []), ...r.data]
+          const merged = dedupeBy([...(xs || []), ...r.data], 'id')
           loadedRef.current = merged.length
           return merged
         })
         setTotal((t) => r.total ?? t)
       })
       .catch(() => {})
-      .finally(() => setLoadingMore(false))
+      .finally(() => { inFlightRef.current = false; setLoadingMore(false) })
   }
 
   // Re-fetch when the active course, batch, or status tab changes.
@@ -97,10 +116,10 @@ export default function StudentsPage() {
     if (!el) return
     const obs = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) loadMore()
-    }, { rootMargin: '300px' })
+    }, { rootMargin: '200px' })
     obs.observe(el)
     return () => obs.disconnect()
-  }, [items, total, loadingMore]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items?.length, total]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users])
   const nameOf  = (s) => {

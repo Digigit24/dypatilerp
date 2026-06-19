@@ -66,6 +66,16 @@ export const importApplicants = async (applicants, courseId, opts = {}) => {
   return { data: res.data }
 }
 
+/** Course+batch scoped counts (single source of truth for stat cards & kanban columns) */
+export const getApplicantStats = async () => {
+  if (USE_MOCK) {
+    await delay()
+    return ok({ total: APPLICANTS.length, by_status: {}, pending_test: 0, tests_completed: 0, avg_score: null })
+  }
+  const { data: res } = await http.get('/applicants/stats')
+  return ok(res.data)
+}
+
 /** Fetch ALL applicants for export (course-scoped via header, no pagination cap) */
 export const exportApplicants = async (filters = {}) => {
   if (USE_MOCK) {
