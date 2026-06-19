@@ -11,7 +11,7 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok, badRequest, notFound } from '../../utils/response.js';
 import { query } from '../../config/database.js';
 import { env } from '../../config/env.js';
-import { sendTestCredentials } from '../email/email.service.js';
+import { sendTestCredentials, sendTestReminder } from '../email/email.service.js';
 
 const router = Router({ mergeParams: true });
 
@@ -263,6 +263,53 @@ router.post('/reset', authenticate, requirePermission('tests', 'update'), asyncH
     login_url: loginUrl,
     email_sent,
   }, 'Test attempt reset — new credentials issued');
+}));
+
+/**
+ * POST /tests/:id/assign/remind
+ * Send a "you haven't started/finished your test" reminder. Re-uses each
+ * applicant's EXISTING token & link (no credential rotation), so the password
+ * from their original invite still works.
+ *
+ * Body:
+ *   { applicant_ids: [...] }   → remind these applicants
+ *   { remind_all: true }       → remind everyone with a link who hasn't submitted
+ */
+router.post('/remind', authenticate, requirePermission('tests', 'update'), asyncHandler(async (req, res) => {
+  const testId = req.params.id;
+  const { rows: [test] } = await query('SELECT * FROM tests WHERE id=$1', [testId]);
+  if (!test) return notFound(res, 'Test not found');
+
+  let ids = Array.isArray(req.body.applicant_ids) ? req.body.applicant_ids : [];
+  if (req.body.remind_all) {
+    const { rows } = await query(
+      `SELECT tat.applicant_id
+       FROM test_access_tokens tat
+       LEFT JOIN test_attempts ta ON ta.test_id = tat.test_id AND ta.user_id = tat.user_id
+       WHERE tat.test_id = $1 AND (ta.status IS NULL OR ta.status <> 'submitted')`,
+      [testId]
+    );
+    ids = rows.map((r) => r.applicant_id);
+  }
+  if (!ids.length) return badRequest(res, 'No applicants to remind.');
+
+  let reminded = 0;
+  const errors = [];
+  for (const applicantId of ids) {
+    const { rows: [tok] } = await query(
+      'SELECT * FROM test_access_tokens WHERE test_id=$1 AND applicant_id=$2', [testId, applicantId]
+    );
+    if (!tok) { errors.push({ applicant_id: applicantId, error: 'No test link found' }); continue; }
+    const { rows: [applicant] } = await query('SELECT * FROM applicants WHERE id=$1', [applicantId]);
+    if (!applicant) { errors.push({ applicant_id: applicantId, error: 'Applicant not found' }); continue; }
+
+    const loginUrl = `${env.FRONTEND_URL}/test-login?token=${tok.token}`;
+    const r = await sendTestReminder({ applicant, test, loginUrl, courseId: test.course_id });
+    if (r.success) reminded++;
+    else errors.push({ applicant_id: applicantId, email: applicant.email, error: r.error });
+  }
+
+  ok(res, { reminded, total: ids.length, errors }, `Reminder sent to ${reminded} applicant(s)`);
 }));
 
 /**

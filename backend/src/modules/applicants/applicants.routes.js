@@ -3,8 +3,10 @@ import { authenticate, optionalAuth } from '../../middleware/auth.js';
 import { requirePermission } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { ok } from '../../utils/response.js';
+import { ok, badRequest, notFound } from '../../utils/response.js';
 import { query } from '../../config/database.js';
+import { env } from '../../config/env.js';
+import { sendTestReminder } from '../email/email.service.js';
 import * as svc from './applicants.service.js';
 import * as ctrl from './applicants.controller.js';
 import {
@@ -57,6 +59,7 @@ router.get('/export', authenticate, requirePermission('applicants', 'read'), asy
   const course_id = req.courseId || req.query.course_id;
   const { data } = await svc.listApplicants({
     course_id,
+    batch_id: req.batchId || req.query.batch_id,
     status: req.query.status,
     search: req.query.search,
     limit: 100000,
@@ -79,6 +82,10 @@ router.post('/import', authenticate, requirePermission('applicants', 'create'), 
   const rows = Array.isArray(req.body.applicants) ? req.body.applicants : [];
   const course_id = req.body.course_id || req.courseId;
   const default_batch_id = req.body.default_batch_id || null;
+  // Wizard-level status applied to every row (a mapped per-row "status" wins).
+  const default_status = IMPORT_STATUSES.has((req.body.default_status || '').trim().toLowerCase())
+    ? req.body.default_status.trim().toLowerCase()
+    : 'submitted';
   if (!rows.length) return res.status(400).json({ success: false, message: 'No applicant rows provided' });
   if (!course_id)    return res.status(400).json({ success: false, message: 'course_id is required — select a course first' });
 
@@ -134,9 +141,10 @@ router.post('/import', authenticate, requirePermission('applicants', 'create'), 
         // Unknown batch codes are non-fatal — falls back to the selected batch (or none)
       }
 
+      // Per-row mapped status wins; otherwise fall back to the wizard's choice.
       const status = IMPORT_STATUSES.has((r.status || '').trim().toLowerCase())
         ? r.status.trim().toLowerCase()
-        : 'submitted';
+        : default_status;
 
       const phd_details = {
         subject:             r.phd_discipline?.trim()      || null,
@@ -181,6 +189,54 @@ router.post('/import', authenticate, requirePermission('applicants', 'create'), 
   }
 
   ok(res, { imported, skipped, errors, total: rows.length }, `Imported ${imported} applicant(s)`);
+}));
+
+/**
+ * @swagger
+ * /applicants/{id}/remind-test:
+ *   post:
+ *     tags: [Applicants]
+ *     summary: Remind an applicant (Test Sent stage) who hasn't started their test
+ *     description: Re-sends the applicant's existing test login link. Does not rotate credentials.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Reminder email sent
+ */
+router.post('/:id/remind-test', authenticate, requirePermission('applicants', 'update'), asyncHandler(async (req, res) => {
+  const applicantId = req.params.id;
+
+  const { rows: [applicant] } = await query('SELECT * FROM applicants WHERE id=$1', [applicantId]);
+  if (!applicant) return notFound(res, 'Applicant not found');
+
+  // Find the most recent test the applicant was given access to.
+  const { rows: [token] } = await query(
+    `SELECT tat.token, tat.test_id, t.title, t.duration_minutes, t.course_id
+     FROM test_access_tokens tat
+     JOIN tests t ON t.id = tat.test_id
+     WHERE tat.applicant_id = $1
+     ORDER BY tat.created_at DESC
+     LIMIT 1`,
+    [applicantId]
+  );
+  if (!token) return badRequest(res, 'No test has been sent to this applicant yet — send the test link first.');
+
+  const loginUrl = `${env.FRONTEND_URL}/test-login?token=${token.token}`;
+  const result = await sendTestReminder({
+    applicant,
+    test: { title: token.title, duration_minutes: token.duration_minutes },
+    loginUrl,
+    courseId: token.course_id,
+  });
+
+  if (!result.success) {
+    return badRequest(res, `Reminder could not be sent: ${result.error || 'email failed'}`);
+  }
+  ok(res, { applicant_id: applicantId, email: applicant.email, email_sent: true }, 'Reminder sent');
 }));
 
 router.get('/:id', authenticate, requirePermission('applicants', 'read'), ctrl.getOne);

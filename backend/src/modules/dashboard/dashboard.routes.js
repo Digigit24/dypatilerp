@@ -22,7 +22,7 @@ router.get('/admin', requirePermission('dashboard_admin', 'read'), asyncHandler(
   // Course context comes from the app header (X-Course-Id) or ?course_id;
   // optional ?batch_id narrows further. No context = global numbers.
   const courseId = req.courseId || req.query.course_id || null;
-  const batchId  = req.query.batch_id || null;
+  const batchId  = req.batchId || req.query.batch_id || null;
 
   // Parameterised course condition; batch id is validated as a UUID and
   // inlined only when it matches, so no user-typed text reaches the SQL.
@@ -37,14 +37,14 @@ router.get('/admin', requirePermission('dashboard_admin', 'read'), asyncHandler(
     submissionsByStatus, monthlySubmissions, fees, batches, testsAgg,
     attemptsAgg, assignmentsAgg, mediaAgg, recentApplicants, recentSubmissions,
   ] = await Promise.all([
-    // Applicant pipeline
-    query(`SELECT status, COUNT(*)::int AS count FROM applicants WHERE 1=1 ${courseCond} GROUP BY status`, params),
+    // Applicant pipeline (narrowed to the selected batch when one is active)
+    query(`SELECT status, COUNT(*)::int AS count FROM applicants WHERE 1=1 ${courseCond} ${batchCondPlain} GROUP BY status`, params),
     // Applications per month (last 6 months)
     query(
       `SELECT to_char(date_trunc('month', applied_at), 'Mon YY') AS label,
               date_trunc('month', applied_at) AS m, COUNT(*)::int AS count
        FROM applicants
-       WHERE applied_at > NOW() - INTERVAL '6 months' ${courseCond}
+       WHERE applied_at > NOW() - INTERVAL '6 months' ${courseCond} ${batchCondPlain}
        GROUP BY m ORDER BY m`, params),
     // Active scholars
     query(
@@ -56,7 +56,7 @@ router.get('/admin', requirePermission('dashboard_admin', 'read'), asyncHandler(
       `SELECT COUNT(*)::int AS count
        FROM approvals a JOIN submissions s ON s.id = a.submission_id
        JOIN batches b ON b.id = s.batch_id
-       WHERE a.status = 'pending' ${courseId ? "AND b.course_id = $1" : ''}`, params),
+       WHERE a.status = 'pending' ${courseId ? "AND b.course_id = $1" : ''} ${batchCondB}`, params),
     // Submissions by status
     query(
       `SELECT s.status, COUNT(*)::int AS count
@@ -68,7 +68,7 @@ router.get('/admin', requirePermission('dashboard_admin', 'read'), asyncHandler(
       `SELECT to_char(date_trunc('month', s.created_at), 'Mon YY') AS label,
               date_trunc('month', s.created_at) AS m, COUNT(*)::int AS count
        FROM submissions s JOIN batches b ON b.id = s.batch_id
-       WHERE s.created_at > NOW() - INTERVAL '6 months' ${courseId ? "AND b.course_id = $1" : ''}
+       WHERE s.created_at > NOW() - INTERVAL '6 months' ${courseId ? "AND b.course_id = $1" : ''} ${batchCondB}
        GROUP BY m ORDER BY m`, params),
     // Fees
     query(
@@ -81,7 +81,7 @@ router.get('/admin', requirePermission('dashboard_admin', 'read'), asyncHandler(
       `SELECT b.id, b.name, b.code, b.status, b.max_students,
               (SELECT COUNT(*)::int FROM batch_enrollments be WHERE be.batch_id = b.id AND be.status = 'active') AS enrolled
        FROM batches b
-       WHERE 1=1 ${courseId ? "AND b.course_id = $1" : ''}
+       WHERE 1=1 ${courseId ? "AND b.course_id = $1" : ''} ${batchCondB}
        ORDER BY b.start_date DESC NULLS LAST LIMIT 6`, params),
     // Tests
     query(
@@ -104,7 +104,7 @@ router.get('/admin', requirePermission('dashboard_admin', 'read'), asyncHandler(
     query(
       `SELECT 'applicant' AS type, first_name || ' ' || last_name AS who,
               status AS detail, applied_at AS at
-       FROM applicants WHERE 1=1 ${courseCond}
+       FROM applicants WHERE 1=1 ${courseCond} ${batchCondPlain}
        ORDER BY applied_at DESC LIMIT 6`, params),
     // Recent submissions
     query(
@@ -113,7 +113,7 @@ router.get('/admin', requirePermission('dashboard_admin', 'read'), asyncHandler(
        FROM submissions s
        JOIN users u ON u.id = s.student_user_id
        JOIN batches b ON b.id = s.batch_id
-       WHERE 1=1 ${courseId ? "AND b.course_id = $1" : ''}
+       WHERE 1=1 ${courseId ? "AND b.course_id = $1" : ''} ${batchCondB}
        ORDER BY s.created_at DESC LIMIT 6`, params),
   ]);
 
@@ -127,6 +127,7 @@ router.get('/admin', requirePermission('dashboard_admin', 'read'), asyncHandler(
 
   ok(res, {
     course_id: courseId,
+    batch_id: safeBatch,
     applicants_by_status: applicantsByStatus.rows,
     applicants_total: applicantsByStatus.rows.reduce((sum, r) => sum + r.count, 0),
     applicants_this_month: thisMonth,

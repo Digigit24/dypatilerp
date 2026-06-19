@@ -8,5 +8,8 @@
  */
 export const courseScope = (req, _res, next) => {
   req.courseId = req.headers['x-course-id'] || null
+  // Optional active batch from the app header. When present, list/dashboard
+  // endpoints narrow further so the UI shows data from one batch only.
+  req.batchId = req.headers['x-batch-id'] || null
   next()
 }

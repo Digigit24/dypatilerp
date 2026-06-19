@@ -45,7 +45,7 @@ export default function AdminDashboard() {
   const [d, setD] = useState(null)
   const [error, setError] = useState(null)
   const currentUser = useAuthStore((s) => s.currentUser)
-  const { currentCourse } = useCourseStore()
+  const { currentCourse, currentBatch } = useCourseStore()
   const labels = useLabels()
   const addToast = useUiStore((s) => s.addToast)
   const navigate = useNavigate()
@@ -60,7 +60,10 @@ export default function AdminDashboard() {
         addToast({ type: 'error', title: 'Dashboard failed to load', message: err.response?.data?.message })
         setD({})
       })
-  }, [currentCourse?.id])
+    // Refetch when the active course OR batch changes. The X-Batch-Id header
+    // (attached automatically) scopes everything to the selected batch; clearing
+    // it back to "All Batches" restores the course-wide overview.
+  }, [currentCourse?.id, currentBatch?.id])
 
   if (!d) return <SkeletonCard rows={8} />
 
@@ -127,7 +130,11 @@ export default function AdminDashboard() {
     <div className="fade-page">
       <PageHeader
         title={`${greeting()}, ${firstName}`}
-        subtitle={currentCourse ? `${currentCourse.name} — live overview` : 'All courses — live overview'}
+        subtitle={
+          currentBatch
+            ? `${currentCourse?.name ? currentCourse.name + ' · ' : ''}${currentBatch.name} — batch overview`
+            : currentCourse ? `${currentCourse.name} — all batches overview` : 'All courses — live overview'
+        }
       />
 
       {/* ── KPI cards ── */}

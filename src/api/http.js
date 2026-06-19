@@ -14,9 +14,14 @@ http.interceptors.request.use((config) => {
 
   // Attach active course so every backend list endpoint filters to the right course.
   // useCourseStore.getState() is safe to call outside React (Zustand stores are plain JS objects).
-  const { currentCourse } = useCourseStore.getState()
+  const { currentCourse, currentBatch } = useCourseStore.getState()
   if (currentCourse?.id) {
     config.headers['X-Course-Id'] = currentCourse.id
+  }
+  // Active batch (when one is selected in the header) narrows every list/dashboard
+  // endpoint to that batch. "All Batches" (null) leaves the course-wide view intact.
+  if (currentBatch?.id) {
+    config.headers['X-Batch-Id'] = currentBatch.id
   }
 
   return config

@@ -105,3 +105,13 @@ export const bulkStudentAction = async (ids, action) => {
   const { data: res } = await http.post('/students/bulk-action', { ids, action })
   return ok(res.data)
 }
+
+/** Soft-delete (archive) a single scholar — sets enrollment to 'withdrawn'. */
+export const archiveStudent = async (userId) => {
+  if (USE_MOCK) { await delay(); return ok({ archived: 1 }) }
+  const { data: res } = await http.delete(`/students/${userId}`)
+  return ok(res.data)
+}
+
+/** Restore an archived scholar back to active. */
+export const restoreStudent = async (userId) => bulkStudentAction([userId], 'restore')

@@ -46,6 +46,17 @@ const APPLICANT_TEMPLATE_ROWS = [
 
 const VALID_STATUSES = ['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'rejected', 'enrolled']
 
+// Human labels for the wizard-level status selector
+const STATUS_OPTIONS = [
+  { value: 'submitted',        label: 'Applied (Submitted)' },
+  { value: 'shortlisted_test', label: 'Shortlisted for Test' },
+  { value: 'test_pending',     label: 'Test Sent' },
+  { value: 'test_completed',   label: 'Test Submitted' },
+  { value: 'shortlisted',      label: 'Final Shortlist' },
+  { value: 'enrolled',         label: 'Enrolled' },
+  { value: 'rejected',         label: 'Rejected' },
+]
+
 const validateApplicantRow = (row, idx) => {
   const errs = []
   if (!row.first_name?.trim()) errs.push('Missing first name')
@@ -70,14 +81,27 @@ export const buildApplicantImportConfig = (course, batches = []) => ({
   templateRows: APPLICANT_TEMPLATE_ROWS,
   templateFilename: 'applicants-import-template.csv',
   validateRow: validateApplicantRow,
-  // Wizard-level selector: assign every imported row to one batch.
-  // A mapped "Batch Code" column still wins per row when both are present.
-  fixedFields: batches.length ? [{
-    key: 'default_batch_id',
-    label: 'Assign all applicants to batch',
-    placeholder: '— No batch / use mapped column —',
-    help: 'Optional. If you also map a "Batch Code" column, that column overrides this choice per row.',
-    options: batches.map((b) => ({ value: b.id, label: b.code ? `${b.name} (${b.code})` : b.name })),
-  }] : [],
-  importFn: (rows, fixed = {}) => importApplicants(rows, course?.id, fixed.default_batch_id || null),
+  // Wizard-level selectors applied to every imported row. A mapped column
+  // (Batch Code / Status) still wins per row when both are present.
+  fixedFields: [
+    {
+      key: 'default_status',
+      label: 'Set status for all applicants',
+      placeholder: 'Applied (Submitted) — default',
+      help: 'Applies to every imported row. If you also map a "Status" column, that column overrides this per row.',
+      options: STATUS_OPTIONS,
+    },
+    ...(batches.length ? [{
+      key: 'default_batch_id',
+      label: 'Assign all applicants to batch',
+      placeholder: '— No batch / use mapped column —',
+      help: 'Optional. If you also map a "Batch Code" column, that column overrides this choice per row.',
+      options: batches.map((b) => ({ value: b.id, label: b.code ? `${b.name} (${b.code})` : b.name })),
+    }] : []),
+  ],
+  importFn: (rows, fixed = {}) =>
+    importApplicants(rows, course?.id, {
+      defaultBatchId: fixed.default_batch_id || null,
+      defaultStatus: fixed.default_status || null,
+    }),
 })

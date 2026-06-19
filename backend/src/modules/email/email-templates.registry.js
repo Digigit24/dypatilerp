@@ -74,6 +74,38 @@ export const EMAIL_TEMPLATES = [
   },
 
   {
+    key: 'test_reminder',
+    label: 'Entrance Test Reminder',
+    category: 'Admissions',
+    audience: 'Applicant',
+    description: 'A gentle nudge sent from the pipeline to applicants who were sent a test but have not started it yet. Re-uses their original login link and credentials.',
+    variables: [
+      { name: 'firstName', sample: SAMPLE.firstName, description: "Applicant's first name" },
+      { name: 'testTitle', sample: 'PhD Entrance Examination 2026', description: 'Title of the test' },
+      { name: 'loginUrl', sample: 'https://portal.dyperf.com/test-login', description: 'Their original test login link' },
+      { name: 'duration', sample: '90', description: 'Duration in minutes' },
+    ],
+    subject: 'Reminder: Complete Your Entrance Test — {{testTitle}}',
+    body: `
+      <h2>Friendly Reminder ⏰</h2>
+      <p>Dear {{firstName}},</p>
+      <p>We noticed you haven't started your <strong>{{testTitle}}</strong> yet. Your test is still waiting for you — please complete it at the earliest.</p>
+
+      <div class="info-box">
+        <p><strong>Test:</strong> {{testTitle}}</p>
+        <p><strong>Duration:</strong> {{duration}} minutes</p>
+        <p><strong>How to log in:</strong> Use the same username and password from your original test invitation email.</p>
+        <p><strong>Important:</strong> Once you click "Start Test", the timer begins and cannot be paused.</p>
+      </div>
+
+      <a href="{{loginUrl}}" class="cta">Login &amp; Take Test →</a>
+
+      <p style="word-break:break-all">Or open this link: <a href="{{loginUrl}}" style="color:#4F46E5">{{loginUrl}}</a></p>
+      <p>If you can no longer find your credentials, simply reply to the admissions team and we'll resend them.</p>
+      <p>Best regards,<br/><strong>DY Patil Admissions Team</strong></p>`,
+  },
+
+  {
     key: 'application_submitted',
     label: 'Application Received (Applicant)',
     category: 'Admissions',

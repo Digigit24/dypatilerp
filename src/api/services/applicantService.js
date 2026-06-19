@@ -49,13 +49,20 @@ export const getApplicantById = async (id) => {
   return ok(normalize(res.data))
 }
 
-/** Bulk-import applicants (mapped rows from the import wizard) into a course */
-export const importApplicants = async (applicants, courseId, defaultBatchId = null) => {
+/** Bulk-import applicants (mapped rows from the import wizard) into a course.
+ *  opts: { defaultBatchId, defaultStatus } — applied to every row unless a
+ *  mapped Batch Code / Status column overrides per row. */
+export const importApplicants = async (applicants, courseId, opts = {}) => {
   if (USE_MOCK) {
     await delay(400, 800)
     return { data: { imported: applicants.length, skipped: 0, errors: [], total: applicants.length } }
   }
-  const { data: res } = await http.post('/applicants/import', { applicants, course_id: courseId, default_batch_id: defaultBatchId || undefined })
+  const { data: res } = await http.post('/applicants/import', {
+    applicants,
+    course_id: courseId,
+    default_batch_id: opts.defaultBatchId || undefined,
+    default_status: opts.defaultStatus || undefined,
+  })
   return { data: res.data }
 }
 
@@ -91,6 +98,13 @@ export const updateApplicantStatus = async (id, status, batch_id) => {
 }
 
 export const shortlistApplicant = async (id) => updateApplicantStatus(id, 'shortlisted')
+
+/** Remind a Test-Sent applicant who hasn't started — resends their existing link */
+export const remindTest = async (id) => {
+  if (USE_MOCK) { await delay(); return ok({ email_sent: true }) }
+  const { data: res } = await http.post(`/applicants/${id}/remind-test`)
+  return ok(res.data)
+}
 
 export const convertToStudent = async (id, batch_id, extra = {}) => {
   if (USE_MOCK) { return ok({}) }

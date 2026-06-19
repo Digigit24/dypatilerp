@@ -1,13 +1,13 @@
 import {
   CheckSquare, Download, ExternalLink, FileText, Filter,
-  Loader2, Square, Upload, Users, XCircle,
+  Loader2, RotateCcw, Square, Trash2, Upload, Users, XCircle,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getApprovals } from '../../api/services/approvalService.js'
 import { getProgressReportByStudent } from '../../api/services/progressReportService.js'
 import { getSubmissionsByStudent } from '../../api/services/submissionService.js'
-import { bulkStudentAction, exportStudents, getStudents } from '../../api/services/studentService.js'
+import { archiveStudent, bulkStudentAction, exportStudents, getStudents } from '../../api/services/studentService.js'
 import { getUsers } from '../../api/services/userService.js'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
@@ -19,17 +19,26 @@ import { useUiStore } from '../../store/uiStore.js'
 import { useCourseStore } from '../../store/courseStore.js'
 import { useLabels } from '../../store/labelStore.js'
 
-const STATUS_TABS = ['all', 'active', 'inactive']
+// Tabs map to the enrollment_status enum (active | suspended | withdrawn=archived).
+const STATUS_TABS = ['all', 'active', 'suspended', 'archived']
+const TAB_TO_STATUS = { active: 'active', suspended: 'suspended', archived: 'withdrawn' }
 
+const PAGE_SIZE = 100
+
+// Active-scholar bulk actions (the Archived tab swaps these for "Restore").
 const BULK_ACTIONS = [
-  { key: 'activate',   label: 'Activate',   color: 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' },
-  { key: 'deactivate', label: 'Deactivate', color: 'text-amber-600 bg-amber-50 hover:bg-amber-100' },
-  { key: 'suspend',    label: 'Suspend',    color: 'text-red-600 bg-red-50 hover:bg-red-100' },
+  { key: 'activate', label: 'Activate', color: 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' },
+  { key: 'suspend',  label: 'Suspend',  color: 'text-amber-600 bg-amber-50 hover:bg-amber-100' },
+  { key: 'archive',  label: 'Archive',  color: 'text-red-600 bg-red-50 hover:bg-red-100' },
 ]
 
 export default function StudentsPage() {
   const labels = useLabels()
   const [items,          setItems]          = useState(null)
+  const [total,          setTotal]          = useState(0)
+  const [loadingMore,    setLoadingMore]    = useState(false)
+  const loadedRef        = useRef(0)
+  const sentinelRef      = useRef(null)
   const [users,          setUsers]          = useState([])
   const [selected,       setSelected]       = useState(null)        // row detail drawer
   const [studentSubs,    setStudentSubs]    = useState([])
@@ -42,22 +51,56 @@ export default function StudentsPage() {
   const [exportLoading,  setExportLoading]  = useState(false)
   const [showImport,     setShowImport]     = useState(false)
   const addToast = useUiStore((s) => s.addToast)
-  const { currentCourse } = useCourseStore()
+  const { currentCourse, currentBatch } = useCourseStore()
 
   useScrollLock(Boolean(selected) || showImport)
 
-  const loadStudents = () =>
-    Promise.all([getStudents(), getUsers()]).then(([students, userRes]) => {
-      setItems(students.data)
-      setUsers(userRes.data)
-    })
+  // Status filter is applied server-side so paging + counts stay correct.
+  const statusParam = () => (statusFilter === 'all' ? {} : { status: TAB_TO_STATUS[statusFilter] })
 
-  // Re-fetch when the active course changes; X-Course-Id header is added automatically
+  const loadStudents = () =>
+    Promise.all([getStudents({ ...statusParam(), limit: PAGE_SIZE, offset: 0 }), getUsers()])
+      .then(([students, userRes]) => {
+        setItems(students.data)
+        setTotal(students.total ?? students.data.length)
+        loadedRef.current = students.data.length
+        setUsers(userRes.data)
+      })
+
+  const loadMore = () => {
+    if (loadingMore || !items || items.length >= total) return
+    setLoadingMore(true)
+    getStudents({ ...statusParam(), limit: PAGE_SIZE, offset: items.length })
+      .then((r) => {
+        setItems((xs) => {
+          const merged = [...(xs || []), ...r.data]
+          loadedRef.current = merged.length
+          return merged
+        })
+        setTotal((t) => r.total ?? t)
+      })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false))
+  }
+
+  // Re-fetch when the active course, batch, or status tab changes.
+  // X-Course-Id / X-Batch-Id headers are added automatically.
   useEffect(() => {
     setItems(null)
     setSelectedIds(new Set())
     loadStudents()
-  }, [currentCourse?.id])
+  }, [currentCourse?.id, currentBatch?.id, statusFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Infinite scroll — load the next 100 when the sentinel scrolls into view.
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const obs = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) loadMore()
+    }, { rootMargin: '300px' })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [items, total, loadingMore]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users])
   const nameOf  = (s) => {
@@ -68,10 +111,8 @@ export default function StudentsPage() {
   const emailOf = (s) => userMap[s.user_id]?.email || s.email || '-'
   const initials = (s) => nameOf(s).split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
 
-  const filtered = useMemo(() => {
-    if (!items) return []
-    return items.filter((s) => statusFilter === 'all' || s.status === statusFilter)
-  }, [items, statusFilter])
+  // Status filtering now happens server-side, so the loaded page is already scoped.
+  const filtered = items || []
 
   // ── Row detail ────────────────────────────────────────────────────────────
   const openStudent = async (student) => {
@@ -132,6 +173,32 @@ export default function StudentsPage() {
     }
   }
 
+  // ── Single-row archive / restore (soft delete) ─────────────────────────────
+  const archiveOne = async (student, e) => {
+    e?.stopPropagation()
+    const name = nameOf(student)
+    if (!window.confirm(`Archive ${name}? They'll be hidden from the active list but can be restored from the Archived tab.`)) return
+    try {
+      await archiveStudent(student.user_id)
+      addToast({ type: 'success', title: `${name} archived.` })
+      await loadStudents()
+    } catch {
+      addToast({ type: 'error', title: 'Archive failed. Please try again.' })
+    }
+  }
+
+  const restoreOne = async (student, e) => {
+    e?.stopPropagation()
+    const name = nameOf(student)
+    try {
+      await bulkStudentAction([student.user_id], 'restore')
+      addToast({ type: 'success', title: `${name} restored.` })
+      await loadStudents()
+    } catch {
+      addToast({ type: 'error', title: 'Restore failed. Please try again.' })
+    }
+  }
+
   // ── Export ─────────────────────────────────────────────────────────────────
   const handleExport = async () => {
     setExportLoading(true)
@@ -185,9 +252,8 @@ export default function StudentsPage() {
                     : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'
                 }`}
               >
-                {tab === 'all'
-                  ? `All (${items.length})`
-                  : `${tab.charAt(0).toUpperCase() + tab.slice(1)} (${items.filter((s) => s.status === tab).length})`}
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {statusFilter === tab ? ` (${total})` : ''}
               </button>
             ))}
           </div>
@@ -218,12 +284,13 @@ export default function StudentsPage() {
                 {['Name', 'Permanent ID', 'Batch', 'Enrolled', 'Progress', 'Status'].map((h) => (
                   <th key={h} className="px-6 py-4">{h}</th>
                 ))}
+                <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center text-sm text-[color:var(--muted)]">
+                  <td colSpan={8} className="px-6 py-16 text-center text-sm text-[color:var(--muted)]">
                     <Users className="mx-auto mb-3 text-[color:var(--border)]" size={32} />
                     No students found.
                   </td>
@@ -274,6 +341,25 @@ export default function StudentsPage() {
                       </div>
                     </td>
                     <td className="px-6"><StatusBadge status={s.status} /></td>
+                    <td className="px-6 text-right" onClick={(e) => e.stopPropagation()}>
+                      {s.status === 'withdrawn' ? (
+                        <button
+                          onClick={(e) => restoreOne(s, e)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-emerald-600 hover:bg-emerald-50 transition"
+                          title="Restore scholar"
+                        >
+                          <RotateCcw size={13} /> Restore
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => archiveOne(s, e)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition"
+                          title="Archive (soft-delete) scholar"
+                        >
+                          <Trash2 size={13} /> Archive
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
@@ -281,6 +367,20 @@ export default function StudentsPage() {
           </table>
         </div>
       </div>
+
+      {/* ── Infinite-scroll sentinel + Load more ── */}
+      {items.length < total && (
+        <div ref={sentinelRef} className="mt-4 flex justify-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
+          >
+            {loadingMore ? <Loader2 size={15} className="animate-spin" /> : null}
+            {loadingMore ? 'Loading…' : `Load more (${items.length} of ${total})`}
+          </button>
+        </div>
+      )}
 
       {/* ── Floating bulk action bar ── */}
       {selectedIds.size > 0 && (
@@ -295,7 +395,10 @@ export default function StudentsPage() {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              {BULK_ACTIONS.map((a) => (
+              {(statusFilter === 'archived'
+                ? [{ key: 'restore', label: 'Restore', color: 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' }]
+                : BULK_ACTIONS
+              ).map((a) => (
                 <button
                   key={a.key}
                   onClick={() => runBulkAction(a.key)}

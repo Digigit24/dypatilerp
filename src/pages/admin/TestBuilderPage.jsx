@@ -2,6 +2,7 @@ import {
   ChevronDown, ChevronRight, Clock, FilePlus2, Loader2,
   Plus, Save, Send, Trash2, Users, X, Copy, Eye, EyeOff, CheckCircle2, Mail, MailCheck,
   RefreshCw, Link2, Search, ExternalLink, ClipboardList, Target, AlignLeft, Shuffle,
+  BellRing, Hourglass, CircleDashed,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -9,7 +10,7 @@ import {
   assignTest, createSection, createTest, deleteSection,
   getTests, publishTest, saveAllQuestions,
   updateSection, updateTest, getTestById,
-  getAccessTokens, resetTestAttempt,
+  getAccessTokens, resetTestAttempt, remindTestApplicants,
 } from '../../api/services/testService.js'
 import { getBatches } from '../../api/services/batchService.js'
 import { getApplicants } from '../../api/services/applicantService.js'
@@ -30,6 +31,146 @@ const blankQ = (sectionId, order = 0) => ({
   section_id: sectionId,
   config: { options: OPTS.map((k) => ({ key: k, text: '' })), correct_answer: 'A' },
 })
+
+// ── Assigned applicants: grouped section + row ──────────────────────────────────
+const GROUP_TONES = {
+  amber:   'bg-amber-50 text-amber-700',
+  blue:    'bg-blue-50 text-blue-700',
+  emerald: 'bg-emerald-50 text-emerald-700',
+}
+
+function AssignedGroup({ title, count, icon: Icon, tone, hint, rows, showRemind, ...rowProps }) {
+  if (!count) return null
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <span className={`grid h-6 w-6 place-items-center rounded-lg ${GROUP_TONES[tone]}`}><Icon size={13} /></span>
+        <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--text)]">{title}</p>
+        <span className="rounded-full bg-[color:var(--surface-strong)] px-2 py-0.5 text-[10px] font-bold text-[color:var(--secondary)]">{count}</span>
+        <span className="hidden text-[11px] text-[color:var(--muted)] sm:inline">· {hint}</span>
+      </div>
+      <div className="space-y-2">
+        {rows.map((row) => (
+          <AssignedRow key={row.applicant_id} row={row} showRemind={showRemind} {...rowProps} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function AssignedRow({
+  row, showRemind, resetState, showPwFor, setShowPwFor,
+  handleReset, remindOne, remindBusy, navigate, addToast, activeTestId,
+}) {
+  const rs = resetState[row.applicant_id] || {}
+  const showPw = showPwFor[row.applicant_id]
+  const fresh = rs.result
+  const expired = row.expires_at && new Date(row.expires_at) < new Date()
+  const reminding = remindBusy === row.applicant_id
+  const attemptBadgeColor =
+    row.attempt_status === 'submitted'   ? 'bg-emerald-100 text-emerald-700' :
+    row.attempt_status === 'in_progress' ? 'bg-amber-100 text-amber-700' :
+                                           'bg-[color:var(--surface)] text-[color:var(--secondary)]'
+  return (
+    <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3">
+      <div className="flex flex-wrap items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="truncate text-sm font-semibold text-[color:var(--text)]">
+            {row.first_name} {row.last_name}
+          </p>
+          <p className="truncate text-xs text-[color:var(--secondary)]">{row.email}</p>
+        </div>
+        {expired && !row.attempt_status && (
+          <span className="shrink-0 rounded-lg bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+            link expired
+          </span>
+        )}
+        <span className={`shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-semibold ${attemptBadgeColor}`}>
+          {row.attempt_status || 'not started'}
+        </span>
+        {row.attempt_status === 'submitted' && row.score != null && (
+          <span className="shrink-0 rounded-lg bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+            Score: {row.score}
+          </span>
+        )}
+      </div>
+
+      {/* Fresh credentials after reset */}
+      {fresh && (
+        <div className="mt-2 rounded-xl bg-[color:var(--card)] border border-[color:var(--border)] px-3 py-2 text-xs space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[color:var(--secondary)]">u:</span>
+            <span className="font-mono text-[color:var(--text)]">{fresh.username}</span>
+            <span className="text-[color:var(--secondary)]">pw:</span>
+            <span className="font-mono text-[color:var(--text)]">
+              {showPw ? fresh.password : '••••••••'}
+            </span>
+            <button onClick={() => setShowPwFor((s) => ({ ...s, [row.applicant_id]: !s[row.applicant_id] }))}>
+              {showPw ? <EyeOff size={11} className="text-[color:var(--secondary)]" /> : <Eye size={11} className="text-[color:var(--secondary)]" />}
+            </button>
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <Link2 size={11} className="shrink-0 text-[color:var(--secondary)]" />
+            <a
+              href={fresh.login_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="truncate font-mono text-[10px] text-[color:var(--accent)] hover:underline"
+            >
+              {fresh.login_url}
+            </a>
+            <button
+              onClick={() => { navigator.clipboard.writeText(fresh.login_url); addToast({ type: 'success', title: 'Link copied!' }) }}
+              className="shrink-0"
+            >
+              <Copy size={11} className="text-[color:var(--secondary)]" />
+            </button>
+            {fresh.email_sent && <MailCheck size={11} className="shrink-0 text-emerald-500" title="Email sent" />}
+          </div>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {row.attempt_status === 'submitted' && (
+          <button
+            onClick={() => navigate(`/admin/applicants/${row.applicant_id}/test-results?testId=${activeTestId}`)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+          >
+            <ExternalLink size={12} /> View Responses
+          </button>
+        )}
+        {showRemind && (
+          <button
+            onClick={() => remindOne(row.applicant_id)}
+            disabled={reminding}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-200 disabled:opacity-50"
+            title="Email a reminder — re-uses their original link & credentials"
+          >
+            {reminding ? <Loader2 size={12} className="animate-spin" /> : <BellRing size={12} />} Remind
+          </button>
+        )}
+        <button
+          onClick={() => handleReset(row.applicant_id, true)}
+          disabled={rs.loading}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-[color:var(--accent-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--accent)] hover:opacity-80 disabled:opacity-50"
+          title="Generates a fresh link + new password and emails it"
+        >
+          {rs.loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+          {row.attempt_status === 'submitted' ? 'Send Fresh Link' : 'Reset & Resend Email'}
+        </button>
+        <button
+          onClick={() => handleReset(row.applicant_id, false)}
+          disabled={rs.loading}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] hover:text-[color:var(--text)] disabled:opacity-50"
+        >
+          {rs.loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+          Reset Only
+        </button>
+      </div>
+    </div>
+  )
+}
 
 // ── Assign modal ───────────────────────────────────────────────────────────────
 function AssignModal({ test, courseId: testCourseId, onClose, addToast }) {
@@ -384,6 +525,7 @@ export default function TestBuilderPage() {
   const [assigned, setAssigned]   = useState([])
   const [resetState, setResetState] = useState({})
   const [showPwFor, setShowPwFor]  = useState({})
+  const [remindBusy, setRemindBusy] = useState(null) // applicant_id | 'all' | null
 
   const activeTest = tests?.find((t) => t.id === activeTestId)
 
@@ -449,6 +591,26 @@ export default function TestBuilderPage() {
       setResetState((s) => ({ ...s, [applicantId]: { loading: false, result: null } }))
       addToast({ type: 'error', title: e?.response?.data?.message || 'Reset failed' })
     }
+  }
+
+  const remindOne = async (applicantId) => {
+    setRemindBusy(applicantId)
+    try {
+      await remindTestApplicants(activeTestId, { applicant_ids: [applicantId] })
+      addToast({ type: 'success', title: 'Reminder email sent' })
+    } catch (e) {
+      addToast({ type: 'error', title: e?.response?.data?.message || 'Reminder failed' })
+    } finally { setRemindBusy(null) }
+  }
+
+  const remindAll = async () => {
+    setRemindBusy('all')
+    try {
+      const res = await remindTestApplicants(activeTestId, { remind_all: true })
+      addToast({ type: 'success', title: `Reminder sent to ${res.data?.reminded ?? 0} applicant(s) who haven't submitted.` })
+    } catch (e) {
+      addToast({ type: 'error', title: e?.response?.data?.message || 'No one to remind' })
+    } finally { setRemindBusy(null) }
   }
 
   const saveMeta = async () => {
@@ -895,10 +1057,20 @@ export default function TestBuilderPage() {
                   <div>
                     <p className="text-sm font-semibold text-[color:var(--text)]">Assigned Applicants</p>
                     <p className="text-[11px] text-[color:var(--secondary)]">
-                      Reset a candidate&apos;s attempt to let them retake. View responses for submitted candidates.
+                      Grouped by progress. Remind those who haven&apos;t started, resend a fresh link, or view submitted responses.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
+                    {assigned.some((r) => r.attempt_status !== 'submitted') && (
+                      <button
+                        onClick={remindAll}
+                        disabled={remindBusy === 'all'}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-200 disabled:opacity-50"
+                        title="Email a reminder to everyone who has a link but hasn't submitted yet"
+                      >
+                        {remindBusy === 'all' ? <Loader2 size={13} className="animate-spin" /> : <BellRing size={13} />} Remind All
+                      </button>
+                    )}
                     <button
                       onClick={() => setShowAssign(true)}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-[color:var(--accent-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--accent)]"
@@ -919,108 +1091,37 @@ export default function TestBuilderPage() {
                   <p className="py-4 text-center text-xs text-[color:var(--secondary)]">
                     No applicants assigned yet. Click &quot;Assign More&quot; above.
                   </p>
-                ) : (
-                  <div className="space-y-2">
-                    {assigned.map((row) => {
-                      const rs = resetState[row.applicant_id] || {}
-                      const showPw = showPwFor[row.applicant_id]
-                      const fresh = rs.result
-                      const expired = row.expires_at && new Date(row.expires_at) < new Date()
-                      const attemptBadgeColor =
-                        row.attempt_status === 'submitted'   ? 'bg-emerald-100 text-emerald-700' :
-                        row.attempt_status === 'in_progress' ? 'bg-amber-100 text-amber-700' :
-                                                               'bg-[color:var(--surface)] text-[color:var(--secondary)]'
-                      return (
-                        <div key={row.applicant_id} className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3">
-                          <div className="flex flex-wrap items-start gap-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="truncate text-sm font-semibold text-[color:var(--text)]">
-                                {row.first_name} {row.last_name}
-                              </p>
-                              <p className="truncate text-xs text-[color:var(--secondary)]">{row.email}</p>
-                            </div>
-                            {expired && !row.attempt_status && (
-                              <span className="shrink-0 rounded-lg bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
-                                link expired
-                              </span>
-                            )}
-                            <span className={`shrink-0 rounded-lg px-2 py-0.5 text-[10px] font-semibold ${attemptBadgeColor}`}>
-                              {row.attempt_status || 'not started'}
-                            </span>
-                            {row.attempt_status === 'submitted' && row.score != null && (
-                              <span className="shrink-0 rounded-lg bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-                                Score: {row.score}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Fresh credentials after reset */}
-                          {fresh && (
-                            <div className="mt-2 rounded-xl bg-[color:var(--card)] border border-[color:var(--border)] px-3 py-2 text-xs space-y-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[color:var(--secondary)]">u:</span>
-                                <span className="font-mono text-[color:var(--text)]">{fresh.username}</span>
-                                <span className="text-[color:var(--secondary)]">pw:</span>
-                                <span className="font-mono text-[color:var(--text)]">
-                                  {showPw ? fresh.password : '••••••••'}
-                                </span>
-                                                          <button onClick={() => setShowPwFor((s) => ({ ...s, [row.applicant_id]: !s[row.applicant_id] }))}>
-                                  {showPw ? <EyeOff size={11} className="text-[color:var(--secondary)]" /> : <Eye size={11} className="text-[color:var(--secondary)]" />}
-                                </button>
-                              </div>
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Link2 size={11} className="shrink-0 text-[color:var(--secondary)]" />
-                                <a
-                                  href={fresh.login_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="truncate font-mono text-[10px] text-[color:var(--accent)] hover:underline"
-                                >
-                                  {fresh.login_url}
-                                </a>
-                                <button
-                                  onClick={() => { navigator.clipboard.writeText(fresh.login_url); addToast({ type: 'success', title: 'Link copied!' }) }}
-                                  className="shrink-0"
-                                >
-                                  <Copy size={11} className="text-[color:var(--secondary)]" />
-                                </button>
-                                {fresh.email_sent && <MailCheck size={11} className="shrink-0 text-emerald-500" title="Email sent" />}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Action buttons */}
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {row.attempt_status === 'submitted' && (
-                              <button
-                                onClick={() => navigate(`/admin/applicants/${row.applicant_id}/test-results?testId=${activeTestId}`)}
-                                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                              >
-                                <ExternalLink size={12} /> View Responses
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleReset(row.applicant_id, true)}
-                              disabled={rs.loading}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-[color:var(--accent-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--accent)] hover:opacity-80 disabled:opacity-50"
-                            >
-                              {rs.loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                              Reset &amp; Resend Email
-                            </button>
-                            <button
-                              onClick={() => handleReset(row.applicant_id, false)}
-                              disabled={rs.loading}
-                              className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] hover:text-[color:var(--text)] disabled:opacity-50"
-                            >
-                              {rs.loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                              Reset Only
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                ) : (() => {
+                  const notStarted = assigned.filter((r) => r.attempt_status !== 'submitted' && r.attempt_status !== 'in_progress')
+                  const inProgress = assigned.filter((r) => r.attempt_status === 'in_progress')
+                  const submitted  = assigned.filter((r) => r.attempt_status === 'submitted')
+                  const rowProps = {
+                    resetState, showPwFor, setShowPwFor, handleReset,
+                    remindOne, remindBusy, navigate, addToast, activeTestId,
+                  }
+                  return (
+                    <div className="space-y-5">
+                      <AssignedGroup
+                        title="Not started" count={notStarted.length}
+                        icon={CircleDashed} tone="amber"
+                        hint="Link sent — candidate hasn't opened the test yet"
+                        rows={notStarted} showRemind {...rowProps}
+                      />
+                      <AssignedGroup
+                        title="In progress (not submitted)" count={inProgress.length}
+                        icon={Hourglass} tone="blue"
+                        hint="Started the test but hasn't submitted"
+                        rows={inProgress} showRemind {...rowProps}
+                      />
+                      <AssignedGroup
+                        title="Submitted" count={submitted.length}
+                        icon={CheckCircle2} tone="emerald"
+                        hint="Test completed — review responses or resend a fresh link to retake"
+                        rows={submitted} {...rowProps}
+                      />
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </div>

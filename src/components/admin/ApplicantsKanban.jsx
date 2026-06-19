@@ -8,11 +8,11 @@
  * Clicking a card opens the same detail drawer used by the list view.
  */
 import {
-  ArrowRight, CheckCircle2, GraduationCap, Loader2, Mail, RefreshCw, RotateCcw, Send, X, XCircle,
+  ArrowRight, BellRing, CheckCircle2, GraduationCap, Loader2, Mail, RefreshCw, RotateCcw, Send, X, XCircle,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { assignTest, getTests, resetTestAttempt } from '../../api/services/testService.js'
-import { convertToStudent, updateApplicantStatus } from '../../api/services/applicantService.js'
+import { convertToStudent, remindTest, updateApplicantStatus } from '../../api/services/applicantService.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useLabels } from '../../store/labelStore.js'
 import { formatDate } from '../../lib/formatters.js'
@@ -37,6 +37,7 @@ export default function ApplicantsKanban({ items, courseId, batches, onSelect, o
   const addToast = useUiStore((s) => s.addToast)
   const labels = useLabels()
   const [busyId, setBusyId] = useState(null)
+  const [remindingAll, setRemindingAll] = useState(false)
   const [modal, setModal] = useState(null) // {type:'send'|'reset'|'convert', applicant}
 
   const byStatus = useMemo(() => {
@@ -56,6 +57,36 @@ export default function ApplicantsKanban({ items, courseId, batches, onSelect, o
     } finally { setBusyId(null) }
   }
 
+  const remind = async (a) => {
+    const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+    setBusyId(a.id)
+    try {
+      await remindTest(a.id)
+      addToast({ type: 'success', title: `Reminder emailed to ${name}.` })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Reminder failed', message: err.response?.data?.message })
+    } finally { setBusyId(null) }
+  }
+
+  // Remind everyone in the Test Sent column who hasn't started the exam yet.
+  const remindAll = async (cards) => {
+    const targets = cards.filter((a) => !a.test_in_progress)
+    if (!targets.length) {
+      addToast({ type: 'info', title: 'No one to remind — everyone here has already started.' })
+      return
+    }
+    setRemindingAll(true)
+    let sent = 0
+    for (const a of targets) {
+      try { await remindTest(a.id); sent++ } catch { /* keep going */ }
+    }
+    setRemindingAll(false)
+    addToast({
+      type: sent ? 'success' : 'error',
+      title: sent ? `Reminder emailed to ${sent} applicant${sent === 1 ? '' : 's'}.` : 'Could not send reminders.',
+    })
+  }
+
   return (
     <div className="overflow-x-auto pb-4">
       <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
@@ -69,6 +100,18 @@ export default function ApplicantsKanban({ items, courseId, batches, onSelect, o
                 <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--secondary)]">{col.title}</p>
                 <span className="ml-auto rounded-full bg-[color:var(--card)] px-2 py-0.5 text-[10px] font-bold text-[color:var(--muted)]">{cards.length}</span>
               </div>
+
+              {/* Bulk reminder for the Test Sent stage — nudges everyone who hasn't started */}
+              {col.key === 'test_pending' && cards.some((a) => !a.test_in_progress) && (
+                <button
+                  onClick={() => remindAll(cards)}
+                  disabled={remindingAll}
+                  className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-100 px-2 py-1.5 text-[11px] font-bold text-amber-700 transition hover:bg-amber-200 disabled:opacity-50"
+                  title="Email a reminder to everyone in this stage who hasn't started the exam"
+                >
+                  {remindingAll ? <Loader2 size={12} className="animate-spin" /> : <BellRing size={12} />} Remind All
+                </button>
+              )}
 
               {/* Cards */}
               <div className="max-h-[calc(100vh-330px)] space-y-2 overflow-y-auto pr-0.5">
@@ -84,6 +127,7 @@ export default function ApplicantsKanban({ items, courseId, batches, onSelect, o
                     labels={labels}
                     onOpen={() => onSelect(a)}
                     onAct={act}
+                    onRemind={() => remind(a)}
                     onSendTest={() => setModal({ type: 'send', applicant: a })}
                     onReset={() => setModal({ type: 'reset', applicant: a })}
                     onConvert={() => setModal({ type: 'convert', applicant: a })}
@@ -152,7 +196,7 @@ export default function ApplicantsKanban({ items, courseId, batches, onSelect, o
 }
 
 // ─── Compact card ───────────────────────────────────────────────────────────────
-function KanbanCard({ a, col, busy, labels, onOpen, onAct, onSendTest, onReset, onConvert }) {
+function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, onSendTest, onReset, onConvert }) {
   const p = passInfo(a)
   const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
 
@@ -212,7 +256,14 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onSendTest, onReset, 
           </>
         )}
         {!busy && col === 'test_pending' && (
-          <Btn onClick={onReset}><RefreshCw size={11} /> Reset & Resend</Btn>
+          <>
+            {!a.test_in_progress && (
+              <Btn primary onClick={onRemind} title="Email a reminder — re-uses their original test link and credentials">
+                <BellRing size={11} /> Remind
+              </Btn>
+            )}
+            <Btn onClick={onReset}><RefreshCw size={11} /> Reset &amp; Resend</Btn>
+          </>
         )}
         {!busy && col === 'test_completed' && (
           <>

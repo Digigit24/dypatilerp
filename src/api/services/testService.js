@@ -116,6 +116,13 @@ export const resetTestAttempt = async (testId, payload) => {
   return ok(res.data)
 }
 
+/** Remind assigned applicants who haven't started/submitted this test.
+ *  payload: { applicant_ids: [...] } or { remind_all: true } */
+export const remindTestApplicants = async (testId, payload) => {
+  const { data: res } = await http.post(`/tests/${testId}/assign/remind`, payload)
+  return ok(res.data)
+}
+
 // ── Test-taking (applicant) ────────────────────────────────────────────────────
 // These use testHttp (sessionStorage token) so the admin's localStorage token
 // never interferes when testing in the same browser.

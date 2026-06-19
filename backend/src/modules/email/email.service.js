@@ -611,6 +611,53 @@ export const sendTestCredentials = async ({
 };
 
 /**
+ * Send a "you haven't started your test yet" reminder to one applicant.
+ * Re-uses their existing login link — no password rotation — so the credentials
+ * from their original invitation email still work.
+ */
+export const sendTestReminder = async ({
+  applicant,       // { first_name, last_name, email }
+  test,            // { title, duration_minutes }
+  loginUrl,
+  courseId,
+}) => {
+  const sender = await getCourseSender(courseId);
+  const { subject, html } = await renderTemplate('test_reminder', {
+    firstName: applicant.first_name,
+    testTitle: test.title,
+    loginUrl,
+    duration: test.duration_minutes,
+  });
+
+  const text = [
+    `Reminder — Complete your entrance test: ${test.title}`,
+    '',
+    `Dear ${applicant.first_name},`,
+    '',
+    `We noticed you haven't started your test yet. Please complete it at the earliest.`,
+    '',
+    `Test:     ${test.title}`,
+    `Duration: ${test.duration_minutes} minutes`,
+    '',
+    `Test Login Link:`,
+    loginUrl,
+    '',
+    `Use the same username and password from your original test invitation email.`,
+    '',
+    'Best regards,',
+    'DY Patil Admissions Team',
+  ].join('\n');
+
+  return sendEmail({
+    to: { email: applicant.email, name: `${applicant.first_name} ${applicant.last_name}` },
+    subject,
+    html,
+    text,
+    sender,
+  });
+};
+
+/**
  * Send a templated notification email, with optional per-course sender override.
  */
 export const sendNotificationEmail = async (eventKey, recipient, data = {}, courseId = null) => {

@@ -28,6 +28,7 @@ const buildWhere = (q) => {
   if (q.course_id) { params.push(q.course_id);  conds.push(`b.course_id=$${params.length}`);  }
   if (q.batch_id)  { params.push(q.batch_id);   conds.push(`be.batch_id=$${params.length}`);  }
   if (q.status)    { params.push(q.status);      conds.push(`be.status=$${params.length}`);    }
+  else             { conds.push(`be.status <> 'withdrawn'`); } // hide archived/removed by default
   if (q.search)    {
     params.push(`%${q.search}%`);
     conds.push(`(u.first_name ILIKE $${params.length} OR u.last_name ILIKE $${params.length} OR u.email ILIKE $${params.length})`);
@@ -38,7 +39,8 @@ const buildWhere = (q) => {
 // ─── GET /students/export ─────────────────────────────────────────────────────
 router.get('/export', requirePermission('students', 'read'), asyncHandler(async (req, res) => {
   const course_id = req.courseId || req.query.course_id;
-  const { params, where } = buildWhere({ ...req.query, course_id });
+  const batch_id = req.batchId || req.query.batch_id;
+  const { params, where } = buildWhere({ ...req.query, course_id, batch_id });
 
   const { rows } = await query(
     `SELECT u.first_name, u.last_name, u.email, u.phone,
@@ -168,24 +170,63 @@ router.post('/bulk-action', requirePermission('students', 'update'), asyncHandle
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ success: false, message: 'No student IDs provided' });
   }
-  const STATUS_MAP = { activate: 'active', deactivate: 'inactive', suspend: 'suspended' };
+  // Values must match the enrollment_status enum: active | withdrawn | completed | suspended.
+  // 'archive'/'remove' is a soft-delete → 'withdrawn' (recoverable via 'restore').
+  const STATUS_MAP = {
+    activate: 'active',
+    restore: 'active',
+    suspend: 'suspended',
+    deactivate: 'withdrawn',
+    archive: 'withdrawn',
+    remove: 'withdrawn',
+    delete: 'withdrawn',
+  };
   const newStatus = STATUS_MAP[action];
   if (!newStatus) {
     return res.status(400).json({ success: false, message: `Unknown action: ${action}` });
   }
+  // Course scope: only touch enrollments in the active course so a bulk action
+  // never leaks across courses.
+  const params = [newStatus, ...ids];
+  let courseFrag = '';
+  const courseId = req.courseId || req.query.course_id;
+  if (courseId) {
+    params.push(courseId);
+    courseFrag = `AND batch_id IN (SELECT id FROM batches WHERE course_id=$${params.length})`;
+  }
   const placeholders = ids.map((_, i) => `$${i + 2}`).join(', ');
   const { rowCount } = await query(
-    `UPDATE batch_enrollments SET status=$1 WHERE user_id IN (${placeholders})`,
-    [newStatus, ...ids]
+    `UPDATE batch_enrollments SET status=$1 WHERE user_id IN (${placeholders}) ${courseFrag}`,
+    params
   );
   ok(res, { updated: rowCount, status: newStatus });
+}));
+
+// ─── DELETE /students/:id — soft-delete (archive) a scholar's enrollment ───────
+// Sets the enrollment status to 'withdrawn' (recoverable). Scoped to the active
+// course so a scholar enrolled elsewhere keeps that enrollment.
+router.delete('/:id', requirePermission('students', 'update'), asyncHandler(async (req, res) => {
+  const courseId = req.courseId || req.query.course_id;
+  const params = [req.params.id];
+  let courseFrag = '';
+  if (courseId) {
+    params.push(courseId);
+    courseFrag = `AND batch_id IN (SELECT id FROM batches WHERE course_id=$${params.length})`;
+  }
+  const { rowCount } = await query(
+    `UPDATE batch_enrollments SET status='withdrawn' WHERE user_id=$1 ${courseFrag}`,
+    params
+  );
+  if (!rowCount) return notFound(res, 'Enrollment not found for this scholar');
+  ok(res, { archived: rowCount }, 'Scholar archived');
 }));
 
 // ─── GET /students ────────────────────────────────────────────────────────────
 router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   const course_id = req.courseId || req.query.course_id;
-  const { params, where } = buildWhere({ ...req.query, course_id });
+  const batch_id = req.batchId || req.query.batch_id;
+  const { params, where } = buildWhere({ ...req.query, course_id, batch_id });
 
   // Own-scope: students can only see their own enrollment record
   let ownFrag = '';

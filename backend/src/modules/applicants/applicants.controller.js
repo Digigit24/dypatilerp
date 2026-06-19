@@ -6,9 +6,11 @@ import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 
 export const list = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  // X-Course-Id header takes precedence over query param so the UI never mixes courses
+  // X-Course-Id / X-Batch-Id headers take precedence over query params so the UI
+  // never mixes courses, and narrows to the active batch when one is selected.
   const course_id = req.courseId || req.query.course_id || undefined;
-  const { data, total } = await svc.listApplicants({ ...req.query, course_id, limit, offset });
+  const batch_id = req.batchId || req.query.batch_id || undefined;
+  const { data, total } = await svc.listApplicants({ ...req.query, course_id, batch_id, limit, offset });
   res.json({ success: true, data, pagination: buildPaginationMeta(total, page, limit) });
 });
 

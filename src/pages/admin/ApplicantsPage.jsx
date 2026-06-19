@@ -3,7 +3,7 @@ import {
   Save, Search, Send, Upload, UserCheck, UserMinus, UserPlus, XCircle, ClipboardList,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createApplicant, exportApplicants, getApplicants, shortlistApplicant, updateApplicantDetails, updateApplicantStatus } from '../../api/services/applicantService.js'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
@@ -20,6 +20,9 @@ import useScrollLock from '../../hooks/useScrollLock.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 const statusTabs = ['all', 'submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'enrolled', 'rejected']
+
+// Applicants load infinitely in pages of this size (both list & pipeline views).
+const PAGE_SIZE = 100
 
 // Ordered stages for the pipeline indicator (rejected is a side-branch)
 const PIPELINE = ['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'enrolled']
@@ -194,8 +197,13 @@ function DrawerActions({ item, onAct, onConvert, busy }) {
 export default function ApplicantsPage() {
   const navigate = useNavigate()
   const currentCourse = useCourseStore((s) => s.currentCourse)
+  const currentBatch = useCourseStore((s) => s.currentBatch)
 
   const [items,    setItems]    = useState(null)
+  const [total,    setTotal]    = useState(0)         // real total from API meta
+  const [loadingMore, setLoadingMore] = useState(false)
+  const loadedRef  = useRef(0)                         // current loaded count (for polling)
+  const sentinelRef = useRef(null)
   const [courses,  setCourses]  = useState([])
   const [batches,  setBatches]  = useState([])   // all batches cache
   const [formBatches, setFormBatches] = useState([])  // batches for selected course in form
@@ -209,7 +217,6 @@ export default function ApplicantsPage() {
   const [editSaving, setEditSaving] = useState(false)
   const [query,      setQuery]      = useState('')
   const [status,     setStatus]     = useState('all')
-  const [batchFilter, setBatchFilter] = useState('all')
   const [showImport, setShowImport] = useState(false)
   const [exporting,  setExporting]  = useState(false)
   const [view,       setView]       = useState('kanban')   // 'kanban' | 'list'
@@ -220,25 +227,63 @@ export default function ApplicantsPage() {
   const loadApplicants = () => {
     setItems(null)
     setSelected(null)
-    Promise.all([getApplicants({ limit: 100 }), getCourses()]).then(([r, c]) => {
+    Promise.all([getApplicants({ limit: PAGE_SIZE, offset: 0 }), getCourses()]).then(([r, c]) => {
       setItems(r.data)
+      setTotal(r.total ?? r.data.length)
+      loadedRef.current = r.data.length
       setCourses(c.data || [])
     })
     if (currentCourse?.id) {
       getBatches({ course_id: currentCourse.id }).then((r) => setBatches(r.data || [])).catch(() => {})
     }
   }
-  useEffect(() => { loadApplicants() }, [currentCourse?.id])
+
+  // Append the next page of 100 (infinite scroll / "Load more")
+  const loadMore = () => {
+    if (loadingMore || !items || items.length >= total) return
+    setLoadingMore(true)
+    getApplicants({ limit: PAGE_SIZE, offset: items.length })
+      .then((r) => {
+        setItems((xs) => {
+          const merged = [...(xs || []), ...r.data]
+          loadedRef.current = merged.length
+          return merged
+        })
+        setTotal((t) => r.total ?? t)
+      })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false))
+  }
+  // Refetch on course OR batch change — the X-Batch-Id header (attached
+  // automatically) scopes the list to the batch selected in the app header.
+  useEffect(() => { loadApplicants() }, [currentCourse?.id, currentBatch?.id])
 
   // Silent background refresh so the "Live" test indicator stays current on the
   // pipeline board — no spinner, no drawer reset. Only polls on the Kanban view.
   useEffect(() => {
     if (view !== 'kanban') return
     const id = setInterval(() => {
-      getApplicants({ limit: 100 }).then((r) => setItems(r.data)).catch(() => {})
+      // Refetch however many pages are currently loaded so appended pages aren't lost.
+      const count = Math.max(PAGE_SIZE, loadedRef.current || PAGE_SIZE)
+      getApplicants({ limit: count, offset: 0 }).then((r) => {
+        setItems(r.data)
+        setTotal(r.total ?? r.data.length)
+        loadedRef.current = r.data.length
+      }).catch(() => {})
     }, 30_000)
     return () => clearInterval(id)
-  }, [view, currentCourse?.id])
+  }, [view, currentCourse?.id, currentBatch?.id])
+
+  // Infinite scroll — load the next page when the sentinel scrolls into view.
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const obs = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) loadMore()
+    }, { rootMargin: '300px' })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [items, total, loadingMore]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Excel export (course-filtered, honours the status filter) ──────────────
   const handleExport = async () => {
@@ -301,12 +346,10 @@ export default function ApplicantsPage() {
     if (!items) return []
     return items.filter((item) => {
       const matchesStatus = status === 'all' || item.status === status
-      const matchesBatch  = batchFilter === 'all'
-        || (batchFilter === 'none' ? !item.batch_id : item.batch_id === batchFilter)
       const haystack = `${item.personal.full_name} ${item.personal.email} ${item.temp_id}`.toLowerCase()
-      return matchesStatus && matchesBatch && haystack.includes(query.toLowerCase())
+      return matchesStatus && haystack.includes(query.toLowerCase())
     })
-  }, [items, query, status, batchFilter])
+  }, [items, query, status])
 
   if (!items) return <SkeletonCard rows={8} />
 
@@ -432,7 +475,7 @@ export default function ApplicantsPage() {
   })
 
   const stats = [
-    { label: 'Total Applications', value: items.length,                                              hint: '+12 this month',    icon: UserPlus,     tone: 'rose'  },
+    { label: 'Total Applications', value: total || items.length,                                     hint: `${items.length} loaded`, icon: UserPlus,     tone: 'rose'  },
     { label: 'Tests Completed',    value: items.filter((a) => a.test_score).length,                  hint: 'Ready for review',  icon: CheckCircle2, tone: 'green' },
     { label: 'Pending Test',       value: items.filter((a) => a.status === 'test_pending').length,   hint: 'Needs follow-up',   icon: Clock3,       tone: 'amber' },
     { label: 'Avg. Test Score',    value: (() => { const s = items.filter((a) => a.test_score); return s.length ? `${Math.round(s.reduce((t, a) => t + a.test_score, 0) / s.length)}%` : '—' })(),
@@ -507,16 +550,11 @@ export default function ApplicantsPage() {
           </button>
         </div>
         <div className="flex items-center gap-3">
-          <select
-            className="input h-9 w-48 py-0 text-xs"
-            value={batchFilter}
-            onChange={(e) => setBatchFilter(e.target.value)}
-            title="Filter applicants by the batch they applied for"
-          >
-            <option value="all">All batches</option>
-            <option value="none">No batch assigned</option>
-            {batches.map((b) => <option key={b.id} value={b.id}>{b.code || b.name}</option>)}
-          </select>
+          {currentBatch && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--accent-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--accent)]" title="Scoped to the batch selected in the app header">
+              {currentBatch.name}
+            </span>
+          )}
           {view === 'kanban' && (
             <p className="hidden text-xs text-[color:var(--secondary)] xl:block">
               Applied → Shortlist → Send Test → Submitted → Final Shortlist → Enrolled
@@ -607,6 +645,20 @@ export default function ApplicantsPage() {
           </table>
         </div>
       </div>
+      )}
+
+      {/* ── Infinite-scroll sentinel + Load more (both views) ── */}
+      {items.length < total && (
+        <div ref={sentinelRef} className="mt-4 flex justify-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
+          >
+            {loadingMore ? <Loader2 size={15} className="animate-spin" /> : null}
+            {loadingMore ? 'Loading…' : `Load more (${items.length} of ${total})`}
+          </button>
+        </div>
       )}
 
       {/* ── Detail drawer ── */}
