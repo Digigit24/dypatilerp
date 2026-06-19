@@ -236,7 +236,19 @@ router.post('/:id/remind-test', authenticate, requirePermission('applicants', 'u
   if (!result.success) {
     return badRequest(res, `Reminder could not be sent: ${result.error || 'email failed'}`);
   }
-  ok(res, { applicant_id: applicantId, email: applicant.email, email_sent: true }, 'Reminder sent');
+
+  // Record the reminder timestamp inside application_data so the pipeline can
+  // show "last reminded" (kept in JSONB to avoid a schema migration).
+  const remindedAt = new Date().toISOString();
+  await query(
+    `UPDATE applicants
+       SET application_data = jsonb_set(COALESCE(application_data, '{}'::jsonb), '{last_reminded_at}', to_jsonb($2::text), true),
+           updated_at = NOW()
+     WHERE id = $1`,
+    [applicantId, remindedAt]
+  );
+
+  ok(res, { applicant_id: applicantId, email: applicant.email, email_sent: true, last_reminded_at: remindedAt }, 'Reminder sent');
 }));
 
 router.get('/:id', authenticate, requirePermission('applicants', 'read'), ctrl.getOne);

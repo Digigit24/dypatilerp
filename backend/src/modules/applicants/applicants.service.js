@@ -31,6 +31,7 @@ const normalizeApplicant = (row) => {
       graduation_year:     pd.year_awarded || appAcademic.graduation_year || null,
     },
     research_statement: appData.research_statement || row.research_statement || null,
+    last_reminded_at: appData.last_reminded_at || null,
   };
 };
 

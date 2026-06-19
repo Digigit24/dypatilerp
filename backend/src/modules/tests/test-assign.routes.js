@@ -305,8 +305,18 @@ router.post('/remind', authenticate, requirePermission('tests', 'update'), async
 
     const loginUrl = `${env.FRONTEND_URL}/test-login?token=${tok.token}`;
     const r = await sendTestReminder({ applicant, test, loginUrl, courseId: test.course_id });
-    if (r.success) reminded++;
-    else errors.push({ applicant_id: applicantId, email: applicant.email, error: r.error });
+    if (r.success) {
+      reminded++;
+      await query(
+        `UPDATE applicants
+           SET application_data = jsonb_set(COALESCE(application_data, '{}'::jsonb), '{last_reminded_at}', to_jsonb($2::text), true),
+               updated_at = NOW()
+         WHERE id = $1`,
+        [applicantId, new Date().toISOString()]
+      );
+    } else {
+      errors.push({ applicant_id: applicantId, email: applicant.email, error: r.error });
+    }
   }
 
   ok(res, { reminded, total: ids.length, errors }, `Reminder sent to ${reminded} applicant(s)`);

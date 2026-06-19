@@ -33,11 +33,22 @@ const passInfo = (a) => {
   return { score: a.test_score, max: a.test_max_score, pass }
 }
 
+const timeAgo = (d) => {
+  if (!d) return null
+  const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000)
+  if (Number.isNaN(s)) return null
+  if (s < 60) return 'just now'
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+  return `${Math.floor(s / 86400)}d ago`
+}
+
 export default function ApplicantsKanban({ items, courseId, batches, onSelect, onChanged }) {
   const addToast = useUiStore((s) => s.addToast)
   const labels = useLabels()
   const [busyId, setBusyId] = useState(null)
   const [remindingAll, setRemindingAll] = useState(false)
+  const [remindedMap, setRemindedMap] = useState({}) // applicant_id -> ISO timestamp (optimistic)
   const [modal, setModal] = useState(null) // {type:'send'|'reset'|'convert', applicant}
 
   const byStatus = useMemo(() => {
@@ -58,10 +69,12 @@ export default function ApplicantsKanban({ items, courseId, batches, onSelect, o
   }
 
   const remind = async (a) => {
+    if (busyId) return // guard against double-fire
     const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
     setBusyId(a.id)
     try {
-      await remindTest(a.id)
+      const r = await remindTest(a.id)
+      setRemindedMap((m) => ({ ...m, [a.id]: r.data?.last_reminded_at || new Date().toISOString() }))
       addToast({ type: 'success', title: `Reminder emailed to ${name}.` })
     } catch (err) {
       addToast({ type: 'error', title: 'Reminder failed', message: err.response?.data?.message })
@@ -77,9 +90,11 @@ export default function ApplicantsKanban({ items, courseId, batches, onSelect, o
     }
     setRemindingAll(true)
     let sent = 0
+    const stamps = {}
     for (const a of targets) {
-      try { await remindTest(a.id); sent++ } catch { /* keep going */ }
+      try { const r = await remindTest(a.id); stamps[a.id] = r.data?.last_reminded_at || new Date().toISOString(); sent++ } catch { /* keep going */ }
     }
+    setRemindedMap((m) => ({ ...m, ...stamps }))
     setRemindingAll(false)
     addToast({
       type: sent ? 'success' : 'error',
@@ -128,6 +143,7 @@ export default function ApplicantsKanban({ items, courseId, batches, onSelect, o
                     onOpen={() => onSelect(a)}
                     onAct={act}
                     onRemind={() => remind(a)}
+                    remindedAt={remindedMap[a.id] || a.last_reminded_at}
                     onSendTest={() => setModal({ type: 'send', applicant: a })}
                     onReset={() => setModal({ type: 'reset', applicant: a })}
                     onConvert={() => setModal({ type: 'convert', applicant: a })}
@@ -196,7 +212,7 @@ export default function ApplicantsKanban({ items, courseId, batches, onSelect, o
 }
 
 // ─── Compact card ───────────────────────────────────────────────────────────────
-function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, onSendTest, onReset, onConvert }) {
+function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt, onSendTest, onReset, onConvert }) {
   const p = passInfo(a)
   const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
 
@@ -263,6 +279,11 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, onSendTest,
               </Btn>
             )}
             <Btn onClick={onReset}><RefreshCw size={11} /> Reset &amp; Resend</Btn>
+            {remindedAt && (
+              <span className="inline-flex w-full items-center gap-1 text-[10px] font-medium text-[color:var(--muted)]" title={`Last reminded: ${new Date(remindedAt).toLocaleString()}`}>
+                <BellRing size={9} /> Reminded {timeAgo(remindedAt)}
+              </span>
+            )}
           </>
         )}
         {!busy && col === 'test_completed' && (

@@ -622,12 +622,34 @@ export const sendTestReminder = async ({
   courseId,
 }) => {
   const sender = await getCourseSender(courseId);
-  const { subject, html } = await renderTemplate('test_reminder', {
-    firstName: applicant.first_name,
-    testTitle: test.title,
-    loginUrl,
-    duration: test.duration_minutes,
-  });
+  const { subject, html } = await renderTemplate(
+    'test_reminder',
+    {
+      firstName: applicant.first_name,
+      testTitle: test.title,
+      loginUrl,
+      duration: test.duration_minutes,
+    },
+    // Inline fallback so reminders work even before an admin saves an override.
+    ({ firstName, testTitle, loginUrl: url, duration }) => ({
+      subject: `Reminder: Complete Your Entrance Test — ${testTitle}`,
+      html: base(`
+        <h2>Friendly Reminder ⏰</h2>
+        <p>Dear ${firstName},</p>
+        <p>We noticed you haven't started your <strong>${testTitle}</strong> yet. Your test is still waiting for you — please complete it at the earliest.</p>
+        <div class="info-box">
+          <p><strong>Test:</strong> ${testTitle}</p>
+          ${duration ? `<p><strong>Duration:</strong> ${duration} minutes</p>` : ''}
+          <p><strong>How to log in:</strong> Use the same username and password from your original test invitation email.</p>
+          <p><strong>Important:</strong> Once you click "Start Test", the timer begins and cannot be paused.</p>
+        </div>
+        <a href="${url}" class="cta">Login &amp; Take Test →</a>
+        <p style="word-break:break-all">Or open this link: <a href="${url}" style="color:#4F46E5">${url}</a></p>
+        <p>If you can no longer find your credentials, simply reply to the admissions team and we'll resend them.</p>
+        <p>Best regards,<br/><strong>DY Patil Admissions Team</strong></p>
+      `),
+    })
+  );
 
   const text = [
     `Reminder — Complete your entrance test: ${test.title}`,
