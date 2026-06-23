@@ -599,7 +599,7 @@ export default function ApplicantsPage() {
       {/* ── Kanban pipeline ── */}
       {view === 'kanban' && (
         <ApplicantsKanban
-          items={filtered}
+          items={items || []}
           courseId={currentCourse?.id}
           batches={batches}
           statusCounts={statCounts?.by_status}
@@ -614,7 +614,15 @@ export default function ApplicantsPage() {
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[color:var(--border)] p-5">
           <div>
             <h2 className="text-lg font-semibold text-[color:var(--text)]">Applicant Review Queue</h2>
-            <p className="text-sm text-[color:var(--secondary)]">{filtered.length} candidates shown</p>
+            <p className="text-sm text-[color:var(--secondary)]">
+              {(() => {
+                if (query) return `${filtered.length} match${filtered.length === 1 ? '' : 'es'} for "${query}"`
+                const realTotal = status === 'all'
+                  ? (statCounts?.total ?? total)
+                  : (statCounts?.by_status?.[status] ?? total)
+                return `${realTotal} candidate${realTotal === 1 ? '' : 's'}${status !== 'all' ? ` · ${status.replaceAll('_', ' ')}` : ''}`
+              })()}
+            </p>
           </div>
           <label className="flex h-11 w-72 items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-4">
             <Search size={16} className="text-[color:var(--muted)]" />
@@ -624,12 +632,17 @@ export default function ApplicantsPage() {
 
         {/* Status tabs */}
         <div className="mobile-filter-scroll flex gap-2 border-b border-[color:var(--border)] px-5 py-3">
-          {statusTabs.map((tab) => (
-            <button key={tab} onClick={() => setStatus(tab)}
-              className={`mobile-compact-button shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold capitalize transition ${status === tab ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}>
-              {tab.replaceAll('_', ' ')}
-            </button>
-          ))}
+          {statusTabs.map((tab) => {
+            const tabCount = tab === 'all'
+              ? (statCounts?.total ?? total)
+              : (statCounts?.by_status?.[tab] ?? null)
+            return (
+              <button key={tab} onClick={() => setStatus(tab)}
+                className={`mobile-compact-button shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold capitalize transition ${status === tab ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}>
+                {tab.replaceAll('_', ' ')}{tabCount != null ? ` (${tabCount})` : ''}
+              </button>
+            )
+          })}
         </div>
 
         <div className="overflow-x-auto">
@@ -682,7 +695,7 @@ export default function ApplicantsPage() {
       )}
 
       {/* ── Infinite-scroll sentinel + Load more (list view; kanban loads all) ── */}
-      {view === 'list' && items.length < total && (
+      {view === 'list' && items.length < (statCounts?.total ?? total) && (
         <div ref={sentinelRef} className="mt-4 flex justify-center">
           <button
             onClick={loadMore}
@@ -690,7 +703,7 @@ export default function ApplicantsPage() {
             className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
           >
             {loadingMore ? <Loader2 size={15} className="animate-spin" /> : null}
-            {loadingMore ? 'Loading…' : `Load more (${items.length} of ${total})`}
+            {loadingMore ? 'Loading…' : `Load more (${items.length} of ${statCounts?.total ?? total})`}
           </button>
         </div>
       )}
