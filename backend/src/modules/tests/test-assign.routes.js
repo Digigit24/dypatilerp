@@ -78,10 +78,22 @@ router.post('/', authenticate, requirePermission('tests', 'update'), asyncHandle
     const { rows: [applicant] } = await query('SELECT * FROM applicants WHERE id = $1', [applicantId]);
     if (!applicant) continue;
 
+    // Is this applicant ALREADY assigned to THIS test? If so we keep their
+    // existing link + password (idempotent re-assign) and never rotate
+    // silently — re-running "assign all" must not break already-sent links.
+    const { rows: [existingToken] } = await query(
+      'SELECT * FROM test_access_tokens WHERE test_id = $1 AND applicant_id = $2',
+      [testId, applicantId]
+    );
+
     let userId = applicant.user_id;
     let plainPassword = null;
 
-    // ── Create user account if not existing ──
+    // ── Ensure a user account exists (identity only) ──
+    // NOTE: we never rotate an existing account's global password here. The
+    // test credential lives on the access-token row (password_hash) so that
+    // assigning/re-assigning one test can never invalidate another test's
+    // credentials or the student's portal password.
     if (!userId) {
       const { rows: [existingUser] } = await query(
         'SELECT id FROM users WHERE email = $1', [applicant.email]
@@ -89,7 +101,11 @@ router.post('/', authenticate, requirePermission('tests', 'update'), asyncHandle
 
       if (existingUser) {
         userId = existingUser.id;
+        // Link the existing account back to this applicant record.
+        await query('UPDATE applicants SET user_id = $1 WHERE id = $2', [userId, applicantId]);
       } else {
+        // Brand-new account — seed it with the test password so portal login
+        // is also possible. (Re-used below as the per-test credential.)
         plainPassword = genPassword();
         const hash = await bcrypt.hash(plainPassword, 10);
         const { rows: [newUser] } = await query(
@@ -111,23 +127,32 @@ router.post('/', authenticate, requirePermission('tests', 'update'), asyncHandle
         // Link user back to applicant record
         await query('UPDATE applicants SET user_id = $1 WHERE id = $2', [userId, applicantId]);
       }
-    } else {
-      // User exists — generate a new password so they have fresh credentials
-      plainPassword = genPassword();
-      const hash = await bcrypt.hash(plainPassword, 10);
-      await query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, userId]);
     }
 
-    // ── Create or replace access token ──
-    const token = genToken();
+    // ── Decide this test's credential ──
+    // Already assigned → reuse existing token + password_hash (no rotation,
+    //   no email; admins should use /remind to nudge with the existing link).
+    // First assignment → issue a fresh per-test password stored on the token.
+    let token;
+    let passwordHash;
+    if (existingToken) {
+      token        = existingToken.token;
+      passwordHash = existingToken.password_hash;
+      // plainPassword stays null → credentials email is not re-sent.
+    } else {
+      if (!plainPassword) plainPassword = genPassword();
+      passwordHash = await bcrypt.hash(plainPassword, 10);
+      token        = genToken();
+    }
+
     const username = applicant.email;
     const { rows: [accessToken] } = await query(
-      `INSERT INTO test_access_tokens (test_id, applicant_id, token, username, user_id, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO test_access_tokens (test_id, applicant_id, token, username, user_id, password_hash, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (test_id, applicant_id)
        DO UPDATE SET token = EXCLUDED.token, username = EXCLUDED.username,
-                     user_id = EXCLUDED.user_id, expires_at = EXCLUDED.expires_at,
-                     used_at = NULL, created_at = NOW()
+                     user_id = EXCLUDED.user_id, password_hash = EXCLUDED.password_hash,
+                     expires_at = EXCLUDED.expires_at
        RETURNING *`,
       [
         testId,
@@ -135,6 +160,7 @@ router.post('/', authenticate, requirePermission('tests', 'update'), asyncHandle
         token,
         username,
         userId,
+        passwordHash,
         tokenExpiry(),
       ]
     );
@@ -213,15 +239,14 @@ router.post('/reset', authenticate, requirePermission('tests', 'update'), asyncH
   const newPassword = genPassword();
   const hash        = await bcrypt.hash(newPassword, 10);
 
-  // Update user password so old password no longer works
-  await query('UPDATE users SET password_hash=$1 WHERE id=$2', [hash, accessToken.user_id]);
-
-  // Refresh access token (reset used_at so fresh login is required)
+  // Rotate THIS test's credential only — the per-test password_hash lives on
+  // the access-token row, so this never touches the global account password
+  // or any other test the applicant may have been assigned.
   await query(
     `UPDATE test_access_tokens
-     SET token=$1, used_at=NULL, created_at=NOW(), expires_at=$4
-     WHERE test_id=$2 AND applicant_id=$3`,
-    [newToken, testId, applicant_id, tokenExpiry()]
+     SET token=$1, password_hash=$2, used_at=NULL, created_at=NOW(), expires_at=$5
+     WHERE test_id=$3 AND applicant_id=$4`,
+    [newToken, hash, testId, applicant_id, tokenExpiry()]
   );
 
   // ── Reset applicant status → test_pending ──

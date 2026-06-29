@@ -42,14 +42,20 @@ router.post('/login', asyncHandler(async (req, res) => {
     return unauthorized(res, 'Invalid username or password.');
   }
 
-  // Validate password against the applicant's user account
+  // Load the applicant's user account (needed for identity + active check).
   const { rows: [user] } = await query(
     'SELECT id, email, password_hash, first_name, last_name, is_active FROM users WHERE id = $1',
     [accessToken.user_id]
   );
   if (!user || !user.is_active) return unauthorized(res, 'Account not found or inactive.');
 
-  const valid = await bcrypt.compare(password, user.password_hash);
+  // Validate against the per-test credential stored on the access token.
+  // Fall back to the global account password for links issued before the
+  // per-test password_hash column existed (backward compatible).
+  // Trim the submitted password — plain-text mailers / copy-paste often add
+  // stray whitespace which would otherwise fail a byte-exact bcrypt compare.
+  const credentialHash = accessToken.password_hash || user.password_hash;
+  const valid = credentialHash ? await bcrypt.compare(String(password).trim(), credentialHash) : false;
   if (!valid) return unauthorized(res, 'Invalid username or password.');
 
   // Check if already submitted

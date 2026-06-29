@@ -21,11 +21,16 @@ CREATE TABLE IF NOT EXISTS test_access_tokens (
   token          VARCHAR(128) UNIQUE NOT NULL,
   username       VARCHAR(255) NOT NULL,
   user_id        UUID REFERENCES users(id),
+  password_hash  VARCHAR(255),
   expires_at     TIMESTAMP,
   used_at        TIMESTAMP,
   created_at     TIMESTAMP DEFAULT NOW(),
   UNIQUE (test_id, applicant_id)
 );
+
+-- Per-test credential (additive for existing deployments)
+ALTER TABLE test_access_tokens
+  ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
 
 -- 3. Add section_id to test_questions
 ALTER TABLE test_questions

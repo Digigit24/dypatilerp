@@ -30,7 +30,9 @@ export default function TestLoginPage() {
     if (!username || !password) { setError('Please enter your username and password.'); return }
     setLoading(true)
     try {
-      const res = await testLogin({ token, username, password })
+      // Trim credentials — mail clients / copy-paste frequently append a
+      // stray space or newline which would otherwise fail login.
+      const res = await testLogin({ token, username: username.trim(), password: password.trim() })
       login(res.data)
       navigate(`/test/${res.data.test_id}/instructions`, { replace: true })
     } catch (err) {

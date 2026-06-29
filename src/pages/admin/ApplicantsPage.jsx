@@ -262,6 +262,23 @@ export default function ApplicantsPage() {
     }
   }
 
+  // Patch one item in-place immediately — no loading flash, no scroll reset.
+  const optimisticUpdate = (id, patch) => {
+    setItems((xs) => xs?.map((x) => x.id === id ? { ...x, ...patch } : x) ?? xs)
+    if (patch.status) refreshStats()
+  }
+
+  // Re-sync from the server without clearing items — called after kanban actions succeed.
+  const silentRefresh = () => {
+    getApplicants({ limit: KANBAN_LIMIT, offset: 0 }).then((r) => {
+      const data = dedupeById(r.data)
+      setItems(data)
+      setTotal(r.total ?? data.length)
+      loadedRef.current = data.length
+    }).catch(() => {})
+    refreshStats()
+  }
+
   // Append the next page of 100 (list view only). Guards: inFlightRef (no concurrent
   // call) + requestedRef (each offset fetched at most once → no repeated API calls).
   const loadMore = () => {
@@ -604,7 +621,8 @@ export default function ApplicantsPage() {
           batches={batches}
           statusCounts={statCounts?.by_status}
           onSelect={(a) => setSelected(a)}
-          onChanged={loadApplicants}
+          onChanged={silentRefresh}
+          onOptimisticUpdate={optimisticUpdate}
         />
       )}
 

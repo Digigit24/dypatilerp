@@ -43,7 +43,7 @@ const timeAgo = (d) => {
   return `${Math.floor(s / 86400)}d ago`
 }
 
-export default function ApplicantsKanban({ items, courseId, batches, statusCounts, onSelect, onChanged }) {
+export default function ApplicantsKanban({ items, courseId, batches, statusCounts, onSelect, onChanged, onOptimisticUpdate }) {
   const addToast = useUiStore((s) => s.addToast)
   const labels = useLabels()
   const [busyId, setBusyId] = useState(null)
@@ -58,12 +58,15 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
   }, [items])
 
   const act = async (a, status, successMsg) => {
+    const prevStatus = a.status
+    onOptimisticUpdate(a.id, { status }) // move card instantly
     setBusyId(a.id)
     try {
       await updateApplicantStatus(a.id, status)
       addToast({ type: status === 'rejected' ? 'warning' : 'success', title: successMsg || `Moved to ${status.replaceAll('_', ' ')}.` })
-      onChanged()
+      onChanged() // silent background sync
     } catch (err) {
+      onOptimisticUpdate(a.id, { status: prevStatus }) // rollback
       addToast({ type: 'error', title: 'Action failed', message: err.response?.data?.message })
     } finally { setBusyId(null) }
   }
@@ -71,12 +74,15 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
   const remind = async (a) => {
     if (busyId) return // guard against double-fire
     const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+    const optimisticTs = new Date().toISOString()
+    setRemindedMap((m) => ({ ...m, [a.id]: optimisticTs })) // optimistic timestamp
     setBusyId(a.id)
     try {
       const r = await remindTest(a.id)
-      setRemindedMap((m) => ({ ...m, [a.id]: r.data?.last_reminded_at || new Date().toISOString() }))
+      setRemindedMap((m) => ({ ...m, [a.id]: r.data?.last_reminded_at || optimisticTs }))
       addToast({ type: 'success', title: `Reminder emailed to ${name}.` })
     } catch (err) {
+      setRemindedMap((m) => { const n = { ...m }; delete n[a.id]; return n }) // rollback
       addToast({ type: 'error', title: 'Reminder failed', message: err.response?.data?.message })
     } finally { setBusyId(null) }
   }
@@ -165,6 +171,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
           onClose={() => setModal(null)}
           onConfirm={async (testId) => {
             const res = await assignTest(testId, { applicant_ids: [modal.applicant.id], send_email: true })
+            onOptimisticUpdate(modal.applicant.id, { status: 'test_pending' })
             addToast({ type: 'success', title: `Test link emailed to ${modal.applicant.personal?.email || modal.applicant.email}.${res.data?.emails_sent ? '' : ' (email may have failed — check credentials in Test Builder)'}` })
             setModal(null)
             onChanged()
@@ -182,6 +189,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
           onClose={() => setModal(null)}
           onConfirm={async (testId) => {
             await resetTestAttempt(testId, { applicant_id: modal.applicant.id, send_email: true })
+            onOptimisticUpdate(modal.applicant.id, { status: 'test_pending', test_score: null, test_submitted_at: null })
             addToast({ type: 'success', title: 'Attempt reset — fresh link emailed.' })
             setModal(null)
             onChanged()
@@ -196,6 +204,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
           onClose={() => setModal(null)}
           onConfirm={async (batchId) => {
             const r = await convertToStudent(modal.applicant.id, batchId, { send_credentials: true })
+            onOptimisticUpdate(modal.applicant.id, { status: 'enrolled' })
             addToast({
               type: 'success',
               title: r.data?.credentials_emailed
