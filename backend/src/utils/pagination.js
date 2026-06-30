@@ -1,7 +1,26 @@
 export const getPagination = (query) => {
-  const page = Math.max(1, parseInt(query.page) || 1);
   const limit = Math.min(2000, Math.max(1, parseInt(query.limit) || 20));
-  const offset = (page - 1) * limit;
+
+  // Support both pagination styles:
+  // page-based:   ?page=2&limit=100
+  // offset-based: ?offset=100&limit=100
+  // Load more / infinite scroll usually sends offset.
+  const hasOffset =
+    query.offset !== undefined &&
+    query.offset !== '' &&
+    query.offset !== null;
+
+  let offset;
+  let page;
+
+  if (hasOffset) {
+    offset = Math.max(0, parseInt(query.offset) || 0);
+    page = Math.floor(offset / limit) + 1;
+  } else {
+    page = Math.max(1, parseInt(query.page) || 1);
+    offset = (page - 1) * limit;
+  }
+
   return { page, limit, offset };
 };
 
