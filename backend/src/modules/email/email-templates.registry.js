@@ -128,6 +128,39 @@ export const EMAIL_TEMPLATES = [
       <p>Best regards,<br/><strong>DY Patil Admissions Team</strong></p>`,
   },
 
+  // ─── Applicants ─────────────────────────────────────────────────────────────
+  {
+    key: 'applicant_shortlisted',
+    label: 'Final Shortlist — Qualified for Interview (Registration Fee)',
+    category: 'Applicants',
+    audience: 'Applicant',
+    description: 'Sent automatically to an applicant when they are moved to the Final Shortlist (status → shortlisted). Confirms they qualified the entrance test and shares the registration-fee / bank account details for the interview stage.',
+    variables: [
+      { name: 'fullName', sample: 'Aarav Sharma', description: "Applicant's full name (falls back to \"Applicant\" if empty)" },
+    ],
+    subject: 'Qualified for the Interview Stage – Post-Doctoral Program Admission Process',
+    body: `
+      <h2>Qualified for the Interview Stage</h2>
+      <p>Dear {{fullName}},</p>
+      <p>Greetings from Dr. D. Y. Patil Education and Research Foundation!</p>
+      <p>We are pleased to inform you that you have successfully qualified the Entrance Test for admission to the Post-Doctoral Program offered by Dr. D. Y. Patil Education and Research Foundation, in collaboration with McCoy College of Business, Texas State University, USA and Dr. D. Y. Patil Institute of Management Studies, Pune, India.</p>
+      <p>The next stage of the admission process is the Personal Interview. The interview schedule, along with other relevant details, will be communicated to you shortly via email.</p>
+      <p>As part of the admission process, all shortlisted applicants are required to complete the program registration by paying the <strong>Registration Fee of USD 200 (INR 19,000)</strong>.</p>
+      <div class="info-box">
+        <p><strong>Account Details</strong></p>
+        <p><strong>Bank Name:</strong> HDFC Bank</p>
+        <p><strong>A/c No.:</strong> 50100136437400</p>
+        <p><strong>Account Name:</strong> DR D Y PATIL EDUCATION AND RESEARCH FOUNDATION</p>
+        <p><strong>IFSC Code:</strong> HDFC0000007</p>
+      </div>
+      <p>Kindly complete the payment within the stipulated timeline and share the transaction receipt by replying to this email. Your registration will be considered complete only upon successful receipt and verification of the registration fee.</p>
+      <p>Please note that the interview process will be scheduled only for candidates who have completed the registration formalities.</p>
+      <p>We congratulate you on your successful performance in the Entrance Test and look forward to your participation in the next stage of the selection process.</p>
+      <p>Should you have any queries, please feel free to contact on 9545154191 or 9860152927. For more information, please refer to <a href="https://www.dypims.com/research-center.php" style="color:#4F46E5">https://www.dypims.com/research-center.php</a></p>
+      <p>We wish you all the very best for the upcoming interview.</p>
+      <p>Warm regards,<br/><strong>Post-Doctoral Program</strong><br/>Dr. D. Y. Patil Education and Research Foundation<br/>Pune (India)</p>`,
+  },
+
   {
     key: 'test_completed',
     label: 'Test Submitted (Applicant)',

@@ -62,8 +62,17 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
     onOptimisticUpdate(a.id, { status }) // move card instantly
     setBusyId(a.id)
     try {
-      await updateApplicantStatus(a.id, status)
-      addToast({ type: status === 'rejected' ? 'warning' : 'success', title: successMsg || `Moved to ${status.replaceAll('_', ' ')}.` })
+      const res = await updateApplicantStatus(a.id, status)
+      // Final Shortlist auto-sends the registration-fee email — reflect whether
+      // it actually went out instead of always claiming success.
+      if (status === 'shortlisted') {
+        const emailFailed = res.data?.shortlist_email && res.data.shortlist_email.sent === false
+        addToast(emailFailed
+          ? { type: 'warning', title: 'Candidate shortlisted, but payment email failed. Please retry or send manually.' }
+          : { type: 'success', title: 'Candidate shortlisted and payment email sent.' })
+      } else {
+        addToast({ type: status === 'rejected' ? 'warning' : 'success', title: successMsg || `Moved to ${status.replaceAll('_', ' ')}.` })
+      }
       onChanged() // silent background sync
     } catch (err) {
       onOptimisticUpdate(a.id, { status: prevStatus }) // rollback

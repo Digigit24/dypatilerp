@@ -324,6 +324,32 @@ const templates = {
     `),
   }),
 
+  // ── Final Shortlist → "Qualified for Interview / Registration Fee" ──
+  applicant_shortlisted: ({ fullName }) => ({
+    subject: 'Qualified for the Interview Stage – Post-Doctoral Program Admission Process',
+    html: base(`
+      <h2>Qualified for the Interview Stage</h2>
+      <p>Dear ${fullName || 'Applicant'},</p>
+      <p>Greetings from Dr. D. Y. Patil Education and Research Foundation!</p>
+      <p>We are pleased to inform you that you have successfully qualified the Entrance Test for admission to the Post-Doctoral Program offered by Dr. D. Y. Patil Education and Research Foundation, in collaboration with McCoy College of Business, Texas State University, USA and Dr. D. Y. Patil Institute of Management Studies, Pune, India.</p>
+      <p>The next stage of the admission process is the Personal Interview. The interview schedule, along with other relevant details, will be communicated to you shortly via email.</p>
+      <p>As part of the admission process, all shortlisted applicants are required to complete the program registration by paying the <strong>Registration Fee of USD 200 (INR 19,000)</strong>.</p>
+      <div class="info-box">
+        <p><strong>Account Details</strong></p>
+        <p><strong>Bank Name:</strong> HDFC Bank</p>
+        <p><strong>A/c No.:</strong> 50100136437400</p>
+        <p><strong>Account Name:</strong> DR D Y PATIL EDUCATION AND RESEARCH FOUNDATION</p>
+        <p><strong>IFSC Code:</strong> HDFC0000007</p>
+      </div>
+      <p>Kindly complete the payment within the stipulated timeline and share the transaction receipt by replying to this email. Your registration will be considered complete only upon successful receipt and verification of the registration fee.</p>
+      <p>Please note that the interview process will be scheduled only for candidates who have completed the registration formalities.</p>
+      <p>We congratulate you on your successful performance in the Entrance Test and look forward to your participation in the next stage of the selection process.</p>
+      <p>Should you have any queries, please feel free to contact on 9545154191 or 9860152927. For more information, please refer to <a href="https://www.dypims.com/research-center.php" style="color:#4F46E5">https://www.dypims.com/research-center.php</a></p>
+      <p>We wish you all the very best for the upcoming interview.</p>
+      <p>Warm regards,<br/><strong>Post-Doctoral Program</strong><br/>Dr. D. Y. Patil Education and Research Foundation<br/>Pune (India)</p>
+    `),
+  }),
+
   application_submitted: ({ firstName, applicationId }) => ({
     subject: 'Application Received — DY Patil PhD Program',
     html: base(`
@@ -672,6 +698,63 @@ export const sendTestReminder = async ({
 
   return sendEmail({
     to: { email: applicant.email, name: `${applicant.first_name} ${applicant.last_name}` },
+    subject,
+    html,
+    text,
+    sender,
+  });
+};
+
+/**
+ * Send the client-approved "Qualified for Interview / Registration Fee" email to
+ * an applicant who has just been moved to the Final Shortlist.
+ *
+ * Override-aware: an admin edit saved in the Email Templates UI wins; otherwise
+ * the code template (key: applicant_shortlisted) is used. {{fullName}} falls
+ * back to "Applicant" when the applicant has no name on record.
+ */
+export const sendApplicantShortlisted = async ({ applicant, courseId = null }) => {
+  const fullName = `${applicant.first_name || ''} ${applicant.last_name || ''}`.trim() || 'Applicant';
+  const sender = await getCourseSender(courseId);
+  const { subject, html } = await renderTemplate('applicant_shortlisted', { fullName });
+
+  const text = [
+    'Qualified for the Interview Stage – Post-Doctoral Program Admission Process',
+    '',
+    `Dear ${fullName},`,
+    '',
+    'Greetings from Dr. D. Y. Patil Education and Research Foundation!',
+    '',
+    'We are pleased to inform you that you have successfully qualified the Entrance Test for admission to the Post-Doctoral Program offered by Dr. D. Y. Patil Education and Research Foundation, in collaboration with McCoy College of Business, Texas State University, USA and Dr. D. Y. Patil Institute of Management Studies, Pune, India.',
+    '',
+    'The next stage of the admission process is the Personal Interview. The interview schedule, along with other relevant details, will be communicated to you shortly via email.',
+    '',
+    'As part of the admission process, all shortlisted applicants are required to complete the program registration by paying the Registration Fee of USD 200 (INR 19,000).',
+    '',
+    'Account Details:',
+    'Bank Name:     HDFC Bank',
+    'A/c No.:       50100136437400',
+    'Account Name:  DR D Y PATIL EDUCATION AND RESEARCH FOUNDATION',
+    'IFSC Code:     HDFC0000007',
+    '',
+    'Kindly complete the payment within the stipulated timeline and share the transaction receipt by replying to this email. Your registration will be considered complete only upon successful receipt and verification of the registration fee.',
+    '',
+    'Please note that the interview process will be scheduled only for candidates who have completed the registration formalities.',
+    '',
+    'We congratulate you on your successful performance in the Entrance Test and look forward to your participation in the next stage of the selection process.',
+    '',
+    'Should you have any queries, please feel free to contact on 9545154191 or 9860152927. For more information, please refer to https://www.dypims.com/research-center.php',
+    '',
+    'We wish you all the very best for the upcoming interview.',
+    '',
+    'Warm regards,',
+    'Post-Doctoral Program',
+    'Dr. D. Y. Patil Education and Research Foundation',
+    'Pune (India)',
+  ].join('\n');
+
+  return sendEmail({
+    to: { email: applicant.email, name: fullName },
     subject,
     html,
     text,

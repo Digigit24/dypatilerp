@@ -410,8 +410,17 @@ export default function ApplicantsPage() {
       setItems((xs) => xs.map((x) => (x.id === item.id ? res.data : x)))
       setSelected(res.data)
 
+      // Final Shortlist auto-sends the registration-fee email — surface whether
+      // it actually went out so a silent email failure is never hidden.
+      if (nextStatus === 'shortlisted') {
+        const emailFailed = res.data?.shortlist_email && res.data.shortlist_email.sent === false
+        addToast(emailFailed
+          ? { type: 'warning', title: 'Candidate shortlisted, but payment email failed. Please retry or send manually.' }
+          : { type: 'success', title: 'Candidate shortlisted and payment email sent.' })
+        return
+      }
+
       const labels = {
-        shortlisted:    `${item.personal.full_name} has been shortlisted.`,
         rejected:       `${item.personal.full_name}'s application rejected.`,
         test_pending:   `Test invite sent to ${item.personal.full_name}.`,
         test_completed: `${item.personal.full_name} marked as test completed.`,
