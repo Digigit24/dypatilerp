@@ -43,6 +43,9 @@ app.set('trust proxy', 1);
 const allowedOrigins = [
   env.FRONTEND_URL,
   'https://app.dyperf.com',
+  'http://app.dyperf.com',
+  'https://www.app.dyperf.com',
+  'http://www.app.dyperf.com',
   'https://dyperf.netlify.app',
   'http://localhost:5173',
   'http://localhost:3000',
