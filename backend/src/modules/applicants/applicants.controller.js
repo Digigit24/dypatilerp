@@ -39,6 +39,35 @@ export const updateDetails = asyncHandler(async (req, res) => {
 export const updateStatus = asyncHandler(async (req, res) => {
   const applicant = await svc.updateApplicantStatus(req.params.id, req.body, req.user.id);
   if (!applicant) return notFound(res, 'Applicant not found');
+
+  // Auto-send the client-approved "Qualified for Interview / Registration Fee"
+  // email the first time an applicant enters the Final Shortlist. Guard on the
+  // previous status so repeated same-status updates never re-send the email.
+  const becameShortlisted =
+    applicant.status === 'shortlisted' && applicant.previous_status !== 'shortlisted';
+
+  if (becameShortlisted) {
+    const { sendApplicantShortlisted } = await import('../email/email.service.js');
+    const result = await sendApplicantShortlisted({
+      applicant,
+      courseId: applicant.course_id || null,
+    });
+
+    applicant.shortlist_email = {
+      attempted: true,
+      sent: !!result.success,
+      error: result.success ? null : (result.error || 'Email could not be sent'),
+    };
+
+    if (result.success) {
+      console.log(`[applicants] Shortlist email sent → ${applicant.email}`, result.messageId || '(mock)');
+    } else {
+      // Do NOT swallow the failure — the applicant is still shortlisted, but the
+      // admin must be able to see that the payment email did not go out.
+      console.error(`[applicants] Shortlist email FAILED → ${applicant.email}: ${applicant.shortlist_email.error}`);
+    }
+  }
+
   ok(res, applicant, 'Status updated');
 });
 

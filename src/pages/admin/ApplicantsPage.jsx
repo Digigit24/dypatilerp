@@ -9,6 +9,7 @@ import { createApplicant, exportApplicants, getApplicants, getApplicantStats, sh
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
 import { buildApplicantImportConfig } from '../../components/admin/applicantImportConfig.js'
 import ApplicantsKanban from '../../components/admin/ApplicantsKanban.jsx'
+import RejectModal from '../../components/admin/RejectModal.jsx'
 import { getBatches } from '../../api/services/batchService.js'
 import { getCourses } from '../../api/services/courseService.js'
 import { useCourseStore } from '../../store/courseStore.js'
@@ -118,12 +119,14 @@ function DrawerActions({ item, onAct, onConvert, busy }) {
   }
 
   if (status === 'shortlisted') {
+    // Reject lives in the drawer body (just above "View Test Responses"), so it
+    // is intentionally not repeated here.
     return (
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2">
         <button
           disabled={busy}
           onClick={() => onConvert(item)}
-          className="col-span-2 btn-primary flex items-center justify-center gap-2 text-sm"
+          className="btn-primary flex items-center justify-center gap-2 text-sm"
         >
           <GraduationCap size={15} /> Convert to Student
         </button>
@@ -133,13 +136,6 @@ function DrawerActions({ item, onAct, onConvert, busy }) {
           className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-amber-400 hover:text-amber-700 transition disabled:opacity-50"
         >
           <UserMinus size={14} /> Remove Shortlist
-        </button>
-        <button
-          disabled={busy}
-          onClick={() => onAct(item, 'rejected')}
-          className="mobile-compact-button flex items-center justify-center rounded-[14px] bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50"
-        >
-          Reject
         </button>
       </div>
     )
@@ -151,8 +147,10 @@ function DrawerActions({ item, onAct, onConvert, busy }) {
   const canMarkDone  = status === 'test_pending'
   const canShortlist = status === 'test_completed'
 
+  // Reject is rendered once in the drawer body (just above "View Test
+  // Responses"), so the footer only carries the forward pipeline action.
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-1 gap-2">
       {canShortlistTest && (
         <button
           disabled={busy}
@@ -190,13 +188,6 @@ function DrawerActions({ item, onAct, onConvert, busy }) {
           <UserCheck size={14} /> Final Shortlist
         </button>
       )}
-      <button
-        disabled={busy}
-        onClick={() => onAct(item, 'rejected')}
-        className={`mobile-compact-button flex items-center justify-center rounded-[14px] bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50 ${!canShortlistTest && !canSendTest && !canMarkDone && !canShortlist ? 'col-span-2' : ''}`}
-      >
-        Reject
-      </button>
     </div>
   )
 }
@@ -223,6 +214,8 @@ export default function ApplicantsPage() {
   const [form,     setForm]     = useState(() => makeBlankForm(currentCourse?.id || ''))
   const [saving,     setSaving]     = useState(false)
   const [acting,     setActing]     = useState(false)
+  const [rejectTarget, setRejectTarget] = useState(null)  // applicant awaiting reject confirmation
+  const [rejecting,    setRejecting]    = useState(false)
   const [editing,    setEditing]    = useState(false)
   const [editForm,   setEditForm]   = useState({})
   const [editSaving, setEditSaving] = useState(false)
@@ -402,6 +395,8 @@ export default function ApplicantsPage() {
   if (!items) return <SkeletonCard rows={8} />
 
   const act = async (item, nextStatus) => {
+    // Reject always goes through the remark-confirmation modal.
+    if (nextStatus === 'rejected') { setRejectTarget(item); return }
     setActing(true)
     try {
       const res = nextStatus === 'shortlisted'
@@ -410,19 +405,53 @@ export default function ApplicantsPage() {
       setItems((xs) => xs.map((x) => (x.id === item.id ? res.data : x)))
       setSelected(res.data)
 
+      // Final Shortlist auto-sends the registration-fee email — surface whether
+      // it actually went out so a silent email failure is never hidden.
+      if (nextStatus === 'shortlisted') {
+        const emailFailed = res.data?.shortlist_email && res.data.shortlist_email.sent === false
+        addToast(emailFailed
+          ? { type: 'warning', title: 'Candidate shortlisted, but payment email failed. Please retry or send manually.' }
+          : { type: 'success', title: 'Candidate shortlisted and payment email sent.' })
+        return
+      }
+
       const labels = {
-        shortlisted:    `${item.personal.full_name} has been shortlisted.`,
-        rejected:       `${item.personal.full_name}'s application rejected.`,
         test_pending:   `Test invite sent to ${item.personal.full_name}.`,
         test_completed: `${item.personal.full_name} marked as test completed.`,
         submitted:      `${item.personal.full_name} moved back to submitted.`,
       }
       addToast({
-        type:  nextStatus === 'rejected' ? 'warning' : 'success',
+        type:  'success',
         title: labels[nextStatus] || `Status updated to ${nextStatus.replaceAll('_', ' ')}.`,
       })
     } finally {
       setActing(false)
+    }
+  }
+
+  // Reject with a remark — optimistic update, rollback on failure.
+  const confirmReject = async (remark) => {
+    const item = rejectTarget
+    if (!item) return
+    const snapshot = item
+    setRejecting(true)
+    // Move the card/row to Rejected instantly (and refresh the scoped counts).
+    optimisticUpdate(item.id, { status: 'rejected', rejection_remark: remark || null })
+    setSelected((s) => (s && s.id === item.id ? { ...s, status: 'rejected', rejection_remark: remark || null } : s))
+    try {
+      const res = await updateApplicantStatus(item.id, 'rejected', { remark })
+      setItems((xs) => xs?.map((x) => (x.id === item.id ? res.data : x)) ?? xs)
+      setSelected((s) => (s && s.id === item.id ? res.data : s))
+      refreshStats()
+      addToast({ type: 'warning', title: `${item.personal.full_name}'s application rejected.` })
+      setRejectTarget(null)
+    } catch (err) {
+      // Roll the UI back to the previous status.
+      optimisticUpdate(item.id, { status: snapshot.status, rejection_remark: snapshot.rejection_remark ?? null })
+      setSelected((s) => (s && s.id === item.id ? snapshot : s))
+      addToast({ type: 'error', title: 'Reject failed', message: err.response?.data?.message || err.message })
+    } finally {
+      setRejecting(false)
     }
   }
 
@@ -830,6 +859,14 @@ export default function ApplicantsPage() {
                 <PipelineBar status={selected.status} />
               </div>
 
+              {/* Rejection remark — recorded when the applicant was rejected */}
+              {selected.status === 'rejected' && selected.rejection_remark && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-red-500">Rejection Remark</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-red-700">{selected.rejection_remark}</p>
+                </div>
+              )}
+
               <DrawerSection title="Personal Information">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Info label="Email"           value={selected.personal.email} />
@@ -903,6 +940,17 @@ export default function ApplicantsPage() {
                     </div>
                   </div>
                 )}
+                {/* Reject — the single reject control in the drawer, available at
+                    every pipeline stage (Applied → Test Sent → Test Done → Final). */}
+                {selected.status !== 'rejected' && selected.status !== 'enrolled' && (
+                  <button
+                    disabled={acting || rejecting}
+                    onClick={() => act(selected, 'rejected')}
+                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50"
+                  >
+                    <XCircle size={16} /> Reject
+                  </button>
+                )}
                 {(selected.status === 'test_completed' || selected.test_score != null) && (
                   <button
                     onClick={() => navigate(`/admin/applicants/${selected.id}/test-results`)}
@@ -949,6 +997,15 @@ export default function ApplicantsPage() {
           </div>
         </div>
       )}
+
+      {/* ── Reject confirmation (remark) ── */}
+      <RejectModal
+        open={Boolean(rejectTarget)}
+        applicantName={rejectTarget?.personal?.full_name || ''}
+        busy={rejecting}
+        onClose={() => { if (!rejecting) setRejectTarget(null) }}
+        onConfirm={confirmReject}
+      />
 
       {/* ── Add Applicant drawer ── */}
       {addOpen && (

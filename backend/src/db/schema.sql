@@ -167,6 +167,7 @@ CREATE TABLE applicants (
   email             VARCHAR(255) NOT NULL,
   phone             VARCHAR(20),
   status            applicant_status DEFAULT 'submitted',
+  rejection_remark  TEXT,                -- free-text reason recorded when rejected
   phd_details       JSONB DEFAULT '{}',  -- { university, year_awarded, subject, thesis_title }
   application_data  JSONB DEFAULT '{}',  -- full multi-step form payload
   applied_at        TIMESTAMP DEFAULT NOW(),

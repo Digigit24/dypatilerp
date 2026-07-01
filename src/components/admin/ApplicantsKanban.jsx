@@ -16,6 +16,7 @@ import { convertToStudent, remindTest, updateApplicantStatus } from '../../api/s
 import { useUiStore } from '../../store/uiStore.js'
 import { useLabels } from '../../store/labelStore.js'
 import { formatDate } from '../../lib/formatters.js'
+import RejectModal from './RejectModal.jsx'
 
 const COLUMNS = [
   { key: 'submitted',        title: 'Applied',              dot: 'bg-slate-400' },
@@ -50,6 +51,8 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
   const [remindingAll, setRemindingAll] = useState(false)
   const [remindedMap, setRemindedMap] = useState({}) // applicant_id -> ISO timestamp (optimistic)
   const [modal, setModal] = useState(null) // {type:'send'|'reset'|'convert', applicant}
+  const [rejectTarget, setRejectTarget] = useState(null) // applicant awaiting reject confirmation
+  const [rejecting, setRejecting] = useState(false)
 
   const byStatus = useMemo(() => {
     const map = Object.fromEntries(COLUMNS.map((c) => [c.key, []]))
@@ -58,17 +61,47 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
   }, [items])
 
   const act = async (a, status, successMsg) => {
+    // Reject always goes through the remark-confirmation modal.
+    if (status === 'rejected') { setRejectTarget(a); return }
     const prevStatus = a.status
     onOptimisticUpdate(a.id, { status }) // move card instantly
     setBusyId(a.id)
     try {
-      await updateApplicantStatus(a.id, status)
-      addToast({ type: status === 'rejected' ? 'warning' : 'success', title: successMsg || `Moved to ${status.replaceAll('_', ' ')}.` })
+      const res = await updateApplicantStatus(a.id, status)
+      // Final Shortlist auto-sends the registration-fee email — reflect whether
+      // it actually went out instead of always claiming success.
+      if (status === 'shortlisted') {
+        const emailFailed = res.data?.shortlist_email && res.data.shortlist_email.sent === false
+        addToast(emailFailed
+          ? { type: 'warning', title: 'Candidate shortlisted, but payment email failed. Please retry or send manually.' }
+          : { type: 'success', title: 'Candidate shortlisted and payment email sent.' })
+      } else {
+        addToast({ type: status === 'rejected' ? 'warning' : 'success', title: successMsg || `Moved to ${status.replaceAll('_', ' ')}.` })
+      }
       onChanged() // silent background sync
     } catch (err) {
       onOptimisticUpdate(a.id, { status: prevStatus }) // rollback
       addToast({ type: 'error', title: 'Action failed', message: err.response?.data?.message })
     } finally { setBusyId(null) }
+  }
+
+  // Reject with a remark — optimistic move to the Rejected column, rollback on failure.
+  const confirmReject = async (remark) => {
+    const a = rejectTarget
+    if (!a) return
+    const prevStatus = a.status
+    const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+    setRejecting(true)
+    onOptimisticUpdate(a.id, { status: 'rejected', rejection_remark: remark || null }) // move card instantly
+    try {
+      await updateApplicantStatus(a.id, 'rejected', { remark })
+      addToast({ type: 'warning', title: `${name}'s application rejected.` })
+      onChanged() // silent background sync
+      setRejectTarget(null)
+    } catch (err) {
+      onOptimisticUpdate(a.id, { status: prevStatus, rejection_remark: a.rejection_remark ?? null }) // rollback
+      addToast({ type: 'error', title: 'Action failed', message: err.response?.data?.message })
+    } finally { setRejecting(false) }
   }
 
   const remind = async (a) => {
@@ -216,6 +249,15 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
           }}
         />
       )}
+
+      {/* Reject confirmation (remark) */}
+      <RejectModal
+        open={Boolean(rejectTarget)}
+        applicantName={rejectTarget?.personal?.full_name || (rejectTarget ? `${rejectTarget.first_name} ${rejectTarget.last_name}` : '')}
+        busy={rejecting}
+        onClose={() => { if (!rejecting) setRejectTarget(null) }}
+        onConfirm={confirmReject}
+      />
     </div>
   )
 }
@@ -288,6 +330,7 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt,
               </Btn>
             )}
             <Btn onClick={onReset}><RefreshCw size={11} /> Reset &amp; Resend</Btn>
+            <RejectBtn onClick={() => onAct(a, 'rejected')} />
             {remindedAt && (
               <span className="inline-flex w-full items-center gap-1 text-[10px] font-medium text-[color:var(--muted)]" title={`Last reminded: ${new Date(remindedAt).toLocaleString()}`}>
                 <BellRing size={9} /> Reminded {timeAgo(remindedAt)}
@@ -307,9 +350,12 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt,
           </>
         )}
         {!busy && col === 'shortlisted' && (
-          <Btn primary onClick={onConvert}>
-            <GraduationCap size={11} /> Convert to {labels.student}
-          </Btn>
+          <>
+            <Btn primary onClick={onConvert}>
+              <GraduationCap size={11} /> Convert to {labels.student}
+            </Btn>
+            <RejectBtn onClick={() => onAct(a, 'rejected')} />
+          </>
         )}
         {!busy && col === 'rejected' && (
           <Btn onClick={() => onAct(a, 'submitted', `${name} moved back to Applied.`)}>

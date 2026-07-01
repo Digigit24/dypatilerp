@@ -101,9 +101,13 @@ export const updateApplicantDetails = async (id, payload) => {
   return ok(normalize(res.data))
 }
 
-export const updateApplicantStatus = async (id, status, batch_id) => {
-  if (USE_MOCK) { await delay(); const item = byId(APPLICANTS, id); return item ? ok({ ...item, status }) : notFound() }
-  const { data: res } = await http.put(`/applicants/${id}/status`, { status, batch_id })
+export const updateApplicantStatus = async (id, status, { batch_id, remark } = {}) => {
+  if (USE_MOCK) {
+    await delay()
+    const item = byId(APPLICANTS, id)
+    return item ? ok({ ...item, status, ...(remark != null ? { rejection_remark: remark } : {}) }) : notFound()
+  }
+  const { data: res } = await http.put(`/applicants/${id}/status`, { status, batch_id, remark })
   return ok(normalize(res.data))
 }
 
