@@ -185,7 +185,7 @@ export const updateApplicantDetails = async (id, payload) => {
   return rows[0] ? normalizeApplicant(rows[0]) : null;
 };
 
-export const updateApplicantStatus = async (id, { status, batch_id }, reviewedBy) => {
+export const updateApplicantStatus = async (id, { status, batch_id, remark }, reviewedBy) => {
   // Capture the current status BEFORE updating so callers can detect a real
   // transition (e.g. first entry into "shortlisted") and avoid duplicate side
   // effects on repeated same-status updates.
@@ -193,10 +193,18 @@ export const updateApplicantStatus = async (id, { status, batch_id }, reviewedBy
   if (!prev.length) return null;
   const previousStatus = prev[0].status;
 
+  // Only touch rejection_remark when actually rejecting — leave any prior remark
+  // intact on other transitions (e.g. reconsidering keeps the history).
+  const setRemark = status === 'rejected';
+  const remarkVal = setRemark ? (remark?.trim() || null) : null;
+
   const { rows } = await query(
-    `UPDATE applicants SET status=$1, batch_id=$2, reviewed_by=$3, reviewed_at=NOW(), updated_at=NOW()
-     WHERE id=$4 RETURNING *`,
-    [status, batch_id||null, reviewedBy, id]
+    `UPDATE applicants
+        SET status=$1, batch_id=$2, reviewed_by=$3, reviewed_at=NOW(), updated_at=NOW()${setRemark ? ', rejection_remark=$5' : ''}
+      WHERE id=$4 RETURNING *`,
+    setRemark
+      ? [status, batch_id||null, reviewedBy, id, remarkVal]
+      : [status, batch_id||null, reviewedBy, id]
   );
   if (!rows[0]) return null;
   const applicant = normalizeApplicant(rows[0]);
