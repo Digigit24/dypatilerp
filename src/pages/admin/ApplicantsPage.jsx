@@ -408,10 +408,15 @@ export default function ApplicantsPage() {
       // Final Shortlist auto-sends the registration-fee email — surface whether
       // it actually went out so a silent email failure is never hidden.
       if (nextStatus === 'shortlisted') {
-        const emailFailed = res.data?.shortlist_email && res.data.shortlist_email.sent === false
+        const info = res.data?.shortlist_email
+        const emailFailed = info && info.sent === false
         addToast(emailFailed
           ? { type: 'warning', title: 'Candidate shortlisted, but payment email failed. Please retry or send manually.' }
-          : { type: 'success', title: 'Candidate shortlisted and payment email sent.' })
+          : {
+              type: 'success',
+              title: 'Candidate shortlisted and payment email sent.',
+              message: info?.cc?.length ? `Confirmation copy sent to ${info.cc.join(', ')}.` : undefined,
+            })
         return
       }
 

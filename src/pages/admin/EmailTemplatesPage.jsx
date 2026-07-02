@@ -5,8 +5,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import { useUiStore } from '../../store/uiStore.js'
 import {
-  listTemplates, previewTemplate, resetTemplate, saveTemplate,
+  getShortlistCc, listTemplates, previewTemplate, resetTemplate, saveShortlistCc, saveTemplate,
 } from '../../api/services/emailTemplateService.js'
+
+// Template that supports an admin-configurable CC list (Final Shortlist email).
+const SHORTLIST_TEMPLATE_KEY = 'applicant_shortlisted'
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// Return the invalid entries in a comma-separated CC string (empty = all valid).
+const invalidCcEntries = (raw) =>
+  String(raw || '').split(',').map((s) => s.trim()).filter(Boolean).filter((p) => !EMAIL_RE.test(p))
 
 const AUDIENCE_STYLES = {
   Applicant: 'bg-sky-100 text-sky-700',
@@ -33,6 +40,13 @@ export default function EmailTemplatesPage() {
   const [preview, setPreview] = useState({ subject: '', html: '' })
   const [previewing, setPreviewing] = useState(false)
   const [tab, setTab] = useState('preview') // 'preview' | 'html'
+
+  // Shortlist-email CC (only for the applicant_shortlisted template)
+  const [cc, setCc] = useState('')
+  const [ccSaved, setCcSaved] = useState('')
+  const [ccSaving, setCcSaving] = useState(false)
+  const ccErrors = invalidCcEntries(cc)
+  const ccDirty = cc !== ccSaved
 
   const subjectRef = useRef(null)
   const bodyRef = useRef(null)
@@ -65,6 +79,31 @@ export default function EmailTemplatesPage() {
     }
   }
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Load the admin-configured shortlist CC once ──────────────────────────────
+  useEffect(() => {
+    getShortlistCc()
+      .then(({ data }) => { setCc(data.cc || ''); setCcSaved(data.cc || '') })
+      .catch(() => { /* best-effort — leaves empty */ })
+  }, [])
+
+  const onSaveCc = async () => {
+    if (ccErrors.length) {
+      addToast({ type: 'error', title: `Invalid email: ${ccErrors.join(', ')}` })
+      return
+    }
+    setCcSaving(true)
+    try {
+      const { data } = await saveShortlistCc(cc)
+      setCc(data.cc || '')
+      setCcSaved(data.cc || '')
+      addToast({ type: 'success', title: 'Shortlist CC saved' })
+    } catch (e) {
+      addToast({ type: 'error', title: 'Failed to save CC', message: e?.response?.data?.message })
+    } finally {
+      setCcSaving(false)
+    }
+  }
 
   const onPick = (t) => {
     if (dirty && !window.confirm('Discard unsaved changes?')) return
@@ -256,6 +295,41 @@ export default function EmailTemplatesPage() {
                   </div>
                 </div>
               </div>
+
+              {/* CC on shortlist email — only for the Final Shortlist template */}
+              {selected.key === SHORTLIST_TEMPLATE_KEY && (
+                <div className="card p-5">
+                  <label className="mb-1.5 block text-sm font-semibold text-[color:var(--text)]">
+                    CC on shortlist email
+                  </label>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                    <div className="flex-1">
+                      <input
+                        value={cc}
+                        onChange={(e) => setCc(e.target.value)}
+                        placeholder="admissions@example.com, office@example.com"
+                        className={`w-full rounded-2xl border bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--text)] outline-none focus:border-[color:var(--accent)] ${ccErrors.length ? 'border-red-400' : 'border-[color:var(--border)]'}`}
+                      />
+                      {ccErrors.length > 0 ? (
+                        <p className="mt-1.5 text-xs font-medium text-red-600">
+                          Invalid email address{ccErrors.length > 1 ? 'es' : ''}: {ccErrors.join(', ')}
+                        </p>
+                      ) : (
+                        <p className="mt-1.5 text-xs text-[color:var(--muted)]">
+                          These addresses receive a copy of every Final Shortlist email.
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={onSaveCc}
+                      disabled={ccSaving || !ccDirty || ccErrors.length > 0}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-2xl bg-[color:var(--accent)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {ccSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Save CC
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                 {/* Editor */}

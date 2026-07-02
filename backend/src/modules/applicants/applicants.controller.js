@@ -56,11 +56,18 @@ export const updateStatus = asyncHandler(async (req, res) => {
     applicant.shortlist_email = {
       attempted: true,
       sent: !!result.success,
+      message_id: result.messageId || null,
+      cc: result.cc || [],
+      via: result.via || (result.mock ? 'mock' : (result.success ? 'api' : null)),
       error: result.success ? null : (result.error || 'Email could not be sent'),
     };
 
     if (result.success) {
-      console.log(`[applicants] Shortlist email sent → ${applicant.email}`, result.messageId || '(mock)');
+      console.log(
+        `[applicants] Shortlist email sent → ${applicant.email}`,
+        `msgId=${result.messageId || '(mock)'}`,
+        applicant.shortlist_email.cc.length ? `cc=${applicant.shortlist_email.cc.join(',')}` : 'cc=(none)',
+      );
     } else {
       // Do NOT swallow the failure — the applicant is still shortlisted, but the
       // admin must be able to see that the payment email did not go out.

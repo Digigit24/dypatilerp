@@ -45,7 +45,7 @@ const getTransporter = () => {
  * @returns {Promise<{success:boolean, messageId?:string, error?:string}>}
  */
 // ─── Brevo HTTP API sender (port 443 — immune to SMTP interception/blocks) ───
-const sendViaBrevoApi = async ({ apiKey, sender, recipients, subject, html, text }) => {
+const sendViaBrevoApi = async ({ apiKey, sender, recipients, cc, subject, html, text }) => {
   try {
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
@@ -53,6 +53,7 @@ const sendViaBrevoApi = async ({ apiKey, sender, recipients, subject, html, text
       body: JSON.stringify({
         sender: { name: sender.name, email: sender.email },
         to: recipients,
+        ...(cc && cc.length ? { cc } : {}),
         subject,
         htmlContent: html,
         ...(text && { textContent: text }),
@@ -68,7 +69,7 @@ const sendViaBrevoApi = async ({ apiKey, sender, recipients, subject, html, text
   }
 };
 
-export const sendEmail = async ({ to, subject, html, text, sender, apiKey } = {}) => {
+export const sendEmail = async ({ to, cc, subject, html, text, sender, apiKey } = {}) => {
   // Saved settings (app_settings.brevo in the database) are the source of truth.
   // Resolution order: explicit param → database → .env (legacy fallback).
   const db = await getBrevoConfig();
@@ -79,17 +80,19 @@ export const sendEmail = async ({ to, subject, html, text, sender, apiKey } = {}
   };
 
   const list = Array.isArray(to) ? to : [to];
+  const ccList = (cc ? (Array.isArray(cc) ? cc : [cc]) : []).filter(Boolean);
+  const toAddr = (r) =>
+    typeof r === 'string' ? { email: r } : { email: r.email, ...(r.name ? { name: r.name } : {}) };
 
   // ── 1. Prefer the Brevo HTTPS API (port 443) when an API key is available ──
   //    SMTP (587) is often intercepted/blocked by cPanel "SMTP Restrictions".
   const key = (apiKey || '').trim() || (db.apiKey || '').trim() || (env.BREVO_API_KEY || '').trim();
   let apiError = null;
   if (key) {
-    const apiRecipients = list.map((r) =>
-      typeof r === 'string' ? { email: r } : { email: r.email, ...(r.name ? { name: r.name } : {}) }
-    );
+    const apiRecipients = list.map(toAddr);
+    const apiCc = ccList.map(toAddr);
     const result = await sendViaBrevoApi({
-      apiKey: key, sender: effectiveSender, recipients: apiRecipients, subject, html, text,
+      apiKey: key, sender: effectiveSender, recipients: apiRecipients, cc: apiCc, subject, html, text,
     });
     if (result.success) {
       console.log('[email] Sent via Brevo API →', result.messageId, '→', apiRecipients.map((r) => r.email));
@@ -105,23 +108,26 @@ export const sendEmail = async ({ to, subject, html, text, sender, apiKey } = {}
   if (!transport) {
     if (apiError) return { success: false, error: apiError };
     console.log('[email] SMTP not configured — mock send');
-    console.log(`[email] MOCK → To: ${JSON.stringify(to)} | Subject: ${subject}`);
+    console.log(`[email] MOCK → To: ${JSON.stringify(to)}${ccList.length ? ` | Cc: ${JSON.stringify(ccList)}` : ''} | Subject: ${subject}`);
     return { success: true, mock: true };
   }
 
-  // Normalise "to" → nodemailer address format
-  const recipients = list.map((r) => (typeof r === 'string' ? r : `${r.name || ''} <${r.email}>`));
+  // Normalise "to"/"cc" → nodemailer address format
+  const asAddr = (r) => (typeof r === 'string' ? r : `${r.name || ''} <${r.email}>`);
+  const recipients = list.map(asAddr);
+  const ccRecipients = ccList.map(asAddr);
 
   try {
     const info = await transport.sendMail({
       from:    `"${effectiveSender.name}" <${effectiveSender.email}>`,
       to:      recipients.join(', '),
+      ...(ccRecipients.length ? { cc: ccRecipients.join(', ') } : {}),
       subject,
       html,
       ...(text && { text }),
     });
-    console.log('[email] Sent →', info.messageId, '→', recipients);
-    return { success: true, messageId: info.messageId };
+    console.log('[email] Sent →', info.messageId, '→', recipients, ...(ccRecipients.length ? ['cc:', ccRecipients] : []));
+    return { success: true, messageId: info.messageId, via: 'smtp' };
   } catch (err) {
     console.error('[email] SMTP error:', err.message);
     // Surface BOTH failures — the API error is usually the actionable one
@@ -713,10 +719,41 @@ export const sendTestReminder = async ({
  * the code template (key: applicant_shortlisted) is used. {{fullName}} falls
  * back to "Applicant" when the applicant has no name on record.
  */
-export const sendApplicantShortlisted = async ({ applicant, courseId = null }) => {
+/**
+ * Read the admin-configured shortlist CC (app_settings key 'shortlist_email_cc',
+ * value { cc: "a@x.com, b@y.com" }). Returns the raw comma-separated string, or
+ * '' when nothing is configured. Queried fresh on each send (low volume) so an
+ * admin edit takes effect immediately with no cache to bust.
+ */
+export const getShortlistCcSetting = async () => {
+  try {
+    const { rows: [row] } = await query(`SELECT value FROM app_settings WHERE key='shortlist_email_cc'`);
+    return typeof row?.value?.cc === 'string' ? row.value.cc : '';
+  } catch {
+    return '';
+  }
+};
+
+export const sendApplicantShortlisted = async ({ applicant, courseId = null, cc = null }) => {
   const fullName = `${applicant.first_name || ''} ${applicant.last_name || ''}`.trim() || 'Applicant';
   const sender = await getCourseSender(courseId);
   const { subject, html } = await renderTemplate('applicant_shortlisted', { fullName });
+
+  // Institute confirmation copy: CC the configured address(es) so the office can
+  // verify the payment email actually went out. Resolution order:
+  //   1. explicit `cc` argument (caller override)
+  //   2. admin-configured CC saved in app_settings (Email Templates UI)
+  //   3. SHORTLIST_EMAIL_CC env var (legacy fallback)
+  //   4. none → candidate-only
+  let ccRaw = cc;
+  if (ccRaw === null || ccRaw === undefined) {
+    const adminCc = await getShortlistCcSetting();
+    ccRaw = adminCc.trim() ? adminCc : (env.SHORTLIST_EMAIL_CC || '');
+  }
+  const ccList = String(ccRaw ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   const text = [
     'Qualified for the Interview Stage – Post-Doctoral Program Admission Process',
@@ -753,13 +790,18 @@ export const sendApplicantShortlisted = async ({ applicant, courseId = null }) =
     'Pune (India)',
   ].join('\n');
 
-  return sendEmail({
+  const result = await sendEmail({
     to: { email: applicant.email, name: fullName },
+    ...(ccList.length ? { cc: ccList } : {}),
     subject,
     html,
     text,
     sender,
   });
+
+  // Surface delivery metadata (provider message id, the CC that was applied) so
+  // the caller can log it and return it in the API response.
+  return { ...result, cc: ccList };
 };
 
 /**
