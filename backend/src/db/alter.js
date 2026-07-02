@@ -365,6 +365,21 @@ const run = async () => {
     `);
     console.log('✓  media manager: visibility, assignment_id, default folders, media permissions');
 
+    // 24. Data heal: reconcile applicants stuck in 'test_pending' who already have
+    // a submitted test attempt. These rows show up in BOTH "Test Pending" (by
+    // status) and "Test Completed" (by submitted attempt). Idempotent — only ever
+    // moves test_pending → test_completed for applicants with a submitted attempt.
+    const healed = await client.query(`
+      UPDATE applicants a
+         SET status='test_completed', updated_at=NOW()
+       WHERE a.status='test_pending'
+         AND EXISTS (
+           SELECT 1 FROM test_attempts ta
+           WHERE ta.applicant_id = a.id AND ta.status='submitted'
+         )
+    `);
+    console.log(`✓  reconciled ${healed.rowCount} applicant(s) stuck in test_pending with a submitted attempt`);
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);
