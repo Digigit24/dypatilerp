@@ -198,13 +198,29 @@ export const updateApplicantStatus = async (id, { status, batch_id, remark }, re
   const setRemark = status === 'rejected';
   const remarkVal = setRemark ? (remark?.trim() || null) : null;
 
+  // Build the SET clause dynamically so batch_id is ONLY overwritten when the
+  // caller explicitly supplies one. The old query always ran `batch_id = $2`
+  // with (batch_id || null), which silently WIPED the applicant's batch on any
+  // status change that didn't re-send it — including Final Shortlist, which
+  // sends no batch_id. A null batch then dropped the applicant out of every
+  // batch-scoped list, so they vanished from the Final Shortlist after a reload.
+  const sets = ['status=$1', 'reviewed_by=$2', 'reviewed_at=NOW()', 'updated_at=NOW()'];
+  const params = [status, reviewedBy];
+
+  const hasBatch = batch_id !== undefined && batch_id !== null && batch_id !== '';
+  if (hasBatch) {
+    params.push(batch_id);
+    sets.push(`batch_id=$${params.length}`);
+  }
+  if (setRemark) {
+    params.push(remarkVal);
+    sets.push(`rejection_remark=$${params.length}`);
+  }
+  params.push(id);
+
   const { rows } = await query(
-    `UPDATE applicants
-        SET status=$1, batch_id=$2, reviewed_by=$3, reviewed_at=NOW(), updated_at=NOW()${setRemark ? ', rejection_remark=$5' : ''}
-      WHERE id=$4 RETURNING *`,
-    setRemark
-      ? [status, batch_id||null, reviewedBy, id, remarkVal]
-      : [status, batch_id||null, reviewedBy, id]
+    `UPDATE applicants SET ${sets.join(', ')} WHERE id=$${params.length} RETURNING *`,
+    params
   );
   if (!rows[0]) return null;
   const applicant = normalizeApplicant(rows[0]);

@@ -352,6 +352,11 @@ router.post('/remind', authenticate, requirePermission('tests', 'update'), async
  * List all access tokens for this test (admin view)
  */
 router.get('/access-tokens', authenticate, requirePermission('tests', 'read'), asyncHandler(async (req, res) => {
+  // Only list applicants still in the testing process. Once an applicant has been
+  // Final Shortlisted (status 'shortlisted'), enrolled, or rejected, they have
+  // left the testing stage — their access token lingers in the DB but they must
+  // no longer appear in the Test Builder's "Assigned" panel. Applicants who are
+  // still test_pending / test_completed continue to show up normally.
   const { rows } = await query(
     `SELECT tat.*, a.first_name, a.last_name, a.email,
             ta.status AS attempt_status, ta.score, ta.submitted_at
@@ -359,6 +364,7 @@ router.get('/access-tokens', authenticate, requirePermission('tests', 'read'), a
      JOIN applicants a ON a.id = tat.applicant_id
      LEFT JOIN test_attempts ta ON ta.test_id = tat.test_id AND ta.user_id = tat.user_id
      WHERE tat.test_id = $1
+       AND a.status NOT IN ('shortlisted', 'enrolled', 'rejected')
      ORDER BY tat.created_at DESC`,
     [req.params.id]
   );

@@ -25,6 +25,9 @@ export const env = {
   BREVO_API_KEY:      process.env.BREVO_API_KEY    || '',
   BREVO_SENDER_NAME:  process.env.BREVO_SENDER_NAME  || 'DY Patil ERP',
   BREVO_SENDER_EMAIL: process.env.BREVO_SENDER_EMAIL || 'postdoc@dyperf.com',
+  // Comma-separated address(es) CC'd on the Final Shortlist / registration-fee
+  // email so the institute receives a confirmation copy of every payment email.
+  SHORTLIST_EMAIL_CC: process.env.SHORTLIST_EMAIL_CC || '',
   // Zata S3-compatible storage (optional — stub mode if not set)
   ZATA_ACCESS_KEY: process.env.ZATA_ACCESS_KEY || '',
   ZATA_SECRET_KEY: process.env.ZATA_SECRET_KEY || '',
