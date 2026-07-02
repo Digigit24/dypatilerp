@@ -532,10 +532,19 @@ router.post('/:id/submit', authenticate, asyncHandler(async (req, res) => {
     [timeTaken, totalScore, attempt.id]
   );
 
-  // Update applicant status → test_completed
+  // Update applicant status → test_completed.
+  // A submitted attempt MUST remove the candidate from the "pending" bucket.
+  // The old guard (status='test_pending') failed to fire whenever the applicant
+  // was in another pre-completion testing state at submit time, leaving them
+  // stuck in Test Sent/Pending while their attempt counted as completed — so the
+  // same candidate appeared in both "Test Pending" and "Test Completed".
+  // Advance from ANY pre-completion testing state; never pull back a candidate
+  // already moved past testing (shortlisted / enrolled / rejected / completed).
   if (attempt.applicant_id) {
     await query(
-      `UPDATE applicants SET status='test_completed' WHERE id=$1 AND status='test_pending'`,
+      `UPDATE applicants
+          SET status='test_completed', updated_at=NOW()
+        WHERE id=$1 AND status IN ('test_pending','shortlisted_test','submitted')`,
       [attempt.applicant_id]
     );
   }
