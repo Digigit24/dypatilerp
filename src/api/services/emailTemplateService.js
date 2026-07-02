@@ -41,3 +41,16 @@ export const previewTemplate = async (key, { subject, body, data } = {}) => {
   const { data: res } = await http.post(`/email-templates/${key}/preview`, { subject, body, data })
   return { data: res.data }
 }
+
+/** Get the admin-configured CC list for the Final Shortlist email → { cc }. */
+export const getShortlistCc = async () => {
+  if (USE_MOCK) return { data: { cc: '' } }
+  const { data: res } = await http.get('/email-templates/shortlist-cc')
+  return { data: res.data }
+}
+
+/** Save the CC list (comma-separated) for the Final Shortlist email → { cc } (normalized). */
+export const saveShortlistCc = async (cc) => {
+  const { data: res } = await http.put('/email-templates/shortlist-cc', { cc })
+  return { data: res.data }
+}

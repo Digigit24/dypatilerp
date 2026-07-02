@@ -719,15 +719,38 @@ export const sendTestReminder = async ({
  * the code template (key: applicant_shortlisted) is used. {{fullName}} falls
  * back to "Applicant" when the applicant has no name on record.
  */
+/**
+ * Read the admin-configured shortlist CC (app_settings key 'shortlist_email_cc',
+ * value { cc: "a@x.com, b@y.com" }). Returns the raw comma-separated string, or
+ * '' when nothing is configured. Queried fresh on each send (low volume) so an
+ * admin edit takes effect immediately with no cache to bust.
+ */
+export const getShortlistCcSetting = async () => {
+  try {
+    const { rows: [row] } = await query(`SELECT value FROM app_settings WHERE key='shortlist_email_cc'`);
+    return typeof row?.value?.cc === 'string' ? row.value.cc : '';
+  } catch {
+    return '';
+  }
+};
+
 export const sendApplicantShortlisted = async ({ applicant, courseId = null, cc = null }) => {
   const fullName = `${applicant.first_name || ''} ${applicant.last_name || ''}`.trim() || 'Applicant';
   const sender = await getCourseSender(courseId);
   const { subject, html } = await renderTemplate('applicant_shortlisted', { fullName });
 
   // Institute confirmation copy: CC the configured address(es) so the office can
-  // verify the payment email actually went out. Explicit `cc` arg wins; otherwise
-  // fall back to SHORTLIST_EMAIL_CC (comma-separated) from the environment.
-  const ccList = String(cc ?? env.SHORTLIST_EMAIL_CC ?? '')
+  // verify the payment email actually went out. Resolution order:
+  //   1. explicit `cc` argument (caller override)
+  //   2. admin-configured CC saved in app_settings (Email Templates UI)
+  //   3. SHORTLIST_EMAIL_CC env var (legacy fallback)
+  //   4. none → candidate-only
+  let ccRaw = cc;
+  if (ccRaw === null || ccRaw === undefined) {
+    const adminCc = await getShortlistCcSetting();
+    ccRaw = adminCc.trim() ? adminCc : (env.SHORTLIST_EMAIL_CC || '');
+  }
+  const ccList = String(ccRaw ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
