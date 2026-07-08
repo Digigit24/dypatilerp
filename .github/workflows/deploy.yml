@@ -42,5 +42,5 @@ jobs:
                cp -r dist/* ../ && \
                cd backend && \
                npm install && \
-               pm2 restart dyperf-backend --update-env && \
+               pm2 restart dyperf-api --update-env && \
                pm2 save"
