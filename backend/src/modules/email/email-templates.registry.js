@@ -162,6 +162,36 @@ export const EMAIL_TEMPLATES = [
   },
 
   {
+    key: 'applicant_shortlist_payment_reminder',
+    label: 'Final Shortlist - Payment Reminder',
+    category: 'Applicants',
+    audience: 'Applicant',
+    description: 'A reminder sent from the pipeline to Final Shortlist candidates (status → shortlisted) who still need to pay the Registration Fee, before the payment deadline (10 July 2026). Re-uses the registration-fee / bank details from the shortlist email.',
+    variables: [
+      { name: 'fullName', sample: 'Aarav Sharma', description: "Applicant's full name (falls back to \"Applicant\" if empty)" },
+    ],
+    subject: 'Reminder: Complete Your Registration Fee Payment – Post-Doctoral Program',
+    body: `
+      <h2>Registration Fee Payment Reminder</h2>
+      <p>Dear {{fullName}},</p>
+      <p>Greetings from Dr. D. Y. Patil Education and Research Foundation!</p>
+      <p>This is a gentle reminder that, as a shortlisted candidate for the Post-Doctoral Program, you are required to complete your program registration by paying the <strong>Registration Fee of USD 200 (INR 19,000)</strong> to confirm your place in the interview stage.</p>
+      <p>As per our records, we have not yet received your registration fee. Kindly complete the payment on or before <strong>10 July 2026</strong> to avoid any delay in scheduling your Personal Interview.</p>
+      <div class="info-box">
+        <p><strong>Account Details</strong></p>
+        <p><strong>Bank Name:</strong> HDFC Bank</p>
+        <p><strong>A/c No.:</strong> 50100136437400</p>
+        <p><strong>Account Name:</strong> DR D Y PATIL EDUCATION AND RESEARCH FOUNDATION</p>
+        <p><strong>IFSC Code:</strong> HDFC0000007</p>
+      </div>
+      <p>Kindly complete the payment before the deadline and share the transaction receipt by replying to this email. Your registration will be considered complete only upon successful receipt and verification of the registration fee.</p>
+      <p>Please note that the interview process will be scheduled only for candidates who have completed the registration formalities.</p>
+      <p>If you have already made the payment, kindly ignore this reminder and share your transaction receipt with us for verification.</p>
+      <p>Should you have any queries, please feel free to contact on 9545154191 or 9860152927. For more information, please refer to <a href="https://www.dypims.com/research-center.php" style="color:#4F46E5">https://www.dypims.com/research-center.php</a></p>
+      <p>Warm regards,<br/><strong>Post-Doctoral Program</strong><br/>Dr. D. Y. Patil Education and Research Foundation<br/>Pune (India)</p>`,
+  },
+
+  {
     key: 'test_completed',
     label: 'Test Submitted (Applicant)',
     category: 'Admissions',

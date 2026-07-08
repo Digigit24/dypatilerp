@@ -1,11 +1,11 @@
 import {
-  Award, CheckCircle2, Clock3, Download, GraduationCap, Kanban, List, Loader2, Pencil, RotateCcw,
+  Award, BellRing, CheckCircle2, Clock3, Download, GraduationCap, Kanban, List, Loader2, Pencil, RotateCcw,
   Save, Search, Send, Upload, UserCheck, UserMinus, UserPlus, XCircle, ClipboardList,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createApplicant, exportApplicants, getApplicants, getApplicantStats, shortlistApplicant, updateApplicantDetails, updateApplicantStatus } from '../../api/services/applicantService.js'
+import { createApplicant, exportApplicants, getApplicants, getApplicantStats, remindPayment, shortlistApplicant, updateApplicantDetails, updateApplicantStatus } from '../../api/services/applicantService.js'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
 import { buildApplicantImportConfig } from '../../components/admin/applicantImportConfig.js'
 import ApplicantsKanban from '../../components/admin/ApplicantsKanban.jsx'
@@ -98,7 +98,7 @@ function PipelineBar({ status }) {
 }
 
 // ─── Status-aware action buttons ──────────────────────────────────────────────
-function DrawerActions({ item, onAct, onConvert, busy }) {
+function DrawerActions({ item, onAct, onConvert, onRemindPay, busy }) {
   const { status, test_score } = item
 
   // Where to send them if removed from shortlist
@@ -130,6 +130,19 @@ function DrawerActions({ item, onAct, onConvert, busy }) {
         >
           <GraduationCap size={15} /> Convert to Student
         </button>
+        <button
+          disabled={busy}
+          onClick={() => onRemindPay(item)}
+          className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-violet-400 hover:text-violet-700 transition disabled:opacity-50"
+          title="Email a registration-fee payment reminder (deadline 10 July 2026)"
+        >
+          <BellRing size={14} /> Send Payment Reminder
+        </button>
+        {item.last_payment_reminded_at && (
+          <p className="text-center text-[11px] text-[color:var(--secondary)]">
+            Last payment reminder: {formatDate(item.last_payment_reminded_at)}
+          </p>
+        )}
         <button
           disabled={busy}
           onClick={() => onAct(item, unshortlistTarget)}
@@ -429,6 +442,22 @@ export default function ApplicantsPage() {
         type:  'success',
         title: labels[nextStatus] || `Status updated to ${nextStatus.replaceAll('_', ' ')}.`,
       })
+    } finally {
+      setActing(false)
+    }
+  }
+
+  // Send a registration-fee payment reminder to a shortlisted applicant.
+  const remindPay = async (item) => {
+    setActing(true)
+    try {
+      const r = await remindPayment(item.id)
+      const ts = r.data?.last_payment_reminded_at || new Date().toISOString()
+      setItems((xs) => xs?.map((x) => (x.id === item.id ? { ...x, last_payment_reminded_at: ts } : x)) ?? xs)
+      setSelected((s) => (s && s.id === item.id ? { ...s, last_payment_reminded_at: ts } : s))
+      addToast({ type: 'success', title: `Payment reminder emailed to ${item.personal.full_name}.` })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Payment reminder failed', message: err.response?.data?.message })
     } finally {
       setActing(false)
     }
@@ -995,6 +1024,7 @@ export default function ApplicantsPage() {
                   item={selected}
                   onAct={act}
                   onConvert={convertToStudent}
+                  onRemindPay={remindPay}
                   busy={acting}
                 />
               )}

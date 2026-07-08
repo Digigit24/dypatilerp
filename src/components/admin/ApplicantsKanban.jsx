@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { assignTest, getTests, resetTestAttempt } from '../../api/services/testService.js'
-import { convertToStudent, remindTest, updateApplicantStatus } from '../../api/services/applicantService.js'
+import { convertToStudent, remindPayment, remindTest, updateApplicantStatus } from '../../api/services/applicantService.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useLabels } from '../../store/labelStore.js'
 import { formatDate } from '../../lib/formatters.js'
@@ -34,6 +34,11 @@ const passInfo = (a) => {
   return { score: a.test_score, max: a.test_max_score, pass }
 }
 
+// Skip candidates reminded within this window during a bulk payment reminder.
+const REMIND_COOLDOWN_MS = 24 * 60 * 60 * 1000
+// Warn (and show the count) before bulk-emailing a column this large or larger.
+const LARGE_BULK_THRESHOLD = 25
+
 const timeAgo = (d) => {
   if (!d) return null
   const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000)
@@ -50,6 +55,8 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
   const [busyId, setBusyId] = useState(null)
   const [remindingAll, setRemindingAll] = useState(false)
   const [remindedMap, setRemindedMap] = useState({}) // applicant_id -> ISO timestamp (optimistic)
+  const [remindingAllPay, setRemindingAllPay] = useState(false) // guards bulk payment-reminder re-clicks
+  const [payRemindedMap, setPayRemindedMap] = useState({}) // applicant_id -> ISO timestamp (payment reminder)
   const [modal, setModal] = useState(null) // {type:'send'|'reset'|'convert', applicant}
   const [rejectTarget, setRejectTarget] = useState(null) // applicant awaiting reject confirmation
   const [rejecting, setRejecting] = useState(false)
@@ -141,6 +148,86 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
     })
   }
 
+  // Send a registration-fee payment reminder to one shortlisted candidate.
+  const remindPay = async (a) => {
+    if (busyId) return // guard against double-fire
+    const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+    const optimisticTs = new Date().toISOString()
+    setPayRemindedMap((m) => ({ ...m, [a.id]: optimisticTs })) // optimistic timestamp
+    setBusyId(a.id)
+    try {
+      const r = await remindPayment(a.id)
+      setPayRemindedMap((m) => ({ ...m, [a.id]: r.data?.last_payment_reminded_at || optimisticTs }))
+      addToast({ type: 'success', title: `Payment reminder emailed to ${name}.` })
+    } catch (err) {
+      setPayRemindedMap((m) => { const n = { ...m }; delete n[a.id]; return n }) // rollback
+      addToast({ type: 'error', title: 'Payment reminder failed', message: err.response?.data?.message })
+    } finally { setBusyId(null) }
+  }
+
+  // Remind EVERYONE currently in the Final Shortlist to pay the registration fee.
+  // No payment-status filtering (fee is tracked offline). Candidates reminded in
+  // the last 24h are skipped; each send is independent so one failure never stops
+  // the rest. Guarded against rapid re-clicks / concurrent runs.
+  const remindAllPayments = async (cards) => {
+    if (remindingAllPay) return // prevent accidental repeated bulk sends
+    const targets = cards
+    if (!targets.length) {
+      addToast({ type: 'info', title: 'No candidates in the Final Shortlist to remind.' })
+      return
+    }
+
+    const now = Date.now()
+    const lastFor = (a) => payRemindedMap[a.id] || a.last_payment_reminded_at
+    const toSend = targets.filter((a) => {
+      const last = lastFor(a)
+      return !(last && (now - new Date(last).getTime()) < REMIND_COOLDOWN_MS)
+    })
+    const skipped = targets.length - toSend.length
+
+    // Confirm before sending — show the count and warn on large batches.
+    const bigWarn = targets.length >= LARGE_BULK_THRESHOLD
+      ? `\n\n⚠️ This is a large batch of ${targets.length} candidates. Please confirm you want to email all of them.`
+      : ''
+    const confirmMsg =
+      `Send the registration-fee payment reminder to the Final Shortlist?\n\n` +
+      `Total in column: ${targets.length}\n` +
+      `Will send now: ${toSend.length}\n` +
+      `Skipped (already reminded in last 24h): ${skipped}${bigWarn}`
+    if (!window.confirm(confirmMsg)) return
+
+    if (!toSend.length) {
+      addToast({ type: 'info', title: 'Everyone here was already reminded within the last 24 hours.' })
+      return
+    }
+
+    setRemindingAllPay(true)
+    let sent = 0
+    const failed = []
+    const stamps = {}
+    for (const a of toSend) {
+      const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+      try {
+        const r = await remindPayment(a.id)
+        stamps[a.id] = r.data?.last_payment_reminded_at || new Date().toISOString()
+        sent++
+      } catch {
+        failed.push({ name, email: a.personal?.email || a.email }) // keep going
+      }
+    }
+    setPayRemindedMap((m) => ({ ...m, ...stamps }))
+    setRemindingAllPay(false)
+
+    // Completion summary: total / sent / failed (with names+emails) / skipped.
+    addToast({
+      type: failed.length ? (sent ? 'warning' : 'error') : 'success',
+      title: `Payment reminders — ${sent} sent, ${failed.length} failed, ${skipped} skipped (of ${targets.length}).`,
+      message: failed.length
+        ? `Failed: ${failed.map((f) => `${f.name} (${f.email})`).join('; ')}`
+        : undefined,
+    })
+  }
+
   return (
     <div className="overflow-x-auto pb-4">
       <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
@@ -167,6 +254,18 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
                 </button>
               )}
 
+              {/* Bulk payment reminder for the Final Shortlist stage — nudges everyone to pay the registration fee */}
+              {col.key === 'shortlisted' && cards.length > 0 && (
+                <button
+                  onClick={() => remindAllPayments(cards)}
+                  disabled={remindingAllPay}
+                  className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-violet-100 px-2 py-1.5 text-[11px] font-bold text-violet-700 transition hover:bg-violet-200 disabled:opacity-50"
+                  title="Email a registration-fee payment reminder to everyone in the Final Shortlist (skips anyone reminded in the last 24h)"
+                >
+                  {remindingAllPay ? <Loader2 size={12} className="animate-spin" /> : <BellRing size={12} />} Remind All (Payment)
+                </button>
+              )}
+
               {/* Cards */}
               <div className="max-h-[calc(100vh-330px)] space-y-2 overflow-y-auto pr-0.5">
                 {cards.length === 0 && (
@@ -183,6 +282,8 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
                     onAct={act}
                     onRemind={() => remind(a)}
                     remindedAt={remindedMap[a.id] || a.last_reminded_at}
+                    onRemindPay={() => remindPay(a)}
+                    payRemindedAt={payRemindedMap[a.id] || a.last_payment_reminded_at}
                     onSendTest={() => setModal({ type: 'send', applicant: a })}
                     onReset={() => setModal({ type: 'reset', applicant: a })}
                     onConvert={() => setModal({ type: 'convert', applicant: a })}
@@ -263,7 +364,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
 }
 
 // ─── Compact card ───────────────────────────────────────────────────────────────
-function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt, onSendTest, onReset, onConvert }) {
+function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt, onRemindPay, payRemindedAt, onSendTest, onReset, onConvert }) {
   const p = passInfo(a)
   const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
 
@@ -354,7 +455,15 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt,
             <Btn primary onClick={onConvert}>
               <GraduationCap size={11} /> Convert to {labels.student}
             </Btn>
+            <Btn onClick={onRemindPay} title="Email a registration-fee payment reminder (deadline 10 July 2026)">
+              <BellRing size={11} /> Send Payment Reminder
+            </Btn>
             <RejectBtn onClick={() => onAct(a, 'rejected')} />
+            {payRemindedAt && (
+              <span className="inline-flex w-full items-center gap-1 text-[10px] font-medium text-[color:var(--muted)]" title={`Last payment reminder: ${new Date(payRemindedAt).toLocaleString()}`}>
+                <BellRing size={9} /> Reminded {timeAgo(payRemindedAt)}
+              </span>
+            )}
           </>
         )}
         {!busy && col === 'rejected' && (

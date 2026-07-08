@@ -356,6 +356,30 @@ const templates = {
     `),
   }),
 
+  // ── Final Shortlist → Registration Fee payment reminder (before deadline) ──
+  applicant_shortlist_payment_reminder: ({ fullName }) => ({
+    subject: 'Reminder: Complete Your Registration Fee Payment – Post-Doctoral Program',
+    html: base(`
+      <h2>Registration Fee Payment Reminder</h2>
+      <p>Dear ${fullName || 'Applicant'},</p>
+      <p>Greetings from Dr. D. Y. Patil Education and Research Foundation!</p>
+      <p>This is a gentle reminder that, as a shortlisted candidate for the Post-Doctoral Program, you are required to complete your program registration by paying the <strong>Registration Fee of USD 200 (INR 19,000)</strong> to confirm your place in the interview stage.</p>
+      <p>As per our records, we have not yet received your registration fee. Kindly complete the payment on or before <strong>10 July 2026</strong> to avoid any delay in scheduling your Personal Interview.</p>
+      <div class="info-box">
+        <p><strong>Account Details</strong></p>
+        <p><strong>Bank Name:</strong> HDFC Bank</p>
+        <p><strong>A/c No.:</strong> 50100136437400</p>
+        <p><strong>Account Name:</strong> DR D Y PATIL EDUCATION AND RESEARCH FOUNDATION</p>
+        <p><strong>IFSC Code:</strong> HDFC0000007</p>
+      </div>
+      <p>Kindly complete the payment before the deadline and share the transaction receipt by replying to this email. Your registration will be considered complete only upon successful receipt and verification of the registration fee.</p>
+      <p>Please note that the interview process will be scheduled only for candidates who have completed the registration formalities.</p>
+      <p>If you have already made the payment, kindly ignore this reminder and share your transaction receipt with us for verification.</p>
+      <p>Should you have any queries, please feel free to contact on 9545154191 or 9860152927. For more information, please refer to <a href="https://www.dypims.com/research-center.php" style="color:#4F46E5">https://www.dypims.com/research-center.php</a></p>
+      <p>Warm regards,<br/><strong>Post-Doctoral Program</strong><br/>Dr. D. Y. Patil Education and Research Foundation<br/>Pune (India)</p>
+    `),
+  }),
+
   application_submitted: ({ firstName, applicationId }) => ({
     subject: 'Application Received — DY Patil PhD Program',
     html: base(`
@@ -798,6 +822,93 @@ export const sendApplicantShortlisted = async ({ applicant, courseId = null, cc 
     text,
     sender,
   });
+
+  // Surface delivery metadata (provider message id, the CC that was applied) so
+  // the caller can log it and return it in the API response.
+  return { ...result, cc: ccList };
+};
+
+/**
+ * Send a registration-fee payment reminder to a shortlisted applicant before the
+ * payment deadline (10 July 2026). Re-uses the same registration-fee / bank
+ * details as the shortlist email, worded as a reminder.
+ *
+ * Override-aware: an admin edit saved in the Email Templates UI wins; otherwise
+ * the code template (key: applicant_shortlist_payment_reminder) is used.
+ * {{fullName}} falls back to "Applicant" when the applicant has no name.
+ *
+ * CC resolution reuses getShortlistCcSetting() exactly like sendApplicantShortlisted.
+ */
+export const sendApplicantShortlistPaymentReminder = async ({ applicant, courseId = null, cc = null }) => {
+  const fullName = `${applicant.first_name || ''} ${applicant.last_name || ''}`.trim() || 'Applicant';
+  const sender = await getCourseSender(courseId);
+  const { subject, html } = await renderTemplate('applicant_shortlist_payment_reminder', { fullName });
+
+  // Same CC resolution order as the shortlist email:
+  //   1. explicit `cc` argument (caller override)
+  //   2. admin-configured CC saved in app_settings (Email Templates UI)
+  //   3. SHORTLIST_EMAIL_CC env var (legacy fallback)
+  //   4. none → candidate-only
+  let ccRaw = cc;
+  if (ccRaw === null || ccRaw === undefined) {
+    const adminCc = await getShortlistCcSetting();
+    ccRaw = adminCc.trim() ? adminCc : (env.SHORTLIST_EMAIL_CC || '');
+  }
+  const ccList = String(ccRaw ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const text = [
+    'Reminder: Complete Your Registration Fee Payment – Post-Doctoral Program',
+    '',
+    `Dear ${fullName},`,
+    '',
+    'Greetings from Dr. D. Y. Patil Education and Research Foundation!',
+    '',
+    'This is a gentle reminder that, as a shortlisted candidate for the Post-Doctoral Program, you are required to complete your program registration by paying the Registration Fee of USD 200 (INR 19,000) to confirm your place in the interview stage.',
+    '',
+    'As per our records, we have not yet received your registration fee. Kindly complete the payment on or before 10 July 2026 to avoid any delay in scheduling your Personal Interview.',
+    '',
+    'Account Details:',
+    'Bank Name:     HDFC Bank',
+    'A/c No.:       50100136437400',
+    'Account Name:  DR D Y PATIL EDUCATION AND RESEARCH FOUNDATION',
+    'IFSC Code:     HDFC0000007',
+    '',
+    'Kindly complete the payment before the deadline and share the transaction receipt by replying to this email. Your registration will be considered complete only upon successful receipt and verification of the registration fee.',
+    '',
+    'Please note that the interview process will be scheduled only for candidates who have completed the registration formalities.',
+    '',
+    'If you have already made the payment, kindly ignore this reminder and share your transaction receipt with us for verification.',
+    '',
+    'Should you have any queries, please feel free to contact on 9545154191 or 9860152927. For more information, please refer to https://www.dypims.com/research-center.php',
+    '',
+    'Warm regards,',
+    'Post-Doctoral Program',
+    'Dr. D. Y. Patil Education and Research Foundation',
+    'Pune (India)',
+  ].join('\n');
+
+  const result = await sendEmail({
+    to: { email: applicant.email, name: fullName },
+    ...(ccList.length ? { cc: ccList } : {}),
+    subject,
+    html,
+    text,
+    sender,
+  });
+
+  // Log the send result (success and failure) so an admin can audit delivery.
+  if (result.success) {
+    console.log(
+      `[email] Payment reminder sent → ${applicant.email}`,
+      `msgId=${result.messageId || '(mock)'}`,
+      ccList.length ? `cc=${ccList.join(',')}` : 'cc=(none)',
+    );
+  } else {
+    console.error(`[email] Payment reminder FAILED → ${applicant.email}: ${result.error || 'email failed'}`);
+  }
 
   // Surface delivery metadata (provider message id, the CC that was applied) so
   // the caller can log it and return it in the API response.
