@@ -5,6 +5,7 @@ import { validate } from '../../middleware/validate.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok, badRequest, notFound } from '../../utils/response.js';
 import { query } from '../../config/database.js';
+import { activeEnrolledClause } from '../../utils/enrollmentFilters.js';
 import { env } from '../../config/env.js';
 import { sendTestReminder, sendApplicantShortlistPaymentReminder } from '../email/email.service.js';
 import * as svc from './applicants.service.js';
@@ -85,9 +86,14 @@ router.get('/stats', authenticate, requirePermission('applicants', 'read'), asyn
   if (course_id) { params.push(course_id); conds.push(`a.course_id = $${params.length}`); }
   if (batch_id)  { params.push(batch_id);  conds.push(`a.batch_id = $${params.length}`); }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+  // Same scope as `where`, but additionally requires an active batch_enrollment
+  // for 'enrolled' applicants so the Enrolled tab/badge matches active enrollments.
+  // (Only the status breakdown needs this — testAgg spans all applicants.)
+  const enrolledGuard = activeEnrolledClause('a');
+  const whereEnrolled = conds.length ? `WHERE ${conds.join(' AND ')} AND ${enrolledGuard}` : `WHERE ${enrolledGuard}`;
 
   const [byStatus, testAgg] = await Promise.all([
-    query(`SELECT status, COUNT(*)::int AS count FROM applicants a ${where} GROUP BY status`, params),
+    query(`SELECT status, COUNT(*)::int AS count FROM applicants a ${whereEnrolled} GROUP BY status`, params),
     query(
       `SELECT COUNT(*) FILTER (WHERE sub.submitted_at IS NOT NULL)::int AS tests_completed,
               ROUND(AVG(sub.score)::numeric, 0) AS avg_score

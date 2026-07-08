@@ -1,4 +1,5 @@
 import { query, getClient } from '../../config/database.js';
+import { activeEnrolledClause } from '../../utils/enrollmentFilters.js';
 
 /**
  * Build a virtual `personal` and `academic` envelope from flat DB columns
@@ -46,7 +47,12 @@ export const listApplicants = async ({ course_id, batch_id, status, search, limi
     params.push(`%${search}%`);
     conditions.push(`(a.first_name ILIKE $${params.length} OR a.last_name ILIKE $${params.length} OR a.email ILIKE $${params.length})`);
   }
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  // An applicant only appears as 'enrolled' when a matching active
+  // batch_enrollment exists (linked via applicant_id). Non-enrolled statuses are
+  // untouched. Applied to both the list and its COUNT so the Enrolled tab and its
+  // total stay in sync with active enrollments (no schema change).
+  conditions.push(activeEnrolledClause('a'));
+  const where = `WHERE ${conditions.join(' AND ')}`;
   const { rows: rawData } = await query(
     `SELECT a.*, b.name as batch_name, b.code as batch_code,
             ta.score          AS test_score,

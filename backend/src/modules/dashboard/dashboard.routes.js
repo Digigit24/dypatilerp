@@ -4,6 +4,7 @@ import { requirePermission } from '../../middleware/rbac.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok } from '../../utils/response.js';
 import { query } from '../../config/database.js';
+import { activeEnrolledClause } from '../../utils/enrollmentFilters.js';
 
 const router = Router();
 router.use(authenticate);
@@ -37,8 +38,10 @@ router.get('/admin', requirePermission('dashboard_admin', 'read'), asyncHandler(
     submissionsByStatus, monthlySubmissions, fees, batches, testsAgg,
     attemptsAgg, assignmentsAgg, mediaAgg, recentApplicants, recentSubmissions,
   ] = await Promise.all([
-    // Applicant pipeline (narrowed to the selected batch when one is active)
-    query(`SELECT status, COUNT(*)::int AS count FROM applicants WHERE 1=1 ${courseCond} ${batchCondPlain} GROUP BY status`, params),
+    // Applicant pipeline (narrowed to the selected batch when one is active).
+    // "enrolled" is counted only when a matching active batch_enrollment exists,
+    // so withdrawn/suspended/completed scholars no longer inflate the bucket.
+    query(`SELECT status, COUNT(*)::int AS count FROM applicants WHERE 1=1 ${courseCond} ${batchCondPlain} AND ${activeEnrolledClause('applicants')} GROUP BY status`, params),
     // Applications per month (last 6 months)
     query(
       `SELECT to_char(date_trunc('month', applied_at), 'Mon YY') AS label,
@@ -204,7 +207,8 @@ router.get('/courses/:courseId', requirePermission('dashboard', 'read'), asyncHa
   const [batches, students, applicants, submissions, fees, topStudents] = await Promise.all([
     query(`SELECT b.*, (SELECT COUNT(*) FROM batch_enrollments WHERE batch_id=b.id AND status='active') as enrolled FROM batches b WHERE b.course_id=$1 ORDER BY b.start_date DESC`, [cid]),
     query(`SELECT COUNT(*) FROM batch_enrollments be JOIN batches b ON b.id=be.batch_id WHERE b.course_id=$1 AND be.status='active'`, [cid]),
-    query(`SELECT COUNT(*), status FROM applicants WHERE course_id=$1 GROUP BY status`, [cid]),
+    // "enrolled" counts only applicants with a matching active batch_enrollment.
+    query(`SELECT COUNT(*), status FROM applicants WHERE course_id=$1 AND ${activeEnrolledClause('applicants')} GROUP BY status`, [cid]),
     query(`SELECT COUNT(*), s.status FROM submissions s JOIN batches b ON b.id=s.batch_id WHERE b.course_id=$1 GROUP BY s.status`, [cid]),
     query(`SELECT SUM(f.amount) as total_due, SUM(CASE WHEN f.status='paid' THEN f.amount ELSE 0 END) as collected FROM fees f JOIN batches b ON b.id=f.batch_id WHERE b.course_id=$1`, [cid]),
     query(
