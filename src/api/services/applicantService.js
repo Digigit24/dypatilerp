@@ -120,6 +120,13 @@ export const remindTest = async (id) => {
   return ok(res.data)
 }
 
+/** Remind a shortlisted applicant to pay the registration fee (before the deadline) */
+export const remindPayment = async (id) => {
+  if (USE_MOCK) { await delay(); return ok({ email_sent: true, last_payment_reminded_at: new Date().toISOString() }) }
+  const { data: res } = await http.post(`/applicants/${id}/remind-payment`)
+  return ok(res.data)
+}
+
 export const convertToStudent = async (id, batch_id, extra = {}) => {
   if (USE_MOCK) { return ok({}) }
   const { data: res } = await http.post(`/applicants/${id}/convert`, { batch_id, ...extra })

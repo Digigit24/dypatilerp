@@ -32,6 +32,7 @@ const normalizeApplicant = (row) => {
     },
     research_statement: appData.research_statement || row.research_statement || null,
     last_reminded_at: appData.last_reminded_at || null,
+    last_payment_reminded_at: appData.last_payment_reminded_at || null,
   };
 };
 

@@ -6,7 +6,7 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok, badRequest, notFound } from '../../utils/response.js';
 import { query } from '../../config/database.js';
 import { env } from '../../config/env.js';
-import { sendTestReminder } from '../email/email.service.js';
+import { sendTestReminder, sendApplicantShortlistPaymentReminder } from '../email/email.service.js';
 import * as svc from './applicants.service.js';
 import * as ctrl from './applicants.controller.js';
 import {
@@ -296,6 +296,62 @@ router.post('/:id/remind-test', authenticate, requirePermission('applicants', 'u
   );
 
   ok(res, { applicant_id: applicantId, email: applicant.email, email_sent: true, last_reminded_at: remindedAt }, 'Reminder sent');
+}));
+
+/**
+ * @swagger
+ * /applicants/{id}/remind-payment:
+ *   post:
+ *     tags: [Applicants]
+ *     summary: Remind a shortlisted applicant to pay the registration fee (before the deadline)
+ *     description: >
+ *       Sends the registration-fee payment reminder email to a Final Shortlist
+ *       (status = shortlisted) applicant. Only tracks whether a reminder was sent
+ *       (stored in application_data.last_payment_reminded_at) — no payment status.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Payment reminder email sent
+ */
+router.post('/:id/remind-payment', authenticate, requirePermission('applicants', 'update'), asyncHandler(async (req, res) => {
+  const applicantId = req.params.id;
+
+  const { rows: [applicant] } = await query('SELECT * FROM applicants WHERE id=$1', [applicantId]);
+  if (!applicant) return notFound(res, 'Applicant not found');
+
+  // Only Final Shortlist candidates get the registration-fee payment reminder.
+  if (applicant.status !== 'shortlisted') {
+    return badRequest(res, 'Payment reminders can only be sent to shortlisted (Final Shortlist) candidates.');
+  }
+
+  const result = await sendApplicantShortlistPaymentReminder({
+    applicant,
+    courseId: applicant.course_id || null,
+  });
+
+  // Do not hide email failures — return an error and do NOT update the timestamp.
+  if (!result.success) {
+    return badRequest(res, `Payment reminder could not be sent: ${result.error || 'email failed'}`);
+  }
+
+  // Record the reminder timestamp inside application_data so the pipeline can
+  // show "last reminded" (kept in JSONB to avoid a schema migration). Mirrors the
+  // remind-test approach: jsonb_set + COALESCE preserves all existing fields.
+  // Only updated AFTER a successful send.
+  const remindedAt = new Date().toISOString();
+  await query(
+    `UPDATE applicants
+       SET application_data = jsonb_set(COALESCE(application_data, '{}'::jsonb), '{last_payment_reminded_at}', to_jsonb($2::text), true),
+           updated_at = NOW()
+     WHERE id = $1`,
+    [applicantId, remindedAt]
+  );
+
+  ok(res, { applicant_id: applicantId, email: applicant.email, email_sent: true, last_payment_reminded_at: remindedAt }, 'Payment reminder sent');
 }));
 
 router.get('/:id', authenticate, requirePermission('applicants', 'read'), ctrl.getOne);
