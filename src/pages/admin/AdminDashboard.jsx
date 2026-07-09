@@ -14,6 +14,7 @@ import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import { useAuthStore } from '../../store/authStore.js'
 import { useCourseStore } from '../../store/courseStore.js'
 import { useLabels } from '../../store/labelStore.js'
+import { usePermStore } from '../../store/permStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
@@ -47,6 +48,10 @@ export default function AdminDashboard() {
   const currentUser = useAuthStore((s) => s.currentUser)
   const { currentCourse, currentBatch } = useCourseStore()
   const labels = useLabels()
+  const can = usePermStore((s) => s.can)
+  // Subscribe to `loaded` so the dashboard re-renders once permissions resolve
+  // (selecting only `can`, a stable fn ref, would not trigger a re-render).
+  const permsLoaded = usePermStore((s) => s.loaded)
   const addToast = useUiStore((s) => s.addToast)
   const navigate = useNavigate()
 
@@ -65,7 +70,9 @@ export default function AdminDashboard() {
     // it back to "All Batches" restores the course-wide overview.
   }, [currentCourse?.id, currentBatch?.id])
 
-  if (!d) return <SkeletonCard rows={8} />
+  // Wait for BOTH dashboard data and permissions so cards are gated correctly on
+  // first paint (no flash of restricted cards before can() knows the grants).
+  if (!d || !permsLoaded) return <SkeletonCard rows={8} />
 
   const firstName = currentUser?.first_name ?? 'there'
 
@@ -83,40 +90,52 @@ export default function AdminDashboard() {
   const statusMap = Object.fromEntries((d.applicants_by_status || []).map((r) => [r.status, r.count]))
   const pipelineMax = Math.max(1, ...Object.values(statusMap))
 
+  // Only surface aggregate cards / shortcuts the user is permitted to see, using
+  // the same permStore.can() the sidebar uses. Admin & coordinator hold all of
+  // these modules, so their dashboard is unchanged; a guide/mentor gets a trimmed
+  // view (no Applicants / Fees / Test aggregates). The backend already omits the
+  // corresponding data, so this is the UI half of a consistent restriction.
   const kpis = [
-    {
+    can('applicants') && {
       label: 'Applicants', value: d.applicants_total ?? 0, icon: Users,
       hint: `+${d.applicants_this_month ?? 0} this month`, to: '/admin/applicants', tone: 'accent',
     },
-    {
+    can('students') && {
       label: `Active ${labels.studentPlural}`, value: d.total_active_students ?? 0, icon: GraduationCap,
       hint: `${(d.batches || []).length} batches`, to: '/admin/students', tone: 'emerald',
     },
-    {
+    can('approvals') && {
       label: 'Pending Approvals', value: d.pending_approvals ?? 0, icon: ClipboardCheck,
       hint: 'awaiting review', to: '/admin/approvals', tone: 'amber',
     },
-    {
+    can('tests') && {
       label: 'Tests Submitted', value: d.attempts?.submitted ?? 0, icon: FileText,
       hint: d.attempts?.avg_score != null ? `avg score ${d.attempts.avg_score}` : `${d.tests?.published ?? 0} live test${(d.tests?.published ?? 0) === 1 ? '' : 's'}`,
       to: '/admin/test-builder', tone: 'blue',
     },
-    {
+    can('fees') && {
       label: 'Fees Collected', value: inr.format(d.fees?.total_paid ?? 0), icon: IndianRupee,
       hint: `${feesPct}% of ${inr.format(d.fees?.total_due ?? 0)}`, to: '/admin/fees', tone: 'violet', small: true,
     },
-  ]
+  ].filter(Boolean)
 
   const shortcuts = [
-    { label: 'Applicant Pipeline', icon: Kanban, to: '/admin/applicants' },
-    { label: 'Add Applicant', icon: UserPlus, to: '/admin/applicants' },
-    { label: 'Test Builder', icon: FileText, to: '/admin/test-builder' },
-    { label: 'Assignments', icon: ClipboardList, to: '/admin/assignments' },
-    { label: 'Approvals', icon: ClipboardCheck, to: '/admin/approvals' },
-    { label: 'Formats', icon: FileDown, to: '/admin/formats' },
-    { label: 'Media', icon: PlayCircle, to: '/admin/lectures' },
-    { label: 'Notifications', icon: Bell, to: '/admin/notifications' },
-  ]
+    can('applicants') && { label: 'Applicant Pipeline', icon: Kanban, to: '/admin/applicants' },
+    can('applicants') && { label: 'Add Applicant', icon: UserPlus, to: '/admin/applicants' },
+    can('tests') && { label: 'Test Builder', icon: FileText, to: '/admin/test-builder' },
+    can('assignments') && { label: 'Assignments', icon: ClipboardList, to: '/admin/assignments' },
+    can('approvals') && { label: 'Approvals', icon: ClipboardCheck, to: '/admin/approvals' },
+    can('formats') && { label: 'Formats', icon: FileDown, to: '/admin/formats' },
+    can('lectures') && { label: 'Media', icon: PlayCircle, to: '/admin/lectures' },
+    can('notifications') && { label: 'Notifications', icon: Bell, to: '/admin/notifications' },
+  ].filter(Boolean)
+
+  const footerStats = [
+    can('assignments') && ['Assignments', d.assignments?.total ?? 0, `${d.assignments?.mandatory ?? 0} mandatory`, '/admin/assignments', ClipboardList],
+    can('tests') && ['Tests', d.tests?.total ?? 0, `${d.tests?.published ?? 0} published`, '/admin/test-builder', FileText],
+    can('lectures') && ['Media Files', d.media_total ?? 0, 'in library', '/admin/lectures', PlayCircle],
+    can('submissions') && ['Submissions', (d.submissions_by_status || []).reduce((s, r) => s + r.count, 0), `${(d.submissions_by_status || []).find((r) => r.status === 'approved')?.count ?? 0} approved`, '/admin/approvals', Activity],
+  ].filter(Boolean)
 
   const tones = {
     accent: 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]',
@@ -154,6 +173,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* ── Quick shortcuts ── */}
+      {shortcuts.length > 0 && (
       <div className="card mt-6 p-5">
         <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--muted)]">Quick Shortcuts</p>
         <div className="grid grid-cols-4 gap-2 lg:grid-cols-8">
@@ -171,8 +191,10 @@ export default function AdminDashboard() {
           ))}
         </div>
       </div>
+      )}
 
-      {/* ── Charts row ── */}
+      {/* ── Charts row (applicant admissions data) ── */}
+      {can('applicants') && (
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
         {/* Applications trend */}
         <div className="card p-6">
@@ -222,6 +244,7 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+      )}
 
       {/* ── Bottom row ── */}
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -255,6 +278,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Batches */}
+        {can('batches') && (
         <div className="card p-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-[color:var(--text)]">Batches</h2>
@@ -286,16 +310,13 @@ export default function AdminDashboard() {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* ── Footer stats strip ── */}
+      {footerStats.length > 0 && (
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {[
-          ['Assignments', d.assignments?.total ?? 0, `${d.assignments?.mandatory ?? 0} mandatory`, '/admin/assignments', ClipboardList],
-          ['Tests', d.tests?.total ?? 0, `${d.tests?.published ?? 0} published`, '/admin/test-builder', FileText],
-          ['Media Files', d.media_total ?? 0, 'in library', '/admin/lectures', PlayCircle],
-          ['Submissions', (d.submissions_by_status || []).reduce((s, r) => s + r.count, 0), `${(d.submissions_by_status || []).find((r) => r.status === 'approved')?.count ?? 0} approved`, '/admin/approvals', Activity],
-        ].map(([label, val, hint, to, Icon]) => (
+        {footerStats.map(([label, val, hint, to, Icon]) => (
           <button key={label} onClick={() => navigate(to)} className="card card-hover flex items-center gap-3 p-4 text-left">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[color:var(--surface)] text-[color:var(--secondary)]"><Icon size={17} /></span>
             <span className="min-w-0">
@@ -305,6 +326,7 @@ export default function AdminDashboard() {
           </button>
         ))}
       </div>
+      )}
     </div>
   )
 }

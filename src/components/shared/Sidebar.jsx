@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { useBrandingStore, useBranding } from '../../store/brandingStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
-export default function Sidebar({ sections, footer, width = 260, role, collapsed = false, mobileOpen = false, onClose }) {
+export default function Sidebar({ sections, footer, notice, width = 260, role, collapsed = false, mobileOpen = false, onClose }) {
   const theme = useUiStore((s) => s.theme)
   const branding = useBranding()
   const loadBranding = useBrandingStore((s) => s.loadBranding)
@@ -56,6 +56,7 @@ export default function Sidebar({ sections, footer, width = 260, role, collapsed
         ))}
       </nav>
 
+      {notice && !collapsed && <div className="mt-2 shrink-0">{notice}</div>}
       {!collapsed && <div className="mt-3 shrink-0">{footer}</div>}
     </aside>
   )
