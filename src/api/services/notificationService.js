@@ -3,14 +3,16 @@ import { USE_MOCK } from '../config.js'
 import { delay, ok } from './_mock.js'
 import http from '../http.js'
 
-export const getNotifications = async (filters = {}) => {
+// `opts.suppressErrorToast` lets the shell notification poll opt out of the global
+// 403 toast — it's an optional background call, permission-gated at the caller.
+export const getNotifications = async (filters = {}, { suppressErrorToast } = {}) => {
   if (USE_MOCK) {
     await delay()
     let data = [...NOTIFICATIONS]
     if (filters.recipient_id) data = data.filter((n) => n.recipient_id === filters.recipient_id || n.recipient_type === 'all' || n.recipient_batch_id)
     return ok(data, { total: data.length })
   }
-  const { data: res } = await http.get('/notifications', { params: filters })
+  const { data: res } = await http.get('/notifications', { params: filters, suppressErrorToast })
   return ok(res.data, { total: res.pagination?.total || 0 })
 }
 
