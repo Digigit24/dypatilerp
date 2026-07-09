@@ -10,6 +10,7 @@ import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { formatDate } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { usePermStore } from '../../store/permStore.js'
 
 export default function BatchStudentsPage() {
   const labels = useLabels()
@@ -20,7 +21,11 @@ export default function BatchStudentsPage() {
   const [students, setStudents] = useState(null)
   const [users, setUsers] = useState([])
   const [form, setForm] = useState(null)
+  // getUsers requires users:read (guide/mentor lack it). Gate it so it never 403s.
+  const canReadUsers = usePermStore((s) => s.can('users', 'read'))
 
+  // Core data — batch + its students (batches:read / students:read), both
+  // permitted for guide/mentor. getStudents already carries first_name/last_name.
   useEffect(() => {
     const load = async () => {
       let resolvedBatchId = batchId
@@ -31,25 +36,31 @@ export default function BatchStudentsPage() {
         return
       }
 
-      const [batchRes, studentsRes, usersRes] = await Promise.all([
+      const [batchRes, studentsRes] = await Promise.all([
         getBatchById(resolvedBatchId),
         getStudents({ batch_id: resolvedBatchId }),
-        getUsers(),
       ])
       setBatch(batchRes.data)
       setForm(batchRes.data)
       setStudents(studentsRes.data)
-      setUsers(usersRes.data)
     }
     load()
   }, [batchId, navigate])
 
+  // Optional user enrichment — only for roles allowed to read users, non-blocking.
+  useEffect(() => {
+    if (!canReadUsers) { setUsers([]); return }
+    getUsers().then((r) => setUsers(r.data)).catch(() => setUsers([]))
+  }, [canReadUsers])
+
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users])
   const coordinator = batch ? userMap[batch.coordinator_id] : null
 
+  // Names come from the students data everyone here can read; never a raw UUID.
   const studentName = (student) => {
+    if (student.first_name || student.last_name) return `${student.first_name || ''} ${student.last_name || ''}`.trim()
     const user = userMap[student.user_id]
-    return user ? `${user.first_name} ${user.last_name}` : student.user_id
+    return user ? `${user.first_name} ${user.last_name}` : '—'
   }
 
   const save = async () => {
@@ -115,7 +126,7 @@ export default function BatchStudentsPage() {
             <div className="mt-5 h-2 overflow-hidden rounded-full bg-[color:var(--surface-strong)]">
               <div className="h-full rounded-full bg-[color:var(--accent)]" style={{ width: `${Math.min(fill, 100)}%` }} />
             </div>
-            <p className="mt-4 text-sm text-[color:var(--secondary)]">Coordinator: {coordinator ? `${coordinator.first_name} ${coordinator.last_name}` : batch.coordinator_id}</p>
+            <p className="mt-4 text-sm text-[color:var(--secondary)]">Coordinator: {coordinator ? `${coordinator.first_name} ${coordinator.last_name}` : '—'}</p>
           </div>
         </aside>
 

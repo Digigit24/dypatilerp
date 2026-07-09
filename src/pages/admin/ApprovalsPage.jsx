@@ -9,6 +9,7 @@ import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { usePermStore } from '../../store/permStore.js'
 
 export default function ApprovalsPage() {
   const [rows, setRows] = useState(null)
@@ -20,25 +21,38 @@ export default function ApprovalsPage() {
   const [suggestedTitle, setSuggestedTitle] = useState('')
   const addToast = useUiStore((s) => s.addToast)
   useScrollLock(Boolean(revisionTarget || selected))
+  // getUsers requires users:read (guide/mentor lack it). Gate it so it never 403s.
+  const canReadUsers = usePermStore((s) => s.can('users', 'read'))
 
+  // Core data — approvals + submissions + students are all permitted for guide/mentor.
   useEffect(() => {
-    Promise.all([getApprovals(), getSubmissions(), getStudents(), getUsers()]).then(([a, s, st, u]) => {
+    Promise.all([getApprovals(), getSubmissions(), getStudents()]).then(([a, s, st]) => {
       setRows(a.data.map((ap) => ({ ...ap, submission: s.data.find((x) => x.id === ap.submission_id) })))
       setStudents(st.data)
-      setUsers(u.data)
     })
   }, [])
 
+  // Optional user enrichment — only for roles allowed to read users, non-blocking.
+  useEffect(() => {
+    if (!canReadUsers) { setUsers([]); return }
+    getUsers().then((u) => setUsers(u.data)).catch(() => setUsers([]))
+  }, [canReadUsers])
+
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users])
   const studentMap = useMemo(() => Object.fromEntries(students.map((s) => [s.id, s])), [students])
+  // Student names come from the students data everyone here can read; users
+  // enrichment is only a fallback. Never render a raw UUID — use "—".
   const studentName = (studentId) => {
     const student = studentMap[studentId]
+    if (student && (student.first_name || student.last_name)) return `${student.first_name || ''} ${student.last_name || ''}`.trim()
     const user = student ? userMap[student.user_id] : null
-    return user ? `${user.first_name} ${user.last_name}` : studentId
+    return user ? `${user.first_name} ${user.last_name}` : '—'
   }
+  // Reviewer/user names can only be resolved from the (admin-only) users list;
+  // when it isn't available, show a safe placeholder rather than a raw UUID.
   const userName = (userId) => {
     const user = userMap[userId]
-    return user ? `${user.first_name} ${user.last_name}` : userId
+    return user ? `${user.first_name} ${user.last_name}` : '—'
   }
   const threadFor = (submissionId) => rows.filter((row) => row.submission_id === submissionId).sort((a, b) => (a.stage_order || 0) - (b.stage_order || 0))
 

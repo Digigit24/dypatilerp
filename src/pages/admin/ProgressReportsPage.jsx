@@ -8,6 +8,7 @@ import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { useCourseStore } from '../../store/courseStore.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { usePermStore } from '../../store/permStore.js'
 
 export default function AdminProgressReportsPage() {
   const [reports, setReports] = useState(null)
@@ -16,22 +17,35 @@ export default function AdminProgressReportsPage() {
   const [period, setPeriod] = useState(1)
   const addToast = useUiStore((s) => s.addToast)
   const { currentCourse } = useCourseStore()
+  // getUsers requires users:read (guide/mentor lack it). Gate it so it never 403s.
+  const canReadUsers = usePermStore((s) => s.can('users', 'read'))
 
+  // Core data (progress_reports + students) — both permitted for guide/mentor.
   useEffect(() => {
     setReports(null)
-    Promise.all([getProgressReports(), getStudents(), getUsers()]).then(([r, s, u]) => {
+    Promise.all([getProgressReports(), getStudents()]).then(([r, s]) => {
       setReports(r.data)
       setStudents(s.data)
-      setUsers(u.data)
     })
   }, [currentCourse?.id])
 
+  // Optional enrichment — only fetched for roles allowed to read users, and never
+  // blocking: a failure here must not blank a page the role is authorized to view.
+  useEffect(() => {
+    if (!canReadUsers) { setUsers([]); return }
+    getUsers().then((u) => setUsers(u.data)).catch(() => setUsers([]))
+  }, [canReadUsers, currentCourse?.id])
+
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users])
   const studentMap = useMemo(() => Object.fromEntries(students.map((s) => [s.id, s])), [students])
+  // Resolve names from the students data everyone here can read (first_name/
+  // last_name come from getStudents); users enrichment is only a fallback. Never
+  // render a raw UUID — show "—" when a name can't be resolved.
   const nameOf = (studentId) => {
     const s = studentMap[studentId]
+    if (s && (s.first_name || s.last_name)) return `${s.first_name || ''} ${s.last_name || ''}`.trim()
     const u = s ? userMap[s.user_id] : null
-    return u ? `${u.first_name} ${u.last_name}` : studentId
+    return u ? `${u.first_name} ${u.last_name}` : '—'
   }
 
   if (!reports) return <SkeletonCard rows={8} />

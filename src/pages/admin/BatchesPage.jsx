@@ -12,6 +12,7 @@ import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { useCourseStore } from '../../store/courseStore.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { usePermStore } from '../../store/permStore.js'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
 
@@ -35,22 +36,35 @@ export default function BatchesPage() {
   const { currentCourse } = useCourseStore()
   const addToast = useUiStore((s) => s.addToast)
   useScrollLock(drawerOpen || !!workflowBatch)
+  // The course dropdown + faculty picker need courses:read / users:read, which
+  // guide/mentor lack. Gate both so they never 403 (the create/edit drawer is
+  // admin/coordinator-only anyway; guide/mentor just view the batch list).
+  const canReadCourses = usePermStore((s) => s.can('courses', 'read'))
+  const canReadUsers   = usePermStore((s) => s.can('users', 'read'))
 
+  // Core batch list (batches:read) — permitted for guide/mentor.
   const load = () =>
     getBatches(currentCourse?.id ? { course_id: currentCourse.id } : {})
       .then((r) => setItems(r.data || []))
 
+  useEffect(() => { load() }, [currentCourse?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Optional enrichment for the add/edit drawer — permission-gated + non-blocking.
   useEffect(() => {
-    load()
-    getCourses().then((r) => setCourses(r.data || []))
+    if (!canReadCourses) { setCourses([]); return }
+    getCourses().then((r) => setCourses(r.data || [])).catch(() => setCourses([]))
+  }, [canReadCourses])
+
+  useEffect(() => {
+    if (!canReadUsers) { setFaculty([]); return }
     getUsers().then((r) => {
       const all = r.data || []
       setFaculty(all.filter((u) => {
         const roles = Array.isArray(u.roles) ? u.roles : (u.roles || '').replace(/^\{|\}$/g, '').split(',').filter(Boolean)
         return roles.some((r) => FACULTY_ROLES.includes(r))
       }))
-    })
-  }, [currentCourse?.id])
+    }).catch(() => setFaculty([]))
+  }, [canReadUsers])
 
   const openAdd = () => {
     setEditing(null)

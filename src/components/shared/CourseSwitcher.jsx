@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { getCourses } from '../../api/services/courseService.js'
 import { getBatches } from '../../api/services/batchService.js'
 import { useCourseStore } from '../../store/courseStore.js'
+import { usePermStore } from '../../store/permStore.js'
 import { USE_MOCK } from '../../api/config.js'
 
 export default function CourseSwitcher() {
@@ -10,14 +11,16 @@ export default function CourseSwitcher() {
   const [open, setOpen] = useState(false)
   const [batches, setBatches] = useState([])
   const ref = useRef(null)
+  // /courses needs courses:read (guide/mentor lack it). Gate so it never 403s.
+  const canReadCourses = usePermStore((s) => s.can('courses', 'read'))
 
-  // Load courses on mount
+  // Load courses — only for roles allowed to read them; non-blocking.
   useEffect(() => {
-    if (USE_MOCK) return
+    if (USE_MOCK || !canReadCourses) return
     getCourses({ is_active: true }).then((r) => {
       if (r.data?.length) setCourses(r.data)
-    })
-  }, [])
+    }).catch(() => {})
+  }, [canReadCourses])
 
   // Load batches for current course
   useEffect(() => {
