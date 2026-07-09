@@ -30,8 +30,12 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (res) => res,
   async (error) => {
-    // Global permission-denied handling: clear toast, no silent failures
-    if (error.response?.status === 403) {
+    // Global permission-denied handling: clear toast, no silent failures.
+    // Opt-out per request via `suppressErrorToast` for OPTIONAL/background calls
+    // (e.g. the shell notification poll) so an unauthorized enrichment fetch can't
+    // spam this toast. This is per-request only — real user-initiated actions do
+    // not set the flag and still surface their 403s.
+    if (error.response?.status === 403 && !error.config?.suppressErrorToast) {
       const msg = error.response?.data?.message || 'You do not have permission to perform this action.'
       try {
         useUiStore.getState().addToast({ type: 'error', title: 'Permission denied', message: msg })
