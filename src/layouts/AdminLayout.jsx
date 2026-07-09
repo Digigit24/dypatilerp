@@ -34,6 +34,9 @@ export default function AdminLayout() {
   const permsLoaded = usePermStore((s) => s.loaded)
   const permsFailed = usePermStore((s) => s.failed)
   const reloadPermissions = usePermStore((s) => s.reload)
+  // The course store is enrichment: /courses needs courses:read, which
+  // guide/mentor lack. Gate it so it never 403s on the pages they can view.
+  const canReadCourses = usePermStore((s) => s.can('courses', 'read'))
   const userId = currentUser?.id
 
   // Load DB-driven UI labels once, and (re)load permissions whenever the logged-in
@@ -42,11 +45,12 @@ export default function AdminLayout() {
   useEffect(() => { loadLabels() }, [])
   useEffect(() => { if (userId) reloadPermissions() }, [userId])
 
-  // Load courses into store on mount
+  // Load courses into store — only for roles allowed to read courses, and
+  // non-blocking so a 403 can never surface a toast on an authorized page.
   useEffect(() => {
-    if (USE_MOCK) return
-    getCourses({ is_active: true }).then((r) => { if (r.data?.length) setCourses(r.data) })
-  }, [])
+    if (USE_MOCK || !canReadCourses) return
+    getCourses({ is_active: true }).then((r) => { if (r.data?.length) setCourses(r.data) }).catch(() => {})
+  }, [canReadCourses]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme

@@ -71,24 +71,34 @@ export default function StudentsPage() {
   //  - bulk send is admin-only, matching the backend requireRole('admin') guard
   const canSendCreds     = usePermStore((s) => s.can('students', 'update'))
   const canBulkSendCreds = usePermStore((s) => s.hasRole('admin'))
+  // getUsers requires users:read (guide/mentor lack it). Gate it so it never 403s.
+  const canReadUsers     = usePermStore((s) => s.can('users', 'read'))
 
   useScrollLock(Boolean(selected) || showImport)
 
   // Status filter is applied server-side so paging + counts stay correct.
   const statusParam = () => (statusFilter === 'all' ? {} : { status: TAB_TO_STATUS[statusFilter] })
 
+  // Core scholar data (students:read) — the students list already carries
+  // first_name/last_name/email, so names render without the users enrichment.
   const loadStudents = () => {
     inFlightRef.current = false
     requestedRef.current = new Set([0])
-    return Promise.all([getStudents({ ...statusParam(), limit: PAGE_SIZE, offset: 0 }), getUsers()])
-      .then(([students, userRes]) => {
+    return getStudents({ ...statusParam(), limit: PAGE_SIZE, offset: 0 })
+      .then((students) => {
         const data = dedupeBy(students.data, 'id')
         setItems(data)
         setTotal(students.total ?? data.length)
         loadedRef.current = data.length
-        setUsers(userRes.data)
       })
   }
+
+  // Optional user enrichment — only for roles allowed to read users, and
+  // non-blocking so a 403 can never blank this authorized page.
+  useEffect(() => {
+    if (!canReadUsers) { setUsers([]); return }
+    getUsers().then((r) => setUsers(r.data)).catch(() => setUsers([]))
+  }, [canReadUsers])
 
   // Synchronous in-flight guard prevents a rapid double-trigger appending the same page.
   const loadMore = () => {
@@ -131,12 +141,14 @@ export default function StudentsPage() {
   }, [items?.length, total]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users])
+  // The students list already carries first_name/last_name/email, so names
+  // resolve without users enrichment. Never fall back to a raw UUID — use "—".
   const nameOf  = (s) => {
+    if (s.first_name || s.last_name) return `${s.first_name || ''} ${s.last_name || ''}`.trim()
     const u = userMap[s.user_id]
-    if (u) return `${u.first_name} ${u.last_name}`
-    return s.first_name ? `${s.first_name} ${s.last_name}` : s.user_id
+    return u ? `${u.first_name} ${u.last_name}` : '—'
   }
-  const emailOf = (s) => userMap[s.user_id]?.email || s.email || '-'
+  const emailOf = (s) => s.email || userMap[s.user_id]?.email || '—'
   const initials = (s) => nameOf(s).split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
 
   // Status filtering now happens server-side, so the loaded page is already scoped.
