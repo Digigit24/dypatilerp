@@ -1,4 +1,4 @@
-import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, Search, Settings, Shield, Sun, UserCog, Users, Wand2 } from 'lucide-react'
+import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Search, Settings, Shield, Sun, UserCog, Users, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -31,10 +31,16 @@ export default function AdminLayout() {
   useScrollLock(mobileOpen)
 
   const can = usePermStore((s) => s.can)
-  const loadPermissions = usePermStore((s) => s.loadPermissions)
+  const permsLoaded = usePermStore((s) => s.loaded)
+  const permsFailed = usePermStore((s) => s.failed)
+  const reloadPermissions = usePermStore((s) => s.reload)
+  const userId = currentUser?.id
 
-  // Load DB-driven UI labels + my permissions once
-  useEffect(() => { loadLabels(); loadPermissions() }, [])
+  // Load DB-driven UI labels once, and (re)load permissions whenever the logged-in
+  // user changes. reload() forces a fresh fetch so User B never inherits User A's
+  // cached grants after a logout→login in the same tab.
+  useEffect(() => { loadLabels() }, [])
+  useEffect(() => { if (userId) reloadPermissions() }, [userId])
 
   // Load courses into store on mount
   useEffect(() => {
@@ -49,6 +55,7 @@ export default function AdminLayout() {
   const handleLogout = async () => {
     await logout()
     clearAuth()
+    usePermStore.getState().reset() // drop this user's grants so the next login loads fresh
     navigate('/login', { replace: true })
   }
 
@@ -98,10 +105,31 @@ export default function AdminLayout() {
     }] : []),
   ]
 
-  // Hide items the user can't read; drop empty groups
+  // Hide items the user can't read; drop empty groups. can() fails closed, so
+  // while permissions are still loading the perm-gated groups stay hidden (the
+  // full menu never flashes); they appear once the fetch resolves.
   const sections = sectionsRaw
     .map((g) => ({ ...g, items: g.items.filter((it) => !it.perm || can(it.perm, 'read')) }))
     .filter((g) => g.items.length > 0)
+
+  // Neutral loading / controlled retry state for the nav — never a fallback that
+  // exposes restricted items.
+  const permNotice = !permsLoaded ? (
+    <div className="soft-panel flex items-center gap-2 rounded-2xl p-3 text-xs text-[color:var(--secondary)]">
+      <Loader2 size={14} className="animate-spin" /> Loading menu…
+    </div>
+  ) : permsFailed ? (
+    <div className="soft-panel rounded-2xl p-3 text-xs">
+      <p className="font-semibold text-[color:var(--text)]">Menu unavailable</p>
+      <p className="mb-2 mt-0.5 text-[color:var(--secondary)]">Couldn’t load your permissions.</p>
+      <button
+        onClick={() => reloadPermissions()}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--accent-tint)] px-2.5 py-1.5 font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white"
+      >
+        <RefreshCw size={12} /> Retry
+      </button>
+    </div>
+  ) : null
 
   return (
     <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
@@ -109,6 +137,7 @@ export default function AdminLayout() {
       <Sidebar
         sections={[{ title: 'HOME', items: [{ to: '/', label: 'Landing Page', icon: Globe }, { to: '/admin', label: 'Dashboard', icon: Home }] }, ...sections]}
         role={roleLabel(role)}
+        notice={permNotice}
         collapsed={collapsed}
         mobileOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}

@@ -14,6 +14,16 @@ router.use(authenticate);
  * action gating in the frontend.
  */
 router.get('/my-permissions', asyncHandler(async (req, res) => {
+  // This response drives frontend visibility, so it must never be served as a
+  // conditional 304. Express' default weak ETag made browser revalidations return
+  // 304 with an empty body; the frontend treated that as a failed permission load
+  // and fell back to showing everything. Strip the conditional-request headers so
+  // Express can never mark the response "fresh" (→ always a 200 with the full
+  // body, regardless of any proxy/CDN), and tell clients not to cache it at all.
+  delete req.headers['if-none-match'];
+  delete req.headers['if-modified-since'];
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+
   const { rows } = await query(
     `SELECT DISTINCT p.module, p.action, COALESCE(rp.scope, 'all') AS scope
      FROM user_roles ur

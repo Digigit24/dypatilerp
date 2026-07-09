@@ -53,6 +53,18 @@ const loadGrants = async (userId) => {
   return entry;
 };
 
+/**
+ * Non-middleware permission check for handlers that must vary their RESPONSE
+ * (not just allow/deny) by what the caller may see — e.g. the admin dashboard
+ * trimming aggregate sections a guide/mentor isn't permitted to view. Reuses the
+ * same 60s grants cache as requirePermission(); the backend stays the authority.
+ */
+export const userHasPermission = async (userId, module, action = 'read') => {
+  if (!userId) return false;
+  const { grants } = await loadGrants(userId);
+  return grants.some((g) => g.module === module && g.action === action);
+};
+
 export const requirePermission = (module, action) => async (req, res, next) => {
   if (!req.user) return forbidden(res);
   try {

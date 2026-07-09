@@ -13,31 +13,57 @@ import http from '../api/http.js'
 export const usePermStore = create((set, get) => ({
   permissions: [],   // [{ module, action, scope }]
   roles: [],
-  loaded: false,
-  failed: false,     // endpoint unreachable (e.g. older backend) -> fail OPEN
+  loaded: false,     // a load attempt has fully resolved (success or permanent failure)
+  loading: false,    // a load is currently in flight
+  failed: false,     // the load permanently failed after retries -> fail CLOSED
 
-  loadPermissions: async () => {
-    if (get().loaded) return
-    try {
-      const { data: res } = await http.get('/roles/my-permissions')
-      set({ permissions: res.data?.permissions || [], roles: res.data?.roles || [], loaded: true, failed: false })
-    } catch {
-      // Fail OPEN in the UI: show everything and let the backend's own
-      // permission checks be the authority. Never lock an admin out of
-      // the sidebar because of a fetch hiccup or an un-deployed backend.
-      set({ loaded: true, failed: true })
+  loadPermissions: async ({ force = false } = {}) => {
+    const s = get()
+    if (s.loading) return                 // de-dupe concurrent callers
+    if (s.loaded && !force) return         // already resolved for this user
+    set({ loading: true })
+
+    // Retry transient failures a few times so a momentary network hiccup never
+    // strands a real admin on the fail-closed UI. The backend remains the
+    // authority; this only governs what the sidebar/dashboard advertise.
+    let lastErr
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const { data: res } = await http.get('/roles/my-permissions')
+        set({
+          permissions: res.data?.permissions || [],
+          roles: res.data?.roles || [],
+          loaded: true, loading: false, failed: false,
+        })
+        return
+      } catch (err) {
+        lastErr = err
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 300 * (attempt + 1)))
+      }
     }
+
+    // Permanent failure: fail CLOSED (no permissions granted in the UI) and flag
+    // so the layout can offer a retry instead of silently exposing restricted UI.
+    console.error('[permStore] permission load failed after retries', lastErr)
+    set({ permissions: [], roles: [], loaded: true, loading: false, failed: true })
   },
 
   reload: async () => {
     set({ loaded: false, failed: false })
-    await get().loadPermissions()
+    await get().loadPermissions({ force: true })
   },
 
-  /** Does the user hold (module, action) at any scope? */
+  /** Clear all permission state — call on logout so the next user loads fresh. */
+  reset: () => set({ permissions: [], roles: [], loaded: false, loading: false, failed: false }),
+
+  /**
+   * Does the user hold (module, action) at any scope?
+   * Fails CLOSED: until permissions are successfully loaded, nothing is granted.
+   * The backend still enforces every API, so this only controls UI advertising.
+   */
   can: (module, action = 'read') => {
     const { permissions, loaded, failed } = get()
-    if (!loaded || failed) return true // optimistic; backend is the authority
+    if (!loaded || failed) return false
     return permissions.some((p) => p.module === module && p.action === action)
   },
 

@@ -5,6 +5,7 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok } from '../../utils/response.js';
 import { query } from '../../config/database.js';
 import { activeEnrolledClause } from '../../utils/enrollmentFilters.js';
+import { userHasPermission } from '../../middleware/rbac.js';
 
 const router = Router();
 router.use(authenticate);
@@ -125,30 +126,64 @@ router.get('/admin', requirePermission('dashboard_admin', 'read'), asyncHandler(
   const thisMonth = monthlyApplicants.rows.length
     ? monthlyApplicants.rows[monthlyApplicants.rows.length - 1].count : 0;
 
-  const recent = [...recentApplicants.rows, ...recentSubmissions.rows]
+  // Scope the response to what the caller may actually see. dashboard_admin:read
+  // is enough to reach this endpoint, but a guide/mentor holding it must NOT
+  // receive admissions / fees / test aggregates. Admins & coordinators hold all
+  // of these modules, so their payload is unchanged. The backend permission
+  // checks on the underlying feature APIs are untouched — this only trims the
+  // aggregate data that would otherwise be advertised here.
+  const uid = req.user.id;
+  const [
+    canApplicants, canStudents, canApprovals, canSubmissions,
+    canFees, canBatches, canTests, canAssignments, canLectures,
+  ] = await Promise.all([
+    userHasPermission(uid, 'applicants', 'read'),
+    userHasPermission(uid, 'students', 'read'),
+    userHasPermission(uid, 'approvals', 'read'),
+    userHasPermission(uid, 'submissions', 'read'),
+    userHasPermission(uid, 'fees', 'read'),
+    userHasPermission(uid, 'batches', 'read'),
+    userHasPermission(uid, 'tests', 'read'),
+    userHasPermission(uid, 'assignments', 'read'),
+    userHasPermission(uid, 'lectures', 'read'),
+  ]);
+
+  // Recent activity is assembled only from sources the caller is allowed to see.
+  const recent = [
+    ...(canApplicants ? recentApplicants.rows : []),
+    ...(canSubmissions ? recentSubmissions.rows : []),
+  ]
     .sort((a, b) => new Date(b.at) - new Date(a.at))
     .slice(0, 8);
 
   ok(res, {
     course_id: courseId,
     batch_id: safeBatch,
-    applicants_by_status: applicantsByStatus.rows,
-    applicants_total: applicantsByStatus.rows.reduce((sum, r) => sum + r.count, 0),
-    applicants_this_month: thisMonth,
-    monthly_applicants: monthlyApplicants.rows,
-    monthly_submissions: monthlySubmissions.rows,
-    total_active_students: students.rows[0]?.count || 0,
-    pending_approvals: pendingApprovals.rows[0]?.count || 0,
-    submissions_by_status: submissionsByStatus.rows,
-    fees: {
-      total_due: Number(fees.rows[0]?.total_due || 0),
-      total_paid: Number(fees.rows[0]?.total_paid || 0),
-    },
-    batches: batches.rows,
-    tests: testsAgg.rows[0] || { total: 0, published: 0 },
-    attempts: attemptsAgg.rows[0] || { submitted: 0, avg_score: null },
-    assignments: assignmentsAgg.rows[0] || { total: 0, mandatory: 0 },
-    media_total: mediaAgg.rows[0]?.total || 0,
+    ...(canApplicants ? {
+      applicants_by_status: applicantsByStatus.rows,
+      applicants_total: applicantsByStatus.rows.reduce((sum, r) => sum + r.count, 0),
+      applicants_this_month: thisMonth,
+      monthly_applicants: monthlyApplicants.rows,
+    } : {}),
+    ...(canSubmissions ? {
+      monthly_submissions: monthlySubmissions.rows,
+      submissions_by_status: submissionsByStatus.rows,
+    } : {}),
+    ...(canStudents ? { total_active_students: students.rows[0]?.count || 0 } : {}),
+    ...(canApprovals ? { pending_approvals: pendingApprovals.rows[0]?.count || 0 } : {}),
+    ...(canFees ? {
+      fees: {
+        total_due: Number(fees.rows[0]?.total_due || 0),
+        total_paid: Number(fees.rows[0]?.total_paid || 0),
+      },
+    } : {}),
+    ...(canBatches ? { batches: batches.rows } : {}),
+    ...(canTests ? {
+      tests: testsAgg.rows[0] || { total: 0, published: 0 },
+      attempts: attemptsAgg.rows[0] || { submitted: 0, avg_score: null },
+    } : {}),
+    ...(canAssignments ? { assignments: assignmentsAgg.rows[0] || { total: 0, mandatory: 0 } } : {}),
+    ...(canLectures ? { media_total: mediaAgg.rows[0]?.total || 0 } : {}),
     recent_activity: recent,
   });
 }));
