@@ -1,5 +1,5 @@
 import {
-  CheckSquare, Download, ExternalLink, FileText, Filter,
+  CheckSquare, Download, ExternalLink, FileText, Filter, KeyRound,
   Loader2, RotateCcw, Square, Trash2, Upload, Users, XCircle,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -8,7 +8,7 @@ import { getApprovals } from '../../api/services/approvalService.js'
 import { getProgressReportByStudent } from '../../api/services/progressReportService.js'
 import { getSubmissionsByStudent } from '../../api/services/submissionService.js'
 import { archiveStudent, bulkStudentAction, exportStudents, getStudents } from '../../api/services/studentService.js'
-import { getUsers } from '../../api/services/userService.js'
+import { bulkSendCredentials, getUsers, sendCredentials } from '../../api/services/userService.js'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
@@ -18,6 +18,7 @@ import { formatDate } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useCourseStore } from '../../store/courseStore.js'
 import { useLabels } from '../../store/labelStore.js'
+import { usePermStore } from '../../store/permStore.js'
 
 // Tabs map to the enrollment_status enum (active | suspended | withdrawn=archived).
 const STATUS_TABS = ['all', 'active', 'suspended', 'archived']
@@ -60,8 +61,16 @@ export default function StudentsPage() {
   const [bulkLoading,    setBulkLoading]    = useState(false)
   const [exportLoading,  setExportLoading]  = useState(false)
   const [showImport,     setShowImport]     = useState(false)
+  const [sendingCredId,  setSendingCredId]  = useState(null)      // per-row credential send in flight (user_id)
   const addToast = useUiStore((s) => s.addToast)
   const { currentCourse, currentBatch } = useCourseStore()
+
+  // Credential-email visibility (reuses the app-wide permission source; these
+  // selectors re-evaluate when permissions load, and both fail closed):
+  //  - per-row send mirrors the students:update gate (Admin + Coordinator)
+  //  - bulk send is admin-only, matching the backend requireRole('admin') guard
+  const canSendCreds     = usePermStore((s) => s.can('students', 'update'))
+  const canBulkSendCreds = usePermStore((s) => s.hasRole('admin'))
 
   useScrollLock(Boolean(selected) || showImport)
 
@@ -187,6 +196,55 @@ export default function StudentsPage() {
       await loadStudents()
     } catch {
       addToast({ type: 'error', title: `Bulk action failed. Please try again.` })
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
+  // ── Send login details (rotate password + email) ──────────────────────────
+  // Mirrors the User Management / Student Profile credential flow exactly:
+  // one click rotates to a fresh secure password and emails it; the toast is
+  // driven by the returned email_sent flag.
+  const sendCredsOne = async (student, e) => {
+    e?.stopPropagation()
+    if (!student.user_id) {
+      addToast({ type: 'error', title: 'No linked login account', message: `${nameOf(student)} has no user account, so login details can't be sent.` })
+      return
+    }
+    const name = nameOf(student)
+    if (!window.confirm(`Send fresh login details to ${name} by email? This resets their password to a new secure one.`)) return
+    setSendingCredId(student.user_id)
+    try {
+      const r = await sendCredentials(student.user_id)
+      addToast({
+        type: r.data?.email_sent ? 'success' : 'error',
+        title: r.data?.email_sent ? `Login details emailed to ${r.data.email || emailOf(student)}.` : 'Password was reset but the email failed',
+        message: r.data?.email_error || undefined,
+      })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Failed to send login details', message: err.response?.data?.message })
+    } finally {
+      setSendingCredId(null)
+    }
+  }
+
+  // Admin-only bulk: rotate + email fresh login details to every selected scholar.
+  const bulkSendCreds = async () => {
+    const ids = [...selectedIds].filter(Boolean) // never send an undefined user_id
+    if (!ids.length) {
+      addToast({ type: 'error', title: 'No scholars with a linked login account are selected.' })
+      return
+    }
+    if (!window.confirm(`Send fresh login details to ${ids.length} scholar(s) by email? This resets each of their passwords to a new secure one.`)) return
+    setBulkLoading(true)
+    try {
+      const r = await bulkSendCredentials(ids)
+      const sent = r.data?.emails_sent ?? 0
+      const totalSent = r.data?.total ?? ids.length
+      addToast({ type: sent === totalSent ? 'success' : 'warning', title: `Credentials sent to ${sent} of ${totalSent}.` })
+      clearSelection()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Bulk send failed', message: err.response?.data?.message })
     } finally {
       setBulkLoading(false)
     }
@@ -361,23 +419,45 @@ export default function StudentsPage() {
                     </td>
                     <td className="px-6"><StatusBadge status={s.status} /></td>
                     <td className="px-6 text-right" onClick={(e) => e.stopPropagation()}>
-                      {s.status === 'withdrawn' ? (
-                        <button
-                          onClick={(e) => restoreOne(s, e)}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-emerald-600 hover:bg-emerald-50 transition"
-                          title="Restore scholar"
-                        >
-                          <RotateCcw size={13} /> Restore
-                        </button>
-                      ) : (
-                        <button
-                          onClick={(e) => archiveOne(s, e)}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition"
-                          title="Archive (soft-delete) scholar"
-                        >
-                          <Trash2 size={13} /> Archive
-                        </button>
-                      )}
+                      <div className="inline-flex items-center justify-end gap-2">
+                        {canSendCreds && (
+                          s.user_id ? (
+                            <button
+                              onClick={(e) => sendCredsOne(s, e)}
+                              disabled={sendingCredId === s.user_id}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-60"
+                              title="Generate a new password and email the login details to this scholar"
+                            >
+                              {sendingCredId === s.user_id ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />} Send Login Details
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--muted)] opacity-60"
+                              title="This scholar has no linked login account, so login details can't be sent."
+                            >
+                              <KeyRound size={13} /> Send Login Details
+                            </button>
+                          )
+                        )}
+                        {s.status === 'withdrawn' ? (
+                          <button
+                            onClick={(e) => restoreOne(s, e)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-emerald-600 hover:bg-emerald-50 transition"
+                            title="Restore scholar"
+                          >
+                            <RotateCcw size={13} /> Restore
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => archiveOne(s, e)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition"
+                            title="Archive (soft-delete) scholar"
+                          >
+                            <Trash2 size={13} /> Archive
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
@@ -427,6 +507,17 @@ export default function StudentsPage() {
                   {bulkLoading ? <Loader2 size={12} className="animate-spin" /> : a.label}
                 </button>
               ))}
+              {/* Admin-only: matches the backend requireRole('admin') bulk endpoint */}
+              {canBulkSendCreds && (
+                <button
+                  onClick={bulkSendCreds}
+                  disabled={bulkLoading}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[color:var(--accent-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white disabled:opacity-60"
+                  title="Generate a new password for each selected scholar and email their login details"
+                >
+                  {bulkLoading ? <Loader2 size={12} className="animate-spin" /> : <KeyRound size={12} />} Send Login Details
+                </button>
+              )}
             </div>
             <button
               className="ml-1 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[color:var(--surface)] text-[color:var(--muted)] hover:bg-[color:var(--border)] transition"

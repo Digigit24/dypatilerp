@@ -67,6 +67,14 @@ export const usePermStore = create((set, get) => ({
     return permissions.some((p) => p.module === module && p.action === action)
   },
 
+  /**
+   * Does the user hold a given role (from /roles/my-permissions `roles`)?
+   * Use this to gate UI for endpoints guarded by requireRole() that have no
+   * permission module (e.g. the admin-only bulk credential email). Fails CLOSED:
+   * `roles` is empty until a successful load, so this returns false until then.
+   */
+  hasRole: (roleName) => get().roles.includes(roleName),
+
   /** The strongest scope held for a module's action (default read). */
   scopeOf: (module, action = 'read') => {
     const rank = { all: 4, course: 3, batch: 2, own: 1 }
