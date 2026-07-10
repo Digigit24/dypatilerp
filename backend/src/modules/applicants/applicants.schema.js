@@ -45,7 +45,7 @@ export const updateApplicantDetailsSchema = z.object({
 });
 
 export const updateApplicantStatusSchema = z.object({
-  status: z.enum(['submitted','shortlisted_test','test_pending','test_completed','shortlisted','rejected','enrolled']),
+  status: z.enum(['submitted','shortlisted_test','test_pending','test_completed','shortlisted','payment_received','rejected','enrolled']),
   batch_id: z.string().uuid().optional(),
   // Optional free-text reason, saved when an applicant is rejected.
   remark: z.string().max(500).optional(),

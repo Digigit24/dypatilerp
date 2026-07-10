@@ -8,7 +8,7 @@
  * Clicking a card opens the same detail drawer used by the list view.
  */
 import {
-  ArrowRight, BellRing, CheckCircle2, GraduationCap, Loader2, Mail, RefreshCw, RotateCcw, Send, X, XCircle,
+  ArrowRight, BadgeCheck, BellRing, CheckCircle2, CheckSquare, GraduationCap, Loader2, Mail, RefreshCw, RotateCcw, Send, Square, X, XCircle,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { assignTest, getTests, resetTestAttempt } from '../../api/services/testService.js'
@@ -24,6 +24,7 @@ const COLUMNS = [
   { key: 'test_pending',     title: 'Test Sent',            dot: 'bg-amber-400' },
   { key: 'test_completed',   title: 'Test Submitted',       dot: 'bg-blue-400' },
   { key: 'shortlisted',      title: 'Final Shortlist',      dot: 'bg-violet-400' },
+  { key: 'payment_received', title: 'Registration Fee Paid', dot: 'bg-teal-400' },
   { key: 'enrolled',         title: 'Enrolled',             dot: 'bg-emerald-500' },
   { key: 'rejected',         title: 'Rejected',             dot: 'bg-red-400' },
 ]
@@ -60,6 +61,8 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
   const [modal, setModal] = useState(null) // {type:'send'|'reset'|'convert', applicant}
   const [rejectTarget, setRejectTarget] = useState(null) // applicant awaiting reject confirmation
   const [rejecting, setRejecting] = useState(false)
+  const [selectedPaid, setSelectedPaid] = useState(new Set()) // Final Shortlist ids selected to mark paid
+  const [markingPaid, setMarkingPaid] = useState(false)       // guards bulk mark-paid re-clicks
 
   const byStatus = useMemo(() => {
     const map = Object.fromEntries(COLUMNS.map((c) => [c.key, []]))
@@ -75,13 +78,19 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
     setBusyId(a.id)
     try {
       const res = await updateApplicantStatus(a.id, status)
-      // Final Shortlist auto-sends the registration-fee email — reflect whether
-      // it actually went out instead of always claiming success.
+      // Entering Final Shortlist from the pre-shortlist flow auto-sends the
+      // registration-fee email; the backend only returns shortlist_email when it
+      // actually attempted it. Its ABSENCE means this was a correction move
+      // (payment_received → shortlisted) that intentionally sent no email.
       if (status === 'shortlisted') {
-        const emailFailed = res.data?.shortlist_email && res.data.shortlist_email.sent === false
-        addToast(emailFailed
-          ? { type: 'warning', title: 'Candidate shortlisted, but payment email failed. Please retry or send manually.' }
-          : { type: 'success', title: 'Candidate shortlisted and payment email sent.' })
+        const info = res.data?.shortlist_email
+        if (!info) {
+          addToast({ type: 'success', title: successMsg || 'Moved back to Final Shortlist. No email sent.' })
+        } else {
+          addToast(info.sent === false
+            ? { type: 'warning', title: 'Candidate shortlisted, but payment email failed. Please retry or send manually.' }
+            : { type: 'success', title: 'Candidate shortlisted and payment email sent.' })
+        }
       } else {
         addToast({ type: status === 'rejected' ? 'warning' : 'success', title: successMsg || `Moved to ${status.replaceAll('_', ' ')}.` })
       }
@@ -228,6 +237,61 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
     })
   }
 
+  const togglePaidSelect = (id) =>
+    setSelectedPaid((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  // Mark ONE Final Shortlist candidate as Registration Fee Paid → moves them to
+  // the Registration Fee Paid column (and out of the reminder scope). No email.
+  const markPaid = async (a) => {
+    if (busyId) return
+    const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+    const prevStatus = a.status
+    onOptimisticUpdate(a.id, { status: 'payment_received' })
+    setBusyId(a.id)
+    try {
+      await updateApplicantStatus(a.id, 'payment_received')
+      addToast({ type: 'success', title: `${name} marked as Registration Fee Paid.` })
+      setSelectedPaid((prev) => { const n = new Set(prev); n.delete(a.id); return n })
+      onChanged()
+    } catch (err) {
+      onOptimisticUpdate(a.id, { status: prevStatus }) // rollback
+      addToast({ type: 'error', title: 'Action failed', message: err.response?.data?.message })
+    } finally { setBusyId(null) }
+  }
+
+  // Bulk: mark all SELECTED Final Shortlist candidates as Registration Fee Paid.
+  // Confirm first; process independently; show a summary. Guarded against re-clicks.
+  const markAllPaid = async (cards) => {
+    if (markingPaid) return
+    const targets = cards.filter((a) => selectedPaid.has(a.id))
+    if (!targets.length) {
+      addToast({ type: 'info', title: 'Select at least one Final Shortlist candidate first.' })
+      return
+    }
+    if (!window.confirm(
+      `Mark ${targets.length} selected candidate(s) as Registration Fee Paid?\n\n` +
+      `They move to "Registration Fee Paid" and are excluded from payment reminders. No email is sent.`
+    )) return
+
+    setMarkingPaid(true)
+    let done = 0
+    const failed = []
+    for (const a of targets) {
+      const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+      onOptimisticUpdate(a.id, { status: 'payment_received' })
+      try { await updateApplicantStatus(a.id, 'payment_received'); done++ }
+      catch { failed.push(name); onOptimisticUpdate(a.id, { status: 'shortlisted' }) } // rollback this one
+    }
+    setSelectedPaid(new Set())
+    setMarkingPaid(false)
+    addToast({
+      type: failed.length ? (done ? 'warning' : 'error') : 'success',
+      title: `Marked ${done} of ${targets.length} as Registration Fee Paid${failed.length ? `, ${failed.length} failed` : ''}.`,
+      message: failed.length ? `Failed: ${failed.join(', ')}` : undefined,
+    })
+    onChanged()
+  }
+
   return (
     <div className="overflow-x-auto pb-4">
       <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
@@ -266,6 +330,18 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
                 </button>
               )}
 
+              {/* Bulk mark-paid for the Final Shortlist — appears once one or more cards are selected */}
+              {col.key === 'shortlisted' && selectedPaid.size > 0 && (
+                <button
+                  onClick={() => markAllPaid(cards)}
+                  disabled={markingPaid}
+                  className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-teal-100 px-2 py-1.5 text-[11px] font-bold text-teal-700 transition hover:bg-teal-200 disabled:opacity-50"
+                  title="Mark all selected Final Shortlist candidates as Registration Fee Paid (no email sent)"
+                >
+                  {markingPaid ? <Loader2 size={12} className="animate-spin" /> : <BadgeCheck size={12} />} Mark {selectedPaid.size} Paid
+                </button>
+              )}
+
               {/* Cards */}
               <div className="max-h-[calc(100vh-330px)] space-y-2 overflow-y-auto pr-0.5">
                 {cards.length === 0 && (
@@ -284,6 +360,9 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
                     remindedAt={remindedMap[a.id] || a.last_reminded_at}
                     onRemindPay={() => remindPay(a)}
                     payRemindedAt={payRemindedMap[a.id] || a.last_payment_reminded_at}
+                    onMarkPaid={() => markPaid(a)}
+                    selectedPaid={selectedPaid.has(a.id)}
+                    onToggleSelect={() => togglePaidSelect(a.id)}
                     onSendTest={() => setModal({ type: 'send', applicant: a })}
                     onReset={() => setModal({ type: 'reset', applicant: a })}
                     onConvert={() => setModal({ type: 'convert', applicant: a })}
@@ -364,7 +443,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
 }
 
 // ─── Compact card ───────────────────────────────────────────────────────────────
-function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt, onRemindPay, payRemindedAt, onSendTest, onReset, onConvert }) {
+function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt, onRemindPay, payRemindedAt, onMarkPaid, selectedPaid, onToggleSelect, onSendTest, onReset, onConvert }) {
   const p = passInfo(a)
   const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
 
@@ -452,8 +531,22 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt,
         )}
         {!busy && col === 'shortlisted' && (
           <>
+            <button
+              onClick={onToggleSelect}
+              title="Select for bulk 'Mark Payment Received'"
+              className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10.5px] font-bold transition ${
+                selectedPaid
+                  ? 'bg-teal-500 text-white'
+                  : 'border border-[color:var(--border)] text-[color:var(--secondary)] hover:border-teal-400 hover:text-teal-600'
+              }`}
+            >
+              {selectedPaid ? <CheckSquare size={11} /> : <Square size={11} />} {selectedPaid ? 'Selected' : 'Select'}
+            </button>
             <Btn primary onClick={onConvert}>
               <GraduationCap size={11} /> Convert to {labels.student}
+            </Btn>
+            <Btn onClick={onMarkPaid} title="Mark registration fee received — moves to Registration Fee Paid (no email sent)">
+              <BadgeCheck size={11} /> Mark Payment Received
             </Btn>
             <Btn onClick={onRemindPay} title="Email a registration-fee payment reminder (deadline 10 July 2026)">
               <BellRing size={11} /> Send Payment Reminder
@@ -464,6 +557,17 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt,
                 <BellRing size={9} /> Reminded {timeAgo(payRemindedAt)}
               </span>
             )}
+          </>
+        )}
+        {!busy && col === 'payment_received' && (
+          <>
+            <Btn primary onClick={onConvert}>
+              <GraduationCap size={11} /> Convert to {labels.student}
+            </Btn>
+            <Btn onClick={() => onAct(a, 'shortlisted', `${name} moved back to Final Shortlist.`)} title="Correction only — moves back to Final Shortlist. Sends no email.">
+              <RotateCcw size={11} /> Back to Final Shortlist
+            </Btn>
+            <RejectBtn onClick={() => onAct(a, 'rejected')} />
           </>
         )}
         {!busy && col === 'rejected' && (

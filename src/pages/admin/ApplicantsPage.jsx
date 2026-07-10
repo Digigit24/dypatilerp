@@ -1,5 +1,5 @@
 import {
-  Award, BellRing, CheckCircle2, Clock3, Download, GraduationCap, Kanban, List, Loader2, Pencil, RotateCcw,
+  Award, BadgeCheck, BellRing, CheckCircle2, Clock3, Download, GraduationCap, Kanban, List, Loader2, Pencil, RotateCcw,
   Save, Search, Send, Upload, UserCheck, UserMinus, UserPlus, XCircle, ClipboardList,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
@@ -20,7 +20,7 @@ import { formatDate } from '../../lib/formatters.js'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { useUiStore } from '../../store/uiStore.js'
 
-const statusTabs = ['all', 'submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'enrolled', 'rejected']
+const statusTabs = ['all', 'submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'payment_received', 'enrolled', 'rejected']
 
 // Applicants load infinitely in pages of this size (both list & pipeline views).
 const PAGE_SIZE = 100
@@ -34,7 +34,13 @@ const dedupeById = (rows) => {
 }
 
 // Ordered stages for the pipeline indicator (rejected is a side-branch)
-const PIPELINE = ['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'enrolled']
+const PIPELINE = ['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'payment_received', 'enrolled']
+// Short stage labels for the drawer pipeline strips, keyed by status so a new
+// status can never fall through to a wrong/positional label.
+const STAGE_LABELS = {
+  submitted: 'Applied', shortlisted_test: 'Shortlisted', test_pending: 'Test Sent',
+  test_completed: 'Test Done', shortlisted: 'Final', payment_received: 'Fee Paid', enrolled: 'Enrolled',
+}
 
 const makeBlankForm = (courseId = '') => ({
   course_id: courseId,
@@ -49,7 +55,8 @@ function StatusBanner({ status }) {
     submitted:      { bg: 'bg-[color:var(--surface)] border-[color:var(--border)]',   icon: UserPlus,      color: 'text-[color:var(--secondary)]', text: 'Application received — assign test or shortlist directly.' },
     test_pending:   { bg: 'bg-amber-50 border-amber-200',                              icon: Clock3,         color: 'text-amber-700',                text: 'Test invite sent. Awaiting submission from candidate.' },
     test_completed: { bg: 'bg-blue-50 border-blue-200',                               icon: CheckCircle2,   color: 'text-blue-700',                 text: 'Test completed. Review the score and decide next step.' },
-    shortlisted:    { bg: 'bg-emerald-50 border-emerald-200',                          icon: UserCheck,      color: 'text-emerald-700',              text: 'Candidate is shortlisted. Convert to student when ready.' },
+    shortlisted:    { bg: 'bg-emerald-50 border-emerald-200',                          icon: UserCheck,      color: 'text-emerald-700',              text: 'Candidate is shortlisted. Send payment reminders, or mark the registration fee received once paid.' },
+    payment_received:{ bg: 'bg-teal-50 border-teal-200',                               icon: BadgeCheck,     color: 'text-teal-700',                 text: 'Registration fee received. Convert to student when ready.' },
     rejected:       { bg: 'bg-red-50 border-red-200',                                  icon: XCircle,        color: 'text-red-700',                  text: 'Application has been rejected. Reconsider to reopen.' },
   }
   const c = cfg[status] || cfg.submitted
@@ -66,7 +73,6 @@ function StatusBanner({ status }) {
 function PipelineBar({ status }) {
   if (status === 'rejected') return null
   const current = PIPELINE.indexOf(status)
-  const labels  = ['Submitted', 'Test Sent', 'Test Done', 'Shortlisted']
   return (
     <div className="flex items-center gap-0">
       {PIPELINE.map((stage, i) => {
@@ -84,7 +90,7 @@ function PipelineBar({ status }) {
               </div>
               <span className={`mt-1 text-[10px] font-semibold whitespace-nowrap
                 ${active ? 'text-[color:var(--accent)]' : done ? 'text-[color:var(--secondary)]' : 'text-[color:var(--muted)]'}`}>
-                {labels[i]}
+                {STAGE_LABELS[stage]}
               </span>
             </div>
             {!last && (
@@ -145,10 +151,43 @@ function DrawerActions({ item, onAct, onConvert, onRemindPay, busy }) {
         )}
         <button
           disabled={busy}
+          onClick={() => onAct(item, 'payment_received')}
+          className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-teal-400 hover:text-teal-700 transition disabled:opacity-50"
+          title="Mark the registration fee as received — moves the candidate to Registration Fee Paid (no email sent)"
+        >
+          <BadgeCheck size={14} /> Mark Payment Received
+        </button>
+        <button
+          disabled={busy}
           onClick={() => onAct(item, unshortlistTarget)}
           className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-amber-400 hover:text-amber-700 transition disabled:opacity-50"
         >
           <UserMinus size={14} /> Remove Shortlist
+        </button>
+      </div>
+    )
+  }
+
+  if (status === 'payment_received') {
+    // Registration fee received. Convert when ready; "Back to Final Shortlist" is
+    // a correction only and must send NO email (see backend guard). Reject is
+    // rendered once in the drawer body, like the other non-rejected stages.
+    return (
+      <div className="grid grid-cols-1 gap-2">
+        <button
+          disabled={busy}
+          onClick={() => onConvert(item)}
+          className="btn-primary flex items-center justify-center gap-2 text-sm"
+        >
+          <GraduationCap size={15} /> Convert to Student
+        </button>
+        <button
+          disabled={busy}
+          onClick={() => onAct(item, 'shortlisted')}
+          className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-amber-400 hover:text-amber-700 transition disabled:opacity-50"
+          title="Correction only — move back to Final Shortlist. Sends no email."
+        >
+          <RotateCcw size={14} /> Back to Final Shortlist
         </button>
       </div>
     )
@@ -418,12 +457,17 @@ export default function ApplicantsPage() {
       setItems((xs) => xs.map((x) => (x.id === item.id ? res.data : x)))
       setSelected(res.data)
 
-      // Final Shortlist auto-sends the registration-fee email — surface whether
-      // it actually went out so a silent email failure is never hidden.
+      // Entering Final Shortlist from the pre-shortlist flow auto-sends the
+      // registration-fee email; the backend only returns shortlist_email when it
+      // actually attempted it. Its ABSENCE means this was a correction move
+      // (e.g. payment_received → shortlisted) that intentionally sent no email.
       if (nextStatus === 'shortlisted') {
         const info = res.data?.shortlist_email
-        const emailFailed = info && info.sent === false
-        addToast(emailFailed
+        if (!info) {
+          addToast({ type: 'success', title: 'Moved back to Final Shortlist. No email sent.' })
+          return
+        }
+        addToast(info.sent === false
           ? { type: 'warning', title: 'Candidate shortlisted, but payment email failed. Please retry or send manually.' }
           : {
               type: 'success',
@@ -434,9 +478,10 @@ export default function ApplicantsPage() {
       }
 
       const labels = {
-        test_pending:   `Test invite sent to ${item.personal.full_name}.`,
-        test_completed: `${item.personal.full_name} marked as test completed.`,
-        submitted:      `${item.personal.full_name} moved back to submitted.`,
+        test_pending:     `Test invite sent to ${item.personal.full_name}.`,
+        test_completed:   `${item.personal.full_name} marked as test completed.`,
+        submitted:        `${item.personal.full_name} moved back to submitted.`,
+        payment_received: `${item.personal.full_name} marked as Registration Fee Paid.`,
       }
       addToast({
         type:  'success',
@@ -816,7 +861,7 @@ export default function ApplicantsPage() {
                             : done ? 'bg-emerald-100 text-emerald-700'
                             : 'bg-[color:var(--surface)] text-[color:var(--muted)]'
                           }`}>
-                            {stage === 'submitted' ? 'Applied' : stage === 'shortlisted_test' ? 'Shortlisted' : stage === 'test_pending' ? 'Test Sent' : stage === 'test_completed' ? 'Test Done' : stage === 'shortlisted' ? 'Final' : 'Enrolled'}
+                            {STAGE_LABELS[stage] || stage}
                           </span>
                           {i < PIPELINE.length - 1 && <span className={`h-px w-2 ${done ? 'bg-emerald-300' : 'bg-[color:var(--border)]'}`} />}
                         </span>

@@ -41,10 +41,14 @@ export const updateStatus = asyncHandler(async (req, res) => {
   if (!applicant) return notFound(res, 'Applicant not found');
 
   // Auto-send the client-approved "Qualified for Interview / Registration Fee"
-  // email the first time an applicant enters the Final Shortlist. Guard on the
-  // previous status so repeated same-status updates never re-send the email.
+  // email ONLY when a candidate enters the Final Shortlist from the normal
+  // pre-shortlist flow (e.g. test_completed → shortlisted). Post-shortlist
+  // previous statuses must NOT re-trigger it: moving payment_received → shortlisted
+  // (a correction) or enrolled → shortlisted must send NO email, and a repeated
+  // shortlisted → shortlisted update must not re-send either.
   const becameShortlisted =
-    applicant.status === 'shortlisted' && applicant.previous_status !== 'shortlisted';
+    applicant.status === 'shortlisted' &&
+    !['shortlisted', 'payment_received', 'enrolled'].includes(applicant.previous_status);
 
   if (becameShortlisted) {
     const { sendApplicantShortlisted } = await import('../email/email.service.js');
