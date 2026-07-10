@@ -133,6 +133,7 @@ export const EMAIL_TEMPLATES = [
     key: 'applicant_shortlisted',
     label: 'Final Shortlist — Qualified for Interview (Registration Fee)',
     category: 'Applicants',
+    broadcastSafe: true,
     audience: 'Applicant',
     description: 'Sent automatically to an applicant when they are moved to the Final Shortlist (status → shortlisted). Confirms they qualified the entrance test and shares the registration-fee / bank account details for the interview stage.',
     variables: [
@@ -165,6 +166,7 @@ export const EMAIL_TEMPLATES = [
     key: 'applicant_shortlist_payment_reminder',
     label: 'Final Shortlist - Payment Reminder',
     category: 'Applicants',
+    broadcastSafe: true,
     audience: 'Applicant',
     description: 'A reminder sent from the pipeline to Final Shortlist candidates (status → shortlisted) who still need to pay the Registration Fee, before the payment deadline (10 July 2026). Re-uses the registration-fee / bank details from the shortlist email.',
     variables: [
@@ -411,6 +413,7 @@ export const EMAIL_TEMPLATES = [
     key: 'announcement',
     label: 'Announcement',
     category: 'General',
+    broadcastSafe: true,
     audience: 'Scholar',
     description: 'Generic announcement broadcast to recipients.',
     variables: [
@@ -430,6 +433,7 @@ export const EMAIL_TEMPLATES = [
     key: 'zoom_link',
     label: 'Zoom Session Invite',
     category: 'General',
+    broadcastSafe: true,
     audience: 'Scholar',
     description: 'Sent to share a Zoom meeting link for a session.',
     variables: [
@@ -493,4 +497,42 @@ export const sampleDataFor = (key) => {
   const data = { courseName: SAMPLE.courseName };
   for (const v of tpl.variables) data[v.name] = v.sample;
   return data;
+};
+
+// ─── Bulk "Email Sender" support ─────────────────────────────────────────────
+// Only templates explicitly flagged broadcastSafe may be bulk-sent. The flag
+// lives on each template above; templates carrying private/per-recipient data
+// (credentials, test links, passwords, per-candidate assessment/fee data) are
+// intentionally NOT flagged.
+export const isBroadcastSafe = (key) => !!EMAIL_TEMPLATES_BY_KEY[key]?.broadcastSafe;
+
+export const broadcastSafeTemplates = () => EMAIL_TEMPLATES.filter((t) => t.broadcastSafe);
+
+// Contact fields the bulk sender resolves for every recipient (from the
+// applicant/scholar record); documents what the render `data` object carries.
+// courseName is supplied by the render layer.
+export const RESOLVABLE_CONTACT_FIELDS = [
+  'fullName', 'firstName', 'lastName', 'name', 'email', 'batch', 'status', 'courseName',
+];
+
+/** Extract distinct {{placeholder}} names from a subject/body string. */
+export const extractPlaceholders = (str) => {
+  const out = new Set();
+  const re = /\{\{\s*([\w.]+)\s*\}\}/g;
+  let m;
+  while ((m = re.exec(String(str ?? ''))) !== null) out.add(m[1]);
+  return [...out];
+};
+
+/**
+ * Placeholders in the EFFECTIVE subject+body that have no non-empty value in
+ * `data` for this recipient. Purely data-driven: a value must actually be present
+ * to count as resolved, so a recipient missing a required field (or a template
+ * still carrying admin-content placeholders like {{title}}/{{message}}) is caught.
+ * A non-empty result MUST block the send — an email is never delivered with a
+ * leftover {{placeholder}} or a blank substitution of a required field.
+ */
+export const unresolvedPlaceholders = (subject, body, data = {}) => {
+  const has = (k) => data[k] !== undefined && data[k] !== null && String(data[k]).trim() !== '';
+  return extractPlaceholders(`${subject || ''} ${body || ''}`).filter((name) => !has(name));
 };

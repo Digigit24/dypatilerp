@@ -412,6 +412,19 @@ CREATE TABLE audit_logs (
   created_at    TIMESTAMP DEFAULT NOW()
 );
 
+-- Audit log for the generic "Email Sender" (bulk templated sends). One row per
+-- recipient attempt. Also created by alter_email_send_log.sql for existing DBs.
+CREATE TABLE email_send_log (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  sent_by         UUID REFERENCES users(id) ON DELETE SET NULL,
+  template_key    VARCHAR(80) NOT NULL,
+  recipient_email VARCHAR(255) NOT NULL,
+  recipient_type  VARCHAR(20),
+  status          VARCHAR(12) NOT NULL,
+  error           TEXT,
+  created_at      TIMESTAMP DEFAULT NOW()
+);
+
 -- ─── INDEXES ─────────────────────────────────────────────────
 
 CREATE INDEX idx_user_roles_user ON user_roles(user_id);

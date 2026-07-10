@@ -3,6 +3,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import PageHeader from '../../components/shared/PageHeader.jsx'
+import EmailSender from '../../components/admin/EmailSender.jsx'
 import { useUiStore } from '../../store/uiStore.js'
 import {
   getShortlistCc, listTemplates, previewTemplate, resetTemplate, saveShortlistCc, saveTemplate,
@@ -24,6 +25,7 @@ const AUDIENCE_STYLES = {
 export default function EmailTemplatesPage() {
   const addToast = useUiStore((s) => s.addToast)
 
+  const [view, setView] = useState('templates') // 'templates' | 'sender'
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -206,7 +208,24 @@ export default function EmailTemplatesPage() {
         subtitle="View, edit and save the transactional emails your portal sends. Use {{variables}} for personalized values."
       />
 
-      {loading ? (
+      {/* Templates editor ⟷ Email Sender */}
+      <div className="mb-4 flex gap-2">
+        {[['templates', 'Templates'], ['sender', 'Email Sender']].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setView(key)}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+              view === key ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'sender' ? (
+        <EmailSender />
+      ) : loading ? (
         <div className="grid h-64 place-items-center text-[color:var(--secondary)]">
           <Loader2 className="animate-spin" />
         </div>
