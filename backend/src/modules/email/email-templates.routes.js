@@ -64,6 +64,7 @@ const shape = (def, overrides) => {
     category: def.category,
     audience: def.audience,
     description: def.description,
+    broadcastSafe: !!def.broadcastSafe,
     variables: def.variables,
     default: { subject: def.subject, body: def.body },
     override: ov && (ov.subject || ov.body) ? { subject: ov.subject || '', body: ov.body || '' } : null,
