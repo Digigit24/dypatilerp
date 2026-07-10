@@ -364,7 +364,7 @@ router.get('/access-tokens', authenticate, requirePermission('tests', 'read'), a
      JOIN applicants a ON a.id = tat.applicant_id
      LEFT JOIN test_attempts ta ON ta.test_id = tat.test_id AND ta.user_id = tat.user_id
      WHERE tat.test_id = $1
-       AND a.status NOT IN ('shortlisted', 'enrolled', 'rejected')
+       AND a.status NOT IN ('shortlisted', 'payment_received', 'enrolled', 'rejected')
      ORDER BY tat.created_at DESC`,
     [req.params.id]
   );

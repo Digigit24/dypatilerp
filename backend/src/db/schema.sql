@@ -13,7 +13,7 @@ CREATE TYPE user_role_name AS ENUM (
 );
 
 CREATE TYPE applicant_status AS ENUM (
-  'submitted', 'test_pending', 'test_completed', 'shortlisted', 'rejected', 'enrolled'
+  'submitted', 'test_pending', 'test_completed', 'shortlisted', 'payment_received', 'rejected', 'enrolled'
 );
 
 CREATE TYPE batch_status AS ENUM ('upcoming', 'active', 'completed');

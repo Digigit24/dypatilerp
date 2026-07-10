@@ -32,14 +32,14 @@ const greeting = () => {
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
 }
 
-const PIPELINE_ORDER = ['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'enrolled', 'rejected']
+const PIPELINE_ORDER = ['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'payment_received', 'enrolled', 'rejected']
 const PIPELINE_LABELS = {
   submitted: 'Applied', shortlisted_test: 'Shortlisted for Test', test_pending: 'Test Sent',
-  test_completed: 'Test Submitted', shortlisted: 'Final Shortlist', enrolled: 'Enrolled', rejected: 'Rejected',
+  test_completed: 'Test Submitted', shortlisted: 'Final Shortlist', payment_received: 'Registration Fee Paid', enrolled: 'Enrolled', rejected: 'Rejected',
 }
 const PIPELINE_COLORS = {
   submitted: 'bg-slate-400', shortlisted_test: 'bg-indigo-400', test_pending: 'bg-amber-400',
-  test_completed: 'bg-blue-400', shortlisted: 'bg-violet-400', enrolled: 'bg-emerald-500', rejected: 'bg-red-400',
+  test_completed: 'bg-blue-400', shortlisted: 'bg-violet-400', payment_received: 'bg-teal-400', enrolled: 'bg-emerald-500', rejected: 'bg-red-400',
 }
 
 export default function AdminDashboard() {

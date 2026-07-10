@@ -44,7 +44,7 @@ const APPLICANT_TEMPLATE_ROWS = [
   ['Vikram', 'Iyer', 'vikram.iyer@example.com', '9876543211', 'submitted', 'IIT Bombay', 'Ph.D.', 'Mechanical Engineering', 'Thermal optimisation of EV batteries', '2022', '7', 'Karnataka, India', ''],
 ]
 
-const VALID_STATUSES = ['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'rejected', 'enrolled']
+const VALID_STATUSES = ['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'payment_received', 'rejected', 'enrolled']
 
 // Human labels for the wizard-level status selector
 const STATUS_OPTIONS = [
@@ -53,6 +53,7 @@ const STATUS_OPTIONS = [
   { value: 'test_pending',     label: 'Test Sent' },
   { value: 'test_completed',   label: 'Test Submitted' },
   { value: 'shortlisted',      label: 'Final Shortlist' },
+  { value: 'payment_received', label: 'Registration Fee Paid' },
   { value: 'enrolled',         label: 'Enrolled' },
   { value: 'rejected',         label: 'Rejected' },
 ]

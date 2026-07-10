@@ -29,7 +29,7 @@ const router = Router();
  *         schema: { type: string, format: uuid }
  *       - in: query
  *         name: status
- *         schema: { type: string, enum: [submitted,test_pending,test_completed,shortlisted,rejected,enrolled] }
+ *         schema: { type: string, enum: [submitted,test_pending,test_completed,shortlisted,payment_received,rejected,enrolled] }
  *       - in: query
  *         name: search
  *         schema: { type: string }
@@ -129,7 +129,7 @@ router.get('/stats', authenticate, requirePermission('applicants', 'read'), asyn
  *     summary: Bulk-import applicants from the mapped JSON array produced by the import wizard
  *     description: "Body: { applicants: [...], course_id }. Returns { imported, skipped, errors, total }."
  */
-const IMPORT_STATUSES = new Set(['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'rejected', 'enrolled']);
+const IMPORT_STATUSES = new Set(['submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'payment_received', 'rejected', 'enrolled']);
 
 router.post('/import', authenticate, requirePermission('applicants', 'create'), asyncHandler(async (req, res) => {
   const rows = Array.isArray(req.body.applicants) ? req.body.applicants : [];

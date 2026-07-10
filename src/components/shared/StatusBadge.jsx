@@ -14,6 +14,7 @@ const colors = {
   draft: 'bg-stone-100 text-stone-600 border-stone-200',
   upcoming: 'bg-indigo-50 text-indigo-700 border-indigo-100',
   enrolled: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+  payment_received: 'bg-teal-50 text-teal-700 border-teal-100',
 }
 
 export default function StatusBadge({ status }) {
