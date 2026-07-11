@@ -16,6 +16,7 @@ import { convertToStudent, remindPayment, remindTest, updateApplicantStatus } fr
 import { useUiStore } from '../../store/uiStore.js'
 import { useLabels } from '../../store/labelStore.js'
 import { formatDate } from '../../lib/formatters.js'
+import { rejectedFromLabel } from '../../lib/rejectedStage.js'
 import RejectModal from './RejectModal.jsx'
 
 const COLUMNS = [
@@ -551,7 +552,7 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt,
             <Btn onClick={onRemindPay} title="Email a registration-fee payment reminder (deadline 10 July 2026)">
               <BellRing size={11} /> Send Payment Reminder
             </Btn>
-            <RejectBtn onClick={() => onAct(a, 'rejected')} />
+            <RejectLabelBtn onClick={() => onAct(a, 'rejected')} />
             {payRemindedAt && (
               <span className="inline-flex w-full items-center gap-1 text-[10px] font-medium text-[color:var(--muted)]" title={`Last payment reminder: ${new Date(payRemindedAt).toLocaleString()}`}>
                 <BellRing size={9} /> Reminded {timeAgo(payRemindedAt)}
@@ -571,9 +572,19 @@ function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt,
           </>
         )}
         {!busy && col === 'rejected' && (
-          <Btn onClick={() => onAct(a, 'submitted', `${name} moved back to Applied.`)}>
-            <RotateCcw size={11} /> Reconsider
-          </Btn>
+          <>
+            {a.rejected_from_status && (
+              <span
+                className="inline-flex w-full items-center gap-1 rounded-md bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"
+                title={`Rejected from: ${a.rejected_from_status.replaceAll('_', ' ')}`}
+              >
+                {rejectedFromLabel(a.rejected_from_status)}
+              </span>
+            )}
+            <Btn onClick={() => onAct(a, 'submitted', `${name} moved back to Applied.`)}>
+              <RotateCcw size={11} /> Reconsider
+            </Btn>
+          </>
         )}
       </div>
     </div>
@@ -601,6 +612,16 @@ function RejectBtn({ onClick }) {
     <button onClick={onClick} title="Reject"
       className="grid h-6 w-6 place-items-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100">
       <X size={11} />
+    </button>
+  )
+}
+
+// Clearly-labelled reject (used on Final Shortlist, where a small × is too subtle).
+function RejectLabelBtn({ onClick }) {
+  return (
+    <button onClick={onClick} title="Reject this candidate"
+      className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[10.5px] font-bold text-red-600 transition hover:bg-red-100">
+      <X size={11} /> Reject
     </button>
   )
 }

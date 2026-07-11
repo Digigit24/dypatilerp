@@ -17,6 +17,7 @@ import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { formatDate } from '../../lib/formatters.js'
+import { rejectedFromLabel, REJECTED_FROM_ORDER } from '../../lib/rejectedStage.js'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { useUiStore } from '../../store/uiStore.js'
 
@@ -125,8 +126,6 @@ function DrawerActions({ item, onAct, onConvert, onRemindPay, busy }) {
   }
 
   if (status === 'shortlisted') {
-    // Reject lives in the drawer body (just above "View Test Responses"), so it
-    // is intentionally not repeated here.
     return (
       <div className="grid grid-cols-1 gap-2">
         <button
@@ -161,8 +160,17 @@ function DrawerActions({ item, onAct, onConvert, onRemindPay, busy }) {
           disabled={busy}
           onClick={() => onAct(item, unshortlistTarget)}
           className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-amber-400 hover:text-amber-700 transition disabled:opacity-50"
+          title="Move back to Test Submitted — does NOT reject the candidate"
         >
           <UserMinus size={14} /> Remove Shortlist
+        </button>
+        <button
+          disabled={busy}
+          onClick={() => onAct(item, 'rejected')}
+          className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50"
+          title="Reject this candidate (records the stage they were rejected from)"
+        >
+          <XCircle size={14} /> Reject
         </button>
       </div>
     )
@@ -273,6 +281,7 @@ export default function ApplicantsPage() {
   const [editSaving, setEditSaving] = useState(false)
   const [query,      setQuery]      = useState('')
   const [status,     setStatus]     = useState('all')
+  const [rejectedFrom, setRejectedFrom] = useState('all') // Rejected tab: filter by from-stage
   const [showImport, setShowImport] = useState(false)
   const [exporting,  setExporting]  = useState(false)
   const [view,       setView]       = useState('kanban')   // 'kanban' | 'list'
@@ -439,10 +448,13 @@ export default function ApplicantsPage() {
     if (!items) return []
     return items.filter((item) => {
       const matchesStatus = status === 'all' || item.status === status
+      // On the Rejected tab, optionally narrow to a specific from-stage.
+      const matchesRejectedFrom = !(status === 'rejected' && rejectedFrom !== 'all')
+        || item.rejected_from_status === rejectedFrom
       const haystack = `${item.personal.full_name} ${item.personal.email} ${item.temp_id}`.toLowerCase()
-      return matchesStatus && haystack.includes(query.toLowerCase())
+      return matchesStatus && matchesRejectedFrom && haystack.includes(query.toLowerCase())
     })
-  }, [items, query, status])
+  }, [items, query, status, rejectedFrom])
 
   if (!items) return <SkeletonCard rows={8} />
 
@@ -515,8 +527,15 @@ export default function ApplicantsPage() {
     const snapshot = item
     setRejecting(true)
     // Move the card/row to Rejected instantly (and refresh the scoped counts).
-    optimisticUpdate(item.id, { status: 'rejected', rejection_remark: remark || null })
-    setSelected((s) => (s && s.id === item.id ? { ...s, status: 'rejected', rejection_remark: remark || null } : s))
+    // Capture the stage they were rejected FROM so the "rejected from X" label
+    // shows immediately (the server persists the same value).
+    const patch = {
+      status: 'rejected',
+      rejection_remark: remark || null,
+      ...(item.status !== 'rejected' ? { rejected_from_status: item.status } : {}),
+    }
+    optimisticUpdate(item.id, patch)
+    setSelected((s) => (s && s.id === item.id ? { ...s, ...patch } : s))
     try {
       const res = await updateApplicantStatus(item.id, 'rejected', { remark })
       setItems((xs) => xs?.map((x) => (x.id === item.id ? res.data : x)) ?? xs)
@@ -769,6 +788,20 @@ export default function ApplicantsPage() {
               </button>
             )
           })}
+          {/* Rejected tab: analyse by the stage candidates were rejected from */}
+          {status === 'rejected' && (
+            <select
+              value={rejectedFrom}
+              onChange={(e) => setRejectedFrom(e.target.value)}
+              className="ml-auto shrink-0 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs font-semibold text-[color:var(--secondary)]"
+              title="Filter by the stage candidates were rejected from"
+            >
+              <option value="all">All rejected stages</option>
+              {REJECTED_FROM_ORDER.map((s) => (
+                <option key={s} value={s}>{rejectedFromLabel(s)}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -800,7 +833,12 @@ export default function ApplicantsPage() {
                       <span className="font-semibold text-[color:var(--text)]">{a.test_score ?? '-'}</span>
                     </div>
                   </td>
-                  <td className="px-6"><StatusBadge status={a.status} /></td>
+                  <td className="px-6">
+                    <StatusBadge status={a.status} />
+                    {a.status === 'rejected' && a.rejected_from_status && (
+                      <span className="mt-1 block text-[10px] font-bold text-red-500">{rejectedFromLabel(a.rejected_from_status)}</span>
+                    )}
+                  </td>
                   <td className="px-6">
                     <button
                       className="rounded-full bg-[color:var(--accent-tint)] px-4 py-2 text-xs font-semibold text-[color:var(--accent)]"
@@ -938,11 +976,20 @@ export default function ApplicantsPage() {
                 <PipelineBar status={selected.status} />
               </div>
 
-              {/* Rejection remark — recorded when the applicant was rejected */}
-              {selected.status === 'rejected' && selected.rejection_remark && (
+              {/* Rejection details — the stage rejected FROM + the recorded remark */}
+              {selected.status === 'rejected' && (selected.rejected_from_status || selected.rejection_remark) && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-red-500">Rejection Remark</p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-red-700">{selected.rejection_remark}</p>
+                  {selected.rejected_from_status && (
+                    <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-[11px] font-bold text-red-700">
+                      {rejectedFromLabel(selected.rejected_from_status)}
+                    </span>
+                  )}
+                  {selected.rejection_remark && (
+                    <>
+                      <p className={`text-xs font-semibold uppercase tracking-wide text-red-500 ${selected.rejected_from_status ? 'mt-3' : ''}`}>Rejection Remark</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-red-700">{selected.rejection_remark}</p>
+                    </>
+                  )}
                 </div>
               )}
 
