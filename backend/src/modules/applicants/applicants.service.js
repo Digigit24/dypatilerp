@@ -34,6 +34,7 @@ const normalizeApplicant = (row) => {
     research_statement: appData.research_statement || row.research_statement || null,
     last_reminded_at: appData.last_reminded_at || null,
     last_payment_reminded_at: appData.last_payment_reminded_at || null,
+    rejected_from_status: row.rejected_from_status || null,
   };
 };
 
@@ -222,6 +223,17 @@ export const updateApplicantStatus = async (id, { status, batch_id, remark }, re
   if (setRemark) {
     params.push(remarkVal);
     sets.push(`rejection_remark=$${params.length}`);
+    // Record the stage the candidate was rejected FROM (for the Rejected basket's
+    // "Shortlisted → Rejected" label). Skip if they were already rejected so a
+    // repeat action can't overwrite it with 'rejected'.
+    if (previousStatus !== 'rejected') {
+      params.push(previousStatus);
+      sets.push(`rejected_from_status=$${params.length}`);
+    }
+  } else if (previousStatus === 'rejected') {
+    // Reconsidered back into the pipeline → clear the from-stage marker so a stale
+    // "rejected from X" label never lingers on an active applicant.
+    sets.push('rejected_from_status=NULL');
   }
   params.push(id);
 
