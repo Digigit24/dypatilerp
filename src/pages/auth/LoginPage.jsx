@@ -80,7 +80,7 @@ export default function LoginPage() {
             <img
               src="/texas-state-logo.png"
               alt="Texas State University"
-              className="h-16 w-16 shrink-0 rounded-full bg-white object-contain p-0.5 shadow-sm"
+              className="h-16 w-16 shrink-0 object-contain"
             />
             <span className="text-base font-bold text-white">Texas State University, USA</span>
           </div>
@@ -116,7 +116,7 @@ export default function LoginPage() {
               <img
                 src="/texas-state-logo.png"
                 alt="Texas State University"
-                className="h-7 w-7 shrink-0 rounded-full object-contain"
+                className="h-7 w-7 shrink-0 object-contain"
               />
               <span className="text-[11px] leading-tight text-[color:var(--secondary)]">
                 In collaboration with Texas State University, USA
