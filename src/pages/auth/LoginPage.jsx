@@ -57,43 +57,71 @@ export default function LoginPage() {
     <div className="flex min-h-screen bg-[color:var(--bg)]">
       {/* Brand panel */}
       <div
-        className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12"
+        className="hidden lg:flex lg:w-1/2 flex-col justify-between overflow-y-auto p-12"
         style={{ background: 'var(--accent)' }}
       >
         <div>
-          <p className="text-white/80 text-sm font-semibold tracking-widest uppercase">
-            Dr. D. Y. Patil Education and Research Foundation
+          {/* DYPERF logo (white card for contrast on the accent background) */}
+          <span className="inline-block rounded-xl bg-white p-2.5 shadow-sm">
+            <img src="/logo-new.jpg" alt="DYPERF logo" className="h-11 w-auto" />
+          </span>
+
+          <p className="mt-6 text-lg font-bold leading-snug text-white">
+            Dr. D. Y. Patil Education and Research Foundation, India
           </p>
-          <h1 className="mt-6 text-4xl font-bold text-white leading-tight">
-            Applied Business<br />Research Fellowship
+          <p className="mt-4 text-sm italic text-white/70">A Postdoctoral Program in</p>
+          <h1 className="mt-1 text-4xl font-bold leading-tight text-white">
+            Applied Business<br />Research
           </h1>
-          <p className="mt-4 text-white/70 text-lg">
-            Empowering doctoral researchers to bridge industry and academia.
+
+          {/* In collaboration with Texas State University */}
+          <p className="mt-6 text-sm font-semibold text-white/80">In Collaboration with</p>
+          <div className="mt-3 flex items-center gap-3">
+            <img
+              src="/texas-state-logo.png"
+              alt="Texas State University"
+              className="h-16 w-16 shrink-0 object-contain"
+            />
+            <span className="text-base font-bold text-white">Texas State University, USA</span>
+          </div>
+          <p className="mt-4 italic text-white/70">
+            Empowering researchers to bridge industry and academia.
           </p>
+
+          <ul className="mt-8 space-y-3">
+            {[
+              'End-to-end fellowship management',
+              'Multi-stage approval workflows',
+              'Research profile &amp; progress tracking',
+            ].map((f) => (
+              <li key={f} className="flex items-center gap-3 text-white/90 text-sm">
+                <span className="h-2 w-2 rounded-full bg-white/60 shrink-0" />
+                <span dangerouslySetInnerHTML={{ __html: f }} />
+              </li>
+            ))}
+          </ul>
         </div>
 
-        <ul className="space-y-4 mb-8">
-          {[
-            'End-to-end fellowship management',
-            'Multi-stage approval workflows',
-            'Research profile &amp; progress tracking',
-          ].map((f) => (
-            <li key={f} className="flex items-center gap-3 text-white/90 text-sm">
-              <span className="h-2 w-2 rounded-full bg-white/60 shrink-0" />
-              <span dangerouslySetInnerHTML={{ __html: f }} />
-            </li>
-          ))}
-        </ul>
-
-        <p className="text-white/40 text-xs">© {new Date().getFullYear()} DY Patil Vidyapeeth</p>
+        <p className="mt-8 text-white/40 text-xs">© {new Date().getFullYear()} DYPERF</p>
       </div>
 
       {/* Form panel */}
       <div className="flex flex-1 items-center justify-center p-6 lg:p-16">
         <div className="w-full max-w-md">
-          {/* Mobile logo */}
+          {/* Mobile brand header */}
           <div className="lg:hidden mb-8 text-center">
-            <p className="text-[color:var(--accent)] font-bold text-xl">DY Patil Fellowship ERP</p>
+            <img src="/logo-new.jpg" alt="DYPERF logo" className="mx-auto h-10 w-auto" />
+            <h1 className="mt-3 text-xl font-bold text-[color:var(--accent)]">Applied Business Research</h1>
+            <div className="mt-2 flex items-center justify-center gap-2">
+              <img
+                src="/texas-state-logo.png"
+                alt="Texas State University"
+                className="h-7 w-7 shrink-0 object-contain"
+              />
+              <span className="text-[11px] leading-tight text-[color:var(--secondary)]">
+                In collaboration with Texas State University, USA
+              </span>
+            </div>
           </div>
 
           <h2 className="text-3xl font-bold text-[color:var(--text)]">Welcome back</h2>
