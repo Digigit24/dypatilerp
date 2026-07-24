@@ -17,32 +17,20 @@
 
   var CONFIG = window.DLITT_CONFIG || {};
   var API_URL = CONFIG.apiUrl || '';
-  var ENABLED = CONFIG.applicationsEnabled === true;
 
-  var form, submitBtn, statusEl, noticeEl;
+  var form, submitBtn, statusEl;
   var submitting = false;
 
   document.addEventListener('DOMContentLoaded', function () {
     form = document.getElementById('dlitt-apply-form');
     submitBtn = document.getElementById('submit-application');
     statusEl = document.getElementById('form-status');
-    noticeEl = document.getElementById('preview-notice');
     if (!form) return;
 
-    if (!ENABLED) {
-      // PREVIEW MODE: show the notice, keep Submit disabled, never submit.
-      if (noticeEl) {
-        noticeEl.textContent =
-          'Online applications will open shortly. This form is currently available for preview only.';
-        noticeEl.hidden = false;
-      }
-      if (submitBtn) submitBtn.disabled = true;
-    } else if (submitBtn) {
-      submitBtn.disabled = false;
-    }
-
-    // The submit handler is attached in both modes but is inert in preview
-    // mode (belt-and-suspenders against an Enter-key submit).
+    // The form is a real application form: Submit is active on load and is
+    // disabled only while a request is in flight. Whether applications are
+    // actually open is decided by the backend (a disabled/missing target
+    // returns 503, handled below).
     form.addEventListener('submit', onSubmit);
   });
 
@@ -55,7 +43,7 @@
 
   function onSubmit(e) {
     e.preventDefault();
-    if (!ENABLED || submitting) return;      // preview mode never submits
+    if (submitting) return;                  // prevent double submission
 
     var errors = validate();
     if (errors.length) {
