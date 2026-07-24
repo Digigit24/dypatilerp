@@ -1,15 +1,25 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
 /**
  * Route-level tests for POST /api/public/applications. The service layer
- * (already covered by public-applications.service.test.js) and the email
- * notifier are mocked here so these tests exercise only: request validation,
- * course_id/batch_id stripping, HTTP status/response-shape mapping, and that
- * a success fires the same confirmation-email path the shared applicants
- * endpoint uses. No live Postgres/Neon connection is ever used.
+ * (covered by public-applications.service.test.js) and the email notifier are
+ * mocked, so these tests exercise only: request validation, HTTP status /
+ * response-shape mapping, generic-500 error handling, and that notification
+ * fires ONLY after a successful creation. No live Postgres/Neon connection is
+ * ever used and no real email is ever sent.
+ *
+ * The router's rate limiter is a module-level singleton whose in-memory
+ * counter would otherwise accumulate across every request in this file. We
+ * raise its per-window limit to a high value via env BEFORE the router module
+ * is evaluated (vi.hoisted runs before imports), so these functional tests are
+ * isolated from rate-limit exhaustion. (Rate-limit-specific behavior is a
+ * separate concern, not exercised here.)
  */
+vi.hoisted(() => {
+  process.env.PUBLIC_APPLICATIONS_RATE_LIMIT_MAX = '100000';
+});
 
 vi.mock('../src/modules/public-applications/public-applications.service.js', () => ({
   submitPublicApplication: vi.fn(),
@@ -30,14 +40,20 @@ const makeApp = () => {
   return app;
 };
 
+// Matches the strict, nested public schema (applicant.personal.*).
 const validBody = () => ({
   program: 'dlitt',
   applicant: {
-    first_name: 'Asha',
-    last_name: 'Rao',
-    email: 'asha.rao@example.com',
+    personal: {
+      first_name: 'Asha',
+      last_name: 'Rao',
+      email: 'asha.rao@example.com',
+    },
   },
 });
+
+// Flushes the fire-and-forget setImmediate notification scheduled by the controller.
+const flushMicrotasks = () => new Promise((resolve) => setImmediate(resolve));
 
 let app;
 beforeEach(() => {
@@ -60,24 +76,22 @@ describe('POST /api/public/applications — validation', () => {
 
   it('400s when the applicant email is missing', async () => {
     const body = validBody();
-    delete body.applicant.email;
+    delete body.applicant.personal.email;
     const res = await request(app).post('/api/public/applications').send(body);
     expect(res.status).toBe(400);
     expect(svc.submitPublicApplication).not.toHaveBeenCalled();
   });
 
-  it('strips an arbitrary course_id/batch_id sent on the applicant object before it reaches the service', async () => {
-    svc.submitPublicApplication.mockResolvedValue({ success: true, applicant: { id: 'app-1', email: 'asha.rao@example.com' } });
+  it('400-rejects (does not silently strip) an injected course_id/batch_id, and never calls the service', async () => {
+    svc.submitPublicApplication.mockResolvedValue({ success: true, applicant: { id: 'app-1' } });
     const body = validBody();
     body.applicant.course_id = 'attacker-course-id';
     body.applicant.batch_id = 'attacker-batch-id';
 
-    await request(app).post('/api/public/applications').send(body);
+    const res = await request(app).post('/api/public/applications').send(body);
 
-    expect(svc.submitPublicApplication).toHaveBeenCalledTimes(1);
-    const [, appliedApplicant] = svc.submitPublicApplication.mock.calls[0];
-    expect(appliedApplicant.course_id).toBeUndefined();
-    expect(appliedApplicant.batch_id).toBeUndefined();
+    expect(res.status).toBe(400);
+    expect(svc.submitPublicApplication).not.toHaveBeenCalled();
   });
 });
 
@@ -92,7 +106,7 @@ describe('POST /api/public/applications — outcomes', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data).toEqual(applicant);
 
-    await new Promise((resolve) => setImmediate(resolve)); // flush the fire-and-forget notify call
+    await flushMicrotasks(); // let the fire-and-forget notify call run
     expect(notifyApplicationSubmitted).toHaveBeenCalledWith(applicant);
   });
 
@@ -105,6 +119,7 @@ describe('POST /api/public/applications — outcomes', () => {
       success: false,
       message: 'Applications for this program are not currently being accepted.',
     });
+    await flushMicrotasks();
     expect(notifyApplicationSubmitted).not.toHaveBeenCalled();
   });
 
@@ -117,6 +132,57 @@ describe('POST /api/public/applications — outcomes', () => {
       success: false,
       message: 'An application with this email has already been submitted for this program.',
     });
+    await flushMicrotasks();
+    expect(notifyApplicationSubmitted).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/public/applications — generic 500 error handling', () => {
+  let errorSpy;
+  beforeEach(() => {
+    // Silence + capture the server-side error log so test output stays clean
+    // and we can assert the failure was logged via the existing logger.
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    errorSpy.mockRestore();
+  });
+
+  it('returns a generic 500 when the service throws an unexpected error', async () => {
+    svc.submitPublicApplication.mockRejectedValue(new Error('boom'));
+    const res = await request(app).post('/api/public/applications').send(validBody());
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'An unexpected error occurred. Please try again later.',
+    });
+  });
+
+  it('does not leak the internal error message, SQL, IDs, paths, or a stack trace', async () => {
+    const leaky = new Error('duplicate key value violates unique constraint "applicants_pkey" — SELECT * FROM applicants WHERE id=\'11111111-2222-4333-8444-555555555555\' at /home/app/src/db.js:42');
+    svc.submitPublicApplication.mockRejectedValue(leaky);
+
+    const res = await request(app).post('/api/public/applications').send(validBody());
+    const bodyText = JSON.stringify(res.body);
+
+    expect(res.status).toBe(500);
+    expect(bodyText).not.toContain('duplicate key');
+    expect(bodyText).not.toContain('SELECT');
+    expect(bodyText).not.toContain('applicants_pkey');
+    expect(bodyText).not.toContain('11111111-2222-4333-8444-555555555555');
+    expect(bodyText).not.toContain('/home/app');
+    expect(bodyText).not.toContain('stack');
+    expect(res.body).not.toHaveProperty('stack');
+    // The technical detail IS logged server-side via the existing logger.
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('does not fire the notification when applicant creation fails unexpectedly', async () => {
+    svc.submitPublicApplication.mockRejectedValue(new Error('db down'));
+    await request(app).post('/api/public/applications').send(validBody());
+
+    await flushMicrotasks();
     expect(notifyApplicationSubmitted).not.toHaveBeenCalled();
   });
 });
