@@ -44,7 +44,9 @@ export const resolveTrustedTarget = async (program) => {
 
 const normalizeEmail = (email) => (email || '').trim().toLowerCase();
 
-const extractEmail = (applicant) => applicant.email || applicant.personal?.email || '';
+// The strict schema always nests the email under `personal`; keep a defensive
+// fallback so a bad caller can never produce an undefined email lookup.
+const extractEmail = (applicant) => applicant?.personal?.email || applicant?.email || '';
 
 /** Public-submission duplicate rule: normalized email + course_id + batch_id. */
 export const findDuplicateApplication = async (email, course_id, batch_id) => {
@@ -69,10 +71,18 @@ export const submitPublicApplication = async (program, applicantPayload) => {
   const duplicate = await findDuplicateApplication(email, target.course_id, target.batch_id);
   if (duplicate) return { success: false, reason: 'duplicate' };
 
-  // Defensive overwrite — even though the schema never lets a client-supplied
-  // course_id/batch_id reach this far, the resolved trusted IDs always win.
+  // Hand ONLY the validated, generic envelope to the existing applicant
+  // service. course_id/batch_id come from trusted config — never the client.
+  // professional/consent are carried in application_data (the applicant
+  // service persists that JSONB blob as-is), so no schema migration is needed.
   const applicant = await createApplicant({
-    ...applicantPayload,
+    personal:           applicantPayload.personal,
+    academic:           applicantPayload.academic || {},
+    research_statement: applicantPayload.research_statement || null,
+    application_data: {
+      ...(applicantPayload.professional ? { professional: applicantPayload.professional } : {}),
+      ...(applicantPayload.consent !== undefined ? { consent: applicantPayload.consent } : {}),
+    },
     course_id: target.course_id,
     batch_id: target.batch_id,
   });
