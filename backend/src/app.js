@@ -18,6 +18,7 @@ import roleRoutes from './modules/roles/roles.routes.js';
 import courseRoutes from './modules/courses/courses.routes.js';
 import batchRoutes from './modules/batches/batches.routes.js';
 import applicantRoutes from './modules/applicants/applicants.routes.js';
+import publicApplicationRoutes from './modules/public-applications/public-applications.routes.js';
 import studentRoutes from './modules/students/students.routes.js';
 import testRoutes from './modules/tests/tests.routes.js';
 import submissionRoutes from './modules/submissions/submissions.routes.js';
@@ -51,6 +52,10 @@ const allowedOrigins = [
   'http://postdoc.dyperf.com',
   'https://www.postdoc.dyperf.com',
   'http://www.postdoc.dyperf.com',
+  'https://dlitt.dyperf.com',
+  'http://dlitt.dyperf.com',
+  'https://www.dlitt.dyperf.com',
+  'http://www.dlitt.dyperf.com',
   'https://dyperf.netlify.app',
   'http://localhost:5173',
   'http://localhost:3000',
@@ -113,6 +118,7 @@ app.use('/api/roles', roleRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/batches', batchRoutes);
 app.use('/api/applicants', applicantRoutes);
+app.use('/api/public/applications', publicApplicationRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/tests', testRoutes);
 app.use('/api/submissions', submissionRoutes);
