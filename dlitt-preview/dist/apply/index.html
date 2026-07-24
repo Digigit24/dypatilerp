@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Application Form Preview — DLitt Portal | DYPERF</title>
+    <meta
+      name="description"
+      content="Doctor of Letters (DLitt) application form of Dr. D. Y. Patil Education and Research Foundation in collaboration with Undiksha University, Indonesia."
+    />
+    <link rel="stylesheet" href="../assets/application.css" />
+    <script src="../assets/config.js" defer></script>
+    <script src="../assets/application.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <span class="logo-card"><img src="../assets/dyperf-logo.jpg" alt="DYPERF logo" /></span>
+        <div class="header-titles">
+          <span class="program">Doctor of Letters (DLitt)</span>
+          <span class="collab">
+            <img src="../assets/undiksha-logo.png" alt="Undiksha University logo" />
+            In collaboration with Undiksha University, Indonesia
+          </span>
+        </div>
+        <span class="header-spacer"></span>
+        <a class="back-link" href="/">← Back to portal</a>
+      </header>
+
+      <h1 class="page-title">DLitt Application Form</h1>
+      <p class="page-subtitle">
+        Application for the Doctor of Letters (DLitt) Program of Dr. D. Y. Patil Education and Research
+        Foundation, India, in collaboration with Undiksha University, Indonesia.
+      </p>
+
+      <!-- Preview notice (shown by application.js when applications are not yet enabled) -->
+      <div id="preview-notice" class="notice" hidden></div>
+
+      <form id="dlitt-apply-form" class="form-card" novalidate autocomplete="off">
+        <fieldset class="fieldset">
+          <legend>Personal Details</legend>
+          <div class="grid">
+            <div class="field">
+              <label for="first_name">First name<span class="req">*</span></label>
+              <input id="first_name" name="first_name" type="text" maxlength="100" required />
+            </div>
+            <div class="field">
+              <label for="last_name">Last name<span class="req">*</span></label>
+              <input id="last_name" name="last_name" type="text" maxlength="100" required />
+            </div>
+            <div class="field">
+              <label for="email">Email<span class="req">*</span></label>
+              <input id="email" name="email" type="email" maxlength="254" required />
+            </div>
+            <div class="field">
+              <label for="mobile">Mobile</label>
+              <input id="mobile" name="mobile" type="tel" maxlength="20" inputmode="tel" />
+              <span class="hint">Optional. Up to 20 characters.</span>
+            </div>
+            <div class="field full">
+              <label for="state_country">State / Country</label>
+              <input id="state_country" name="state_country" type="text" maxlength="120" />
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <legend>Academic Background</legend>
+          <div class="grid">
+            <div class="field">
+              <label for="highest_degree">Highest degree</label>
+              <input id="highest_degree" name="highest_degree" type="text" maxlength="100" />
+            </div>
+            <div class="field">
+              <label for="university">University</label>
+              <input id="university" name="university" type="text" maxlength="200" />
+            </div>
+            <div class="field full">
+              <label for="specialization">Specialization</label>
+              <input id="specialization" name="specialization" type="text" maxlength="200" />
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <legend>Professional Background</legend>
+          <div class="grid">
+            <div class="field">
+              <label for="current_position">Current position</label>
+              <input id="current_position" name="current_position" type="text" maxlength="200" />
+            </div>
+            <div class="field">
+              <label for="organization">Organization</label>
+              <input id="organization" name="organization" type="text" maxlength="200" />
+            </div>
+            <div class="field">
+              <label for="experience_years">Experience (years)</label>
+              <input id="experience_years" name="experience_years" type="number" min="0" max="80" step="1" />
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <legend>Research</legend>
+          <div class="grid">
+            <div class="field full">
+              <label for="research_statement">Research statement</label>
+              <textarea id="research_statement" name="research_statement" maxlength="5000"></textarea>
+              <span class="hint">Optional. Up to 5000 characters.</span>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="consent-row">
+          <input id="consent" name="consent" type="checkbox" required />
+          <label for="consent">
+            I declare that the information provided is true and correct, and I consent to Dr. D. Y. Patil
+            Education and Research Foundation processing this application.<span class="req">*</span>
+          </label>
+        </div>
+
+        <div id="form-status" class="form-status" hidden></div>
+
+        <button id="submit-application" class="btn-primary" type="submit">Submit Application</button>
+      </form>
+
+      <p class="app-footer">© 2026 DYPERF · Doctor of Letters (DLitt)</p>
+    </div>
+  </body>
+</html>
