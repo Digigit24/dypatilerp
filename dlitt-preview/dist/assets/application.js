@@ -147,18 +147,19 @@
           .then(function (data) { handleError(res.status, data); });
       })
       .catch(function () {
-        handleError(0, null); // network failure → generic message, no retry
+        handleError('network', null); // network failure → connection message, no retry
       });
   }
 
   function handleError(status, data) {
     var msg;
     switch (status) {
+      case 'network': msg = 'Could not connect. Please check your internet connection and try again.'; break;
       case 400: msg = safeValidationMessage(data); break;
-      case 409: msg = 'An application with this email has already been submitted for this program.'; break;
-      case 413: msg = 'The application data is too large. Please shorten the entered information.'; break;
+      case 409: msg = 'You have already submitted an application for this intake.'; break;
+      case 413: msg = 'The application information is too large. Please shorten the entered details and try again.'; break;
       case 429: msg = 'Too many application attempts. Please try again later.'; break;
-      case 503: msg = 'Applications for this program are not currently being accepted.'; break;
+      case 503: msg = 'Applications are opening shortly. Please try again later.'; break;
       default:  msg = 'An unexpected error occurred. Please try again later.';
     }
     setStatus(msg, 'error');
