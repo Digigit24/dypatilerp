@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
@@ -17,8 +17,17 @@ import request from 'supertest';
  * isolated from rate-limit exhaustion. (Rate-limit-specific behavior is a
  * separate concern, not exercised here.)
  */
-vi.hoisted(() => {
+// Capture the original value so it can be restored after this file's suite,
+// preventing the raised limit from leaking into any other test file.
+const { ORIGINAL_RL_MAX } = vi.hoisted(() => {
+  const ORIGINAL_RL_MAX = process.env.PUBLIC_APPLICATIONS_RATE_LIMIT_MAX;
   process.env.PUBLIC_APPLICATIONS_RATE_LIMIT_MAX = '100000';
+  return { ORIGINAL_RL_MAX };
+});
+
+afterAll(() => {
+  if (ORIGINAL_RL_MAX === undefined) delete process.env.PUBLIC_APPLICATIONS_RATE_LIMIT_MAX;
+  else process.env.PUBLIC_APPLICATIONS_RATE_LIMIT_MAX = ORIGINAL_RL_MAX;
 });
 
 vi.mock('../src/modules/public-applications/public-applications.service.js', () => ({
@@ -184,5 +193,82 @@ describe('POST /api/public/applications — generic 500 error handling', () => {
 
     await flushMicrotasks();
     expect(notifyApplicationSubmitted).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/public/applications — request-size guard', () => {
+  it('rejects an oversized payload with a safe 413 and never reaches the service or notifier', async () => {
+    // The route guard rejects bodies whose Content-Length exceeds ~16kb before
+    // validation/controller run. Pad well past that threshold.
+    const body = validBody();
+    body.applicant.research_statement = 'a'.repeat(20 * 1024);
+
+    const res = await request(app).post('/api/public/applications').send(body);
+
+    expect(res.status).toBe(413);
+    expect(res.body).toEqual({ success: false, message: 'Request payload too large.' });
+    // No internal detail beyond the generic message.
+    expect(JSON.stringify(res.body)).not.toContain('16');
+    expect(svc.submitPublicApplication).not.toHaveBeenCalled();
+    await flushMicrotasks();
+    expect(notifyApplicationSubmitted).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Genuine rate-limit test. The router's limiter is a module-level singleton, so
+ * to exercise a real 429 we re-import the router with a LOW configured limit via
+ * a fresh module registry (vi.resetModules). We import the freshly-mocked
+ * service/notifier from the SAME reset registry so the assertions observe the
+ * exact instances the fresh router calls. This is fully isolated from the
+ * functional tests above (which use the high-limit top-level router), so it
+ * cannot make them flaky. The raised env is restored in afterEach + afterAll.
+ */
+describe('POST /api/public/applications — rate limiting (isolated)', () => {
+  let limitedApp;
+  let svcFresh;
+  let notifyFresh;
+
+  beforeEach(async () => {
+    process.env.PUBLIC_APPLICATIONS_RATE_LIMIT_MAX = '2'; // allow 2, reject the 3rd
+    vi.resetModules();
+    svcFresh = await import('../src/modules/public-applications/public-applications.service.js');
+    notifyFresh = await import('../src/modules/notifications/notify.service.js');
+    const { default: freshRouter } = await import('../src/modules/public-applications/public-applications.routes.js');
+    svcFresh.submitPublicApplication.mockResolvedValue({
+      success: true,
+      applicant: { id: 'app-x', email: 'x@example.com' },
+    });
+    limitedApp = express();
+    limitedApp.use(express.json());
+    limitedApp.use('/api/public/applications', freshRouter);
+  });
+
+  afterEach(() => {
+    process.env.PUBLIC_APPLICATIONS_RATE_LIMIT_MAX = '100000'; // restore this file's high limit
+    vi.resetModules();
+  });
+
+  it('allows requests up to the limit, then rejects the next with a safe generic 429', async () => {
+    const r1 = await request(limitedApp).post('/api/public/applications').send(validBody());
+    const r2 = await request(limitedApp).post('/api/public/applications').send(validBody());
+    const r3 = await request(limitedApp).post('/api/public/applications').send(validBody());
+
+    // Requests below the limit succeed.
+    expect(r1.status).toBe(201);
+    expect(r2.status).toBe(201);
+
+    // The request above the limit is rejected with a safe, generic 429.
+    expect(r3.status).toBe(429);
+    expect(r3.body).toEqual({
+      success: false,
+      message: 'Too many application attempts. Please try again later.',
+    });
+
+    // The rejected request never reached the service (creation) …
+    expect(svcFresh.submitPublicApplication).toHaveBeenCalledTimes(2);
+    // … and never triggered a notification (only the 2 successes did).
+    await flushMicrotasks();
+    expect(notifyFresh.notifyApplicationSubmitted).toHaveBeenCalledTimes(2);
   });
 });
