@@ -117,118 +117,140 @@ function LogoSlot({ label, hint, value, onChange, previewBg }) {
   )
 }
 
-// ─── Public application targets (admin-only) ─────────────────────────────────
-// Manages the `public_application_targets` app_settings value: per program,
-// { enabled, course_id, batch_id }. The public form only sends a program key;
-// the backend resolves + verifies course/batch server-side (batch must belong
-// to course), so this UI mirrors that rule by filtering batches by course.
+// ─── Public applications: D.Litt target (admin-only) ─────────────────────────
+// Manages ONLY `public_application_targets.dlitt` inside the shared app_settings
+// value. The complete existing value (postdoc + any other/unknown program keys)
+// is loaded and preserved verbatim on save — only the `dlitt` entry is replaced.
+// The public form only sends a program key; the backend resolves + verifies the
+// course/batch server-side (batch must belong to course), so this UI mirrors
+// that rule by filtering batches by the chosen course.
 const TARGET_KEY = 'public_application_targets'
-const TARGET_PROGRAMS = [
-  { key: 'dlitt',   label: 'Doctor of Letters (DLitt)' },
-  { key: 'postdoc', label: 'Postdoctoral Program' },
-]
-const emptyTarget = () => ({ enabled: false, course_id: '', batch_id: '' })
+const DLITT_LABEL = 'Doctor of Letters (D.Litt)'
+const ENABLE_CONFIRM_MESSAGE =
+  'Enabling this setting will allow the public D.Litt application form to create real applicant ' +
+  'records under the selected course and batch. Confirm that the frontend form and email ' +
+  'notifications have been tested.'
 
 export function PublicApplicationsSection() {
   const addToast = useUiStore((s) => s.addToast)
   const [courses, setCourses] = useState([])
-  const [targets, setTargets] = useState(() =>
-    Object.fromEntries(TARGET_PROGRAMS.map((p) => [p.key, emptyTarget()])),
-  )
-  const [batchesByCourse, setBatchesByCourse] = useState({}) // course_id -> [batches]
+  // The FULL loaded value of public_application_targets — every top-level entry
+  // (postdoc, unknown/future keys) is preserved here and re-spread on save.
+  const [original, setOriginal] = useState({})
+  // The editable D.Litt entry. course_id/batch_id are '' in the UI (controlled
+  // <select> values); they are converted to null in the save payload.
+  const [dlitt, setDlitt] = useState({ enabled: false, course_id: '', batch_id: '' })
+  const [batches, setBatches] = useState([]) // batches for the currently selected course
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  // Set only when the current value could NOT be loaded (a real, non-404 error):
+  // saving is blocked so we never overwrite an unknown existing value.
+  const [loadError, setLoadError] = useState(false)
 
   const loadBatches = async (courseId) => {
-    if (!courseId) return
+    if (!courseId) { setBatches([]); return }
     try {
       const r = await getBatches({ course_id: courseId })
-      setBatchesByCourse((prev) => ({ ...prev, [courseId]: r.data || [] }))
+      setBatches(r.data || [])
     } catch {
-      setBatchesByCourse((prev) => ({ ...prev, [courseId]: [] }))
+      setBatches([])
     }
+  }
+
+  const applyLoadedValue = (value) => {
+    const val = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+    setOriginal(val)
+    const t = (val.dlitt && typeof val.dlitt === 'object') ? val.dlitt : {}
+    const next = {
+      enabled: t.enabled === true,
+      course_id: t.course_id || '',
+      batch_id: t.batch_id || '',
+    }
+    setDlitt(next)
+    if (next.course_id) loadBatches(next.course_id) // show the saved batch on first render
   }
 
   useEffect(() => {
     let alive = true
-    Promise.all([getCourses(), getSettings(TARGET_KEY).catch(() => ({ data: {} }))])
-      .then(([c, s]) => {
+    ;(async () => {
+      // Courses failing shouldn't crash the section — just leave the list empty.
+      try { const c = await getCourses(); if (alive) setCourses(c.data || []) }
+      catch { if (alive) setCourses([]) }
+
+      try {
+        const s = await getSettings(TARGET_KEY)
+        if (alive) applyLoadedValue(s.data)
+      } catch (e) {
         if (!alive) return
-        setCourses(c.data || [])
-        const saved = s.data && typeof s.data === 'object' ? s.data : {}
-        const next = Object.fromEntries(
-          TARGET_PROGRAMS.map((p) => {
-            const t = saved[p.key] || {}
-            return [p.key, {
-              enabled: t.enabled === true,
-              course_id: t.course_id || '',
-              batch_id: t.batch_id || '',
-            }]
-          }),
-        )
-        setTargets(next)
-        // Preload batches for any program that already has a course selected,
-        // so its saved batch shows correctly on first render.
-        ;[...new Set(TARGET_PROGRAMS.map((p) => next[p.key].course_id).filter(Boolean))]
-          .forEach(loadBatches)
-      })
-      .catch(() => { if (alive) addToast({ type: 'error', title: 'Failed to load public application settings.' }) })
-      .finally(() => { if (alive) setLoading(false) })
+        if (e.response?.status === 404) {
+          applyLoadedValue({})                // missing setting → treat as {}, safe to save later
+        } else {
+          // Real auth/server error: don't fabricate a value or crash the page —
+          // show the error and block saving so we can't overwrite unknown data.
+          setLoadError(true)
+          addToast({ type: 'error', title: 'Failed to load public application settings.', message: e.response?.data?.message })
+        }
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
     return () => { alive = false }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const setEnabled = (key, enabled) =>
-    setTargets((t) => ({ ...t, [key]: { ...t[key], enabled } }))
+  const onToggleEnabled = () => setDlitt((d) => ({ ...d, enabled: !d.enabled }))
 
-  const setCourse = (key, course_id) => {
-    // Changing course always clears the batch (it may not belong to the new course).
-    setTargets((t) => ({ ...t, [key]: { ...t[key], course_id, batch_id: '' } }))
-    if (course_id) loadBatches(course_id)
+  const onCourseChange = (course_id) => {
+    // Changing the course always clears the batch (it may belong to another course).
+    setDlitt((d) => ({ ...d, course_id, batch_id: '' }))
+    loadBatches(course_id)
   }
 
-  const setBatch = (key, batch_id) =>
-    setTargets((t) => ({ ...t, [key]: { ...t[key], batch_id } }))
+  const onBatchChange = (batch_id) => setDlitt((d) => ({ ...d, batch_id }))
 
-  // Mirror the backend rule: a program cannot be enabled without BOTH a course
-  // and a batch. (The batch dropdown is course-filtered, so it always belongs
-  // to the chosen course.)
-  const validate = () => {
-    for (const p of TARGET_PROGRAMS) {
-      const t = targets[p.key]
-      if (t.enabled && (!t.course_id || !t.batch_id)) {
-        return `${p.label}: choose a course and an intake batch before enabling public applications.`
-      }
-    }
-    return null
-  }
+  const incomplete = dlitt.enabled && (!dlitt.course_id || !dlitt.batch_id)
+  const wasEnabled = original?.dlitt?.enabled === true
 
   const save = async () => {
-    const err = validate()
-    if (err) { addToast({ type: 'error', title: 'Cannot save', message: err }); return }
+    if (saving) return // guard against double-submit
+    if (loadError) {
+      addToast({ type: 'error', title: 'Cannot save', message: 'Current settings could not be loaded. Reload the page and try again.' })
+      return
+    }
+    // Mirror the backend rule: enabled requires BOTH a course and a batch.
+    if (dlitt.enabled && (!dlitt.course_id || !dlitt.batch_id)) {
+      addToast({ type: 'error', title: 'Cannot save', message: `${DLITT_LABEL}: choose a course and an intake batch before enabling public applications.` })
+      return
+    }
+    // Confirm only when turning a currently-disabled target ON.
+    if (!wasEnabled && dlitt.enabled === true) {
+      // eslint-disable-next-line no-alert
+      if (!window.confirm(ENABLE_CONFIRM_MESSAGE)) return
+    }
+
     setSaving(true)
     try {
-      // Send exactly { enabled, course_id, batch_id } per program — nothing else.
-      const payload = Object.fromEntries(
-        TARGET_PROGRAMS.map((p) => {
-          const t = targets[p.key]
-          return [p.key, {
-            enabled: t.enabled === true,
-            course_id: t.course_id || '',
-            batch_id: t.batch_id || '',
-          }]
-        }),
-      )
-      await saveSettings(TARGET_KEY, payload)
-      addToast({ type: 'success', title: 'Public application settings saved.' })
+      // Preserve every existing entry; replace ONLY dlitt. Unset IDs → null.
+      const nextValue = {
+        ...original,
+        dlitt: {
+          enabled: dlitt.enabled === true,
+          course_id: dlitt.course_id || null,
+          batch_id: dlitt.batch_id || null,
+        },
+      }
+      await saveSettings(TARGET_KEY, nextValue)
+      addToast({ type: 'success', title: 'D.Litt public application settings saved.' })
     } catch (e) {
       addToast({ type: 'error', title: 'Failed to save', message: e.response?.data?.message })
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <Section
       title="Public Applications"
-      subtitle="Enable the public application form per program and map it to a course and intake batch. The public form only sends a program key; the course and batch are resolved and verified on the server."
+      subtitle="Enable the public D.Litt application form and map it to a course and intake batch. The public form only sends a program key; the course and batch are resolved and verified on the server."
       icon={Globe}
     >
       {loading ? (
@@ -237,71 +259,64 @@ export function PublicApplicationsSection() {
         </div>
       ) : (
         <div className="space-y-4">
-          {TARGET_PROGRAMS.map((p) => {
-            const t = targets[p.key]
-            const batches = batchesByCourse[t.course_id] || []
-            const incomplete = t.enabled && (!t.course_id || !t.batch_id)
-            return (
-              <div key={p.key} className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
-                <div className="safe-row">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[color:var(--text)]">{p.label}</p>
-                    <p className="text-xs text-[color:var(--secondary)]">Program key: <code className="font-mono">{p.key}</code></p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setEnabled(p.key, !t.enabled)}
-                    className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${t.enabled ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}
-                    aria-label={`Toggle public applications for ${p.label}`}
-                    aria-pressed={t.enabled}
-                  >
-                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${t.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                  </button>
-                </div>
-
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="text-sm font-semibold text-[color:var(--text)]">Course</label>
-                    <select
-                      className="input mt-1.5 w-full"
-                      value={t.course_id}
-                      onChange={(e) => setCourse(p.key, e.target.value)}
-                    >
-                      <option value="">Select a course…</option>
-                      {courses.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}{c.code ? ` (${c.code})` : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-semibold text-[color:var(--text)]">Intake batch</label>
-                    <select
-                      className="input mt-1.5 w-full"
-                      value={t.batch_id}
-                      onChange={(e) => setBatch(p.key, e.target.value)}
-                      disabled={!t.course_id}
-                    >
-                      <option value="">{t.course_id ? 'Select a batch…' : 'Select a course first'}</option>
-                      {batches.map((b) => (
-                        <option key={b.id} value={b.id}>{b.name}{b.code ? ` (${b.code})` : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {incomplete && (
-                  <p className="mt-3 text-xs font-semibold text-amber-600">
-                    Choose a course and intake batch to enable public applications for this program.
-                  </p>
-                )}
+          <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+            <div className="safe-row">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[color:var(--text)]">{DLITT_LABEL}</p>
+                <p className="text-xs text-[color:var(--secondary)]">Program key: <code className="font-mono">dlitt</code></p>
               </div>
-            )
-          })}
+              <button
+                type="button"
+                onClick={onToggleEnabled}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${dlitt.enabled ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}
+                aria-label={`Toggle public applications for ${DLITT_LABEL}`}
+                aria-pressed={dlitt.enabled}
+              >
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${dlitt.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="text-sm font-semibold text-[color:var(--text)]">Course</label>
+                <select
+                  className="input mt-1.5 w-full"
+                  value={dlitt.course_id}
+                  onChange={(e) => onCourseChange(e.target.value)}
+                >
+                  <option value="">Select a course…</option>
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}{c.code ? ` (${c.code})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-[color:var(--text)]">Intake batch</label>
+                <select
+                  className="input mt-1.5 w-full"
+                  value={dlitt.batch_id}
+                  onChange={(e) => onBatchChange(e.target.value)}
+                  disabled={!dlitt.course_id}
+                >
+                  <option value="">{dlitt.course_id ? 'Select a batch…' : 'Select a course first'}</option>
+                  {batches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}{b.code ? ` (${b.code})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {incomplete && (
+              <p className="mt-3 text-xs font-semibold text-amber-600">
+                Choose a course and intake batch to enable public applications for D.Litt.
+              </p>
+            )}
+          </div>
 
           <div className="flex justify-end">
-            <button className="btn-primary inline-flex items-center gap-2" onClick={save} disabled={saving}>
+            <button className="btn-primary inline-flex items-center gap-2" onClick={save} disabled={saving || loadError}>
               {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-              {saving ? 'Saving…' : 'Save Public Application Settings'}
+              {saving ? 'Saving…' : 'Save D.Litt Settings'}
             </button>
           </div>
         </div>
