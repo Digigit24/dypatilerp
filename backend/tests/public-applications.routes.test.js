@@ -272,3 +272,77 @@ describe('POST /api/public/applications — rate limiting (isolated)', () => {
     expect(notifyFresh.notifyApplicationSubmitted).toHaveBeenCalledTimes(2);
   });
 });
+
+// ── New academic fields: total_publications + prospective_topic ──────────────
+// These exercise the REAL strict schema (the router uses validate()); the
+// service is mocked, so we assert 400 (reject) vs the forwarded, parsed
+// applicant on accept.
+describe('POST /api/public/applications — new academic fields', () => {
+  const withAcademic = (academic) => {
+    const b = validBody();
+    b.applicant.academic = academic;
+    return b;
+  };
+
+  it('accepts total_publications + prospective_topic and forwards them (typed + trimmed) to the service', async () => {
+    svc.submitPublicApplication.mockResolvedValue({ success: true, applicant: { id: 'a1', email: 'x@example.com' } });
+    const res = await request(app).post('/api/public/applications')
+      .send(withAcademic({ total_publications: 42, prospective_topic: '  Advancing society  ' }));
+
+    expect(res.status).toBe(201);
+    const applicant = svc.submitPublicApplication.mock.calls[0][1];
+    expect(applicant.academic.total_publications).toBe(42);       // stays a number
+    expect(applicant.academic.prospective_topic).toBe('Advancing society'); // trimmed by zod
+  });
+
+  it('accepts total_publications = 0 (non-negative boundary)', async () => {
+    svc.submitPublicApplication.mockResolvedValue({ success: true, applicant: {} });
+    const res = await request(app).post('/api/public/applications').send(withAcademic({ total_publications: 0 }));
+    expect(res.status).toBe(201);
+  });
+
+  it('still accepts an old payload with no academic block (backward compatible)', async () => {
+    svc.submitPublicApplication.mockResolvedValue({ success: true, applicant: {} });
+    const res = await request(app).post('/api/public/applications').send(validBody());
+    expect(res.status).toBe(201);
+  });
+
+  it('still accepts an academic block without the new fields', async () => {
+    svc.submitPublicApplication.mockResolvedValue({ success: true, applicant: {} });
+    const res = await request(app).post('/api/public/applications')
+      .send(withAcademic({ university: 'Test University', phd_completion_year: 2019 }));
+    expect(res.status).toBe(201);
+  });
+
+  it.each([
+    ['negative', { total_publications: -1 }],
+    ['decimal', { total_publications: 2.5 }],
+    ['non-numeric string', { total_publications: '5' }],
+    ['over the maximum (1001)', { total_publications: 1001 }],
+  ])('400s on total_publications that is %s', async (_label, academic) => {
+    const res = await request(app).post('/api/public/applications').send(withAcademic(academic));
+    expect(res.status).toBe(400);
+    expect(svc.submitPublicApplication).not.toHaveBeenCalled();
+  });
+
+  it('400s on prospective_topic longer than 500 characters', async () => {
+    const res = await request(app).post('/api/public/applications')
+      .send(withAcademic({ prospective_topic: 'a'.repeat(501) }));
+    expect(res.status).toBe(400);
+    expect(svc.submitPublicApplication).not.toHaveBeenCalled();
+  });
+
+  it('accepts prospective_topic of exactly 500 characters (boundary)', async () => {
+    svc.submitPublicApplication.mockResolvedValue({ success: true, applicant: {} });
+    const res = await request(app).post('/api/public/applications')
+      .send(withAcademic({ prospective_topic: 'a'.repeat(500) }));
+    expect(res.status).toBe(201);
+  });
+
+  it('still rejects unknown academic keys (strict schema preserved)', async () => {
+    const res = await request(app).post('/api/public/applications')
+      .send(withAcademic({ total_publications: 3, not_a_real_field: 'x' }));
+    expect(res.status).toBe(400);
+    expect(svc.submitPublicApplication).not.toHaveBeenCalled();
+  });
+});
