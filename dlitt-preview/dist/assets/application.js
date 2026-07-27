@@ -68,6 +68,7 @@
 
   function validate() {
     var errs = [];
+    // ── Required fields ──────────────────────────────────────────────────────
     if (!val('first_name')) errs.push('First Name is required.');
     if (!val('last_name')) errs.push('Last Name is required.');
 
@@ -81,34 +82,27 @@
     else if (mobile.length > 20) errs.push('WhatsApp Number must be 20 characters or fewer.');
     else if (!/^[0-9+()\-\s]{4,20}$/.test(mobile)) errs.push('Enter a valid WhatsApp Number.');
 
-    var year = val('phd_completion_year');
-    if (!year) errs.push('Year of PhD Completion is required.');
-    else if (!isIntInRange(year, 1900, 2100)) errs.push('Enter a valid Year of PhD Completion (1900–2100).');
-
-    if (!val('phd_research_title')) errs.push('Title of PhD Research is required.');
-    if (!val('university')) errs.push('University of PhD is required.');
-
-    var totalPubs = val('total_publications');
-    if (!totalPubs) errs.push('Total Number of Publications is required.');
-    else if (!isIntInRange(totalPubs, 0, 1000)) errs.push('Total Number of Publications must be a whole number between 0 and 1000.');
-
-    if (!val('prospective_topic')) errs.push('Prospective Topic for D.Litt Research is required.');
-
-    var exp = val('experience_years');
-    if (!exp) errs.push('Total Experience in Years is required.');
-    else if (!isIntInRange(exp, 0, 80)) errs.push('Total Experience must be a whole number between 0 and 80.');
-
-    if (!val('research_statement')) errs.push('Please answer why you want to pursue D.Litt Research.');
-
     var consent = document.getElementById('consent');
     if (!consent || !consent.checked) errs.push('You must agree to the declaration to submit.');
+
+    // ── Optional fields — validated ONLY if filled ───────────────────────────
+    var year = val('phd_completion_year');
+    if (year && !isIntInRange(year, 1900, 2100)) errs.push('Enter a valid Year of PhD Completion (1900–2100).');
+
+    var totalPubs = val('total_publications');
+    if (totalPubs && !isIntInRange(totalPubs, 0, 1000)) errs.push('Total Number of Publications must be a whole number between 0 and 1000.');
+
+    var exp = val('experience_years');
+    if (exp && !isIntInRange(exp, 0, 80)) errs.push('Total Experience must be a whole number between 0 and 80.');
+
+    // Optional string fields have no minimum; their maxlength is enforced by the
+    // inputs (and, defensively, the backend). Nothing to validate here when blank.
 
     return errs;
   }
 
   function buildPayload() {
-    // Called only after validate() passes, so required values are present and
-    // numeric fields are valid integers.
+    // Called only after validate() passes.
     var personal = {
       first_name: val('first_name'),
       last_name: val('last_name'),
@@ -116,25 +110,25 @@
       mobile: val('mobile')
     };
 
-    var academic = {
-      phd_completion_year: Number(val('phd_completion_year')), // actual number
-      phd_research_title: val('phd_research_title'),
-      university: val('university'),
-      total_publications: Number(val('total_publications')),   // actual number, NOT scopus_publications
-      prospective_topic: val('prospective_topic')
-    };
+    // Academic: include only the optional keys that are filled; omit the whole
+    // object if none are. Numeric fields are sent as real numbers (never NaN /
+    // numeric strings — validate() guarantees they're valid integers if present).
+    var academic = {};
+    if (val('phd_completion_year')) academic.phd_completion_year = Number(val('phd_completion_year'));
+    if (val('phd_research_title')) academic.phd_research_title = val('phd_research_title');
+    if (val('university')) academic.university = val('university');
+    if (val('total_publications')) academic.total_publications = Number(val('total_publications')); // NOT scopus_publications
+    if (val('prospective_topic')) academic.prospective_topic = val('prospective_topic');
 
-    var professional = {
-      experience_years: Number(val('experience_years'))        // actual number
-    };
+    // Professional: only experience_years; omit the object if blank.
+    var professional = {};
+    if (val('experience_years')) professional.experience_years = Number(val('experience_years'));
 
-    var applicant = {
-      personal: personal,
-      academic: academic,
-      professional: professional,
-      research_statement: val('research_statement'),
-      consent: true
-    };
+    var applicant = { personal: personal };
+    if (Object.keys(academic).length) applicant.academic = academic;         // omit empty academic
+    if (Object.keys(professional).length) applicant.professional = professional; // omit empty professional
+    if (val('research_statement')) applicant.research_statement = val('research_statement'); // omit if blank
+    applicant.consent = true;
 
     return { program: 'dlitt', applicant: applicant };
   }
