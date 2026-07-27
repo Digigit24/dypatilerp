@@ -121,6 +121,40 @@ describe('submitPublicApplication', () => {
     expect(created.batch_id).toBe(BATCH_ID);
   });
 
+  it('forwards the complete academic object (incl. total_publications + prospective_topic) and research_statement to createApplicant (persistence path)', async () => {
+    mockSettings(settingsValue());
+    const academic = {
+      phd_completion_year: 2019,
+      phd_research_title: 'On distinguished research',
+      university: 'Test University',
+      total_publications: 42,
+      prospective_topic: 'Advancing society through research',
+    };
+    await submitPublicApplication('dlitt', {
+      personal: { first_name: 'Asha', last_name: 'Rao', email: 'asha.rao@example.com' },
+      academic,
+      research_statement: 'Because I want to advance the field.',
+    });
+
+    expect(createApplicant).toHaveBeenCalledTimes(1);
+    const created = createApplicant.mock.calls[0][0];
+    // The service hands the full academic object through unchanged — the new
+    // keys ride along and are persisted by createApplicant in
+    // application_data.academic (no allowlisting of academic here).
+    expect(created.academic).toEqual(academic);
+    expect(created.academic.total_publications).toBe(42);
+    expect(created.academic.prospective_topic).toBe('Advancing society through research');
+    // research_statement is still forwarded unchanged.
+    expect(created.research_statement).toBe('Because I want to advance the field.');
+  });
+
+  it('still forwards an empty academic object for older payloads without the new fields', async () => {
+    mockSettings(settingsValue());
+    await submitPublicApplication('dlitt', { ...applicantPayload }); // no academic
+    const created = createApplicant.mock.calls[0][0];
+    expect(created.academic).toEqual({}); // defaulted to {}, no new keys required
+  });
+
   it('rejects with reason "unavailable" and creates nothing when the target is disabled', async () => {
     mockSettings({ dlitt: { enabled: false, course_id: COURSE_ID, batch_id: BATCH_ID } });
     const result = await submitPublicApplication('dlitt', applicantPayload);

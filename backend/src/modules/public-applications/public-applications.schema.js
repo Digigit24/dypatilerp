@@ -68,6 +68,13 @@ const academicSchema = z
     phd_completion_year: z.number().int().min(1900).max(2100).optional(),
     graduation_year:     z.number().int().min(1900).max(2100).optional(),
     scopus_publications: z.number().int().min(0).max(1000).optional(),
+    // Count of ALL publications (distinct from scopus_publications, which is
+    // Scopus-indexed only). Optional for backward compatibility with older
+    // clients; bound mirrors scopus_publications.
+    total_publications:  z.number().int().min(0).max(1000).optional(),
+    // Prospective research topic — a research-title-like free-text field.
+    // Optional for backward compatibility; length mirrors research-text fields.
+    prospective_topic:   z.string().trim().max(500, 'This field is too long').optional(),
   })
   .strict();
 
