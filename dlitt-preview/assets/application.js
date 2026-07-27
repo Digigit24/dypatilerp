@@ -58,27 +58,47 @@
     return el ? String(el.value).trim() : '';
   }
 
+  // Whole-number-in-range check. Rejects empty, non-numeric, decimals,
+  // negatives, and out-of-range values (returns false → an error is pushed).
+  function isIntInRange(raw, min, max) {
+    if (!/^-?\d+$/.test(raw)) return false; // integers only — no decimals/strings/blank
+    var n = Number(raw);
+    return Number.isInteger(n) && n >= min && n <= max;
+  }
+
   function validate() {
     var errs = [];
-    if (!val('first_name')) errs.push('First name is required.');
-    if (!val('last_name')) errs.push('Last name is required.');
+    if (!val('first_name')) errs.push('First Name is required.');
+    if (!val('last_name')) errs.push('Last Name is required.');
 
     var email = val('email');
     if (!email) errs.push('Email is required.');
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.push('Enter a valid email address.');
 
+    // WhatsApp Number — required. Column is VARCHAR(20), so cap at 20.
     var mobile = val('mobile');
-    if (mobile) {
-      // Mobile is optional, but the applicants.phone column is VARCHAR(20),
-      // so anything longer must be rejected client-side.
-      if (mobile.length > 20) errs.push('Mobile number must be 20 characters or fewer.');
-      else if (!/^[0-9+()\-\s]{4,20}$/.test(mobile)) errs.push('Enter a valid mobile number.');
-    }
+    if (!mobile) errs.push('WhatsApp Number is required.');
+    else if (mobile.length > 20) errs.push('WhatsApp Number must be 20 characters or fewer.');
+    else if (!/^[0-9+()\-\s]{4,20}$/.test(mobile)) errs.push('Enter a valid WhatsApp Number.');
+
+    var year = val('phd_completion_year');
+    if (!year) errs.push('Year of PhD Completion is required.');
+    else if (!isIntInRange(year, 1900, 2100)) errs.push('Enter a valid Year of PhD Completion (1900–2100).');
+
+    if (!val('phd_research_title')) errs.push('Title of PhD Research is required.');
+    if (!val('university')) errs.push('University of PhD is required.');
+
+    var totalPubs = val('total_publications');
+    if (!totalPubs) errs.push('Total Number of Publications is required.');
+    else if (!isIntInRange(totalPubs, 0, 1000)) errs.push('Total Number of Publications must be a whole number between 0 and 1000.');
+
+    if (!val('prospective_topic')) errs.push('Prospective Topic for D.Litt Research is required.');
 
     var exp = val('experience_years');
-    if (exp && (!/^\d{1,3}$/.test(exp) || Number(exp) < 0 || Number(exp) > 80)) {
-      errs.push('Experience must be a whole number between 0 and 80.');
-    }
+    if (!exp) errs.push('Total Experience in Years is required.');
+    else if (!isIntInRange(exp, 0, 80)) errs.push('Total Experience must be a whole number between 0 and 80.');
+
+    if (!val('research_statement')) errs.push('Please answer why you want to pursue D.Litt Research.');
 
     var consent = document.getElementById('consent');
     if (!consent || !consent.checked) errs.push('You must agree to the declaration to submit.');
@@ -87,29 +107,34 @@
   }
 
   function buildPayload() {
+    // Called only after validate() passes, so required values are present and
+    // numeric fields are valid integers.
     var personal = {
       first_name: val('first_name'),
       last_name: val('last_name'),
-      email: val('email').toLowerCase()
+      email: val('email').toLowerCase(),
+      mobile: val('mobile')
     };
-    if (val('mobile')) personal.mobile = val('mobile');
-    if (val('state_country')) personal.state_country = val('state_country');
 
-    var academic = {};
-    if (val('highest_degree')) academic.highest_degree = val('highest_degree');
-    if (val('university')) academic.university = val('university');
-    if (val('specialization')) academic.specialization = val('specialization');
+    var academic = {
+      phd_completion_year: Number(val('phd_completion_year')), // actual number
+      phd_research_title: val('phd_research_title'),
+      university: val('university'),
+      total_publications: Number(val('total_publications')),   // actual number, NOT scopus_publications
+      prospective_topic: val('prospective_topic')
+    };
 
-    var professional = {};
-    if (val('current_position')) professional.current_position = val('current_position');
-    if (val('organization')) professional.organization = val('organization');
-    if (val('experience_years')) professional.experience_years = Number(val('experience_years'));
+    var professional = {
+      experience_years: Number(val('experience_years'))        // actual number
+    };
 
-    var applicant = { personal: personal };
-    if (Object.keys(academic).length) applicant.academic = academic;         // omit empty object
-    if (Object.keys(professional).length) applicant.professional = professional;
-    if (val('research_statement')) applicant.research_statement = val('research_statement');
-    applicant.consent = true;
+    var applicant = {
+      personal: personal,
+      academic: academic,
+      professional: professional,
+      research_statement: val('research_statement'),
+      consent: true
+    };
 
     return { program: 'dlitt', applicant: applicant };
   }

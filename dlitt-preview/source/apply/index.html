@@ -39,11 +39,11 @@
           <legend>Personal Details</legend>
           <div class="grid">
             <div class="field">
-              <label for="first_name">First name<span class="req">*</span></label>
+              <label for="first_name">First Name<span class="req">*</span></label>
               <input id="first_name" name="first_name" type="text" maxlength="100" required />
             </div>
             <div class="field">
-              <label for="last_name">Last name<span class="req">*</span></label>
+              <label for="last_name">Last Name<span class="req">*</span></label>
               <input id="last_name" name="last_name" type="text" maxlength="100" required />
             </div>
             <div class="field">
@@ -51,60 +51,57 @@
               <input id="email" name="email" type="email" maxlength="254" required />
             </div>
             <div class="field">
-              <label for="mobile">Mobile</label>
-              <input id="mobile" name="mobile" type="tel" maxlength="20" inputmode="tel" />
-              <span class="hint">Optional. Up to 20 characters.</span>
-            </div>
-            <div class="field full">
-              <label for="state_country">State / Country</label>
-              <input id="state_country" name="state_country" type="text" maxlength="120" />
+              <label for="mobile">WhatsApp Number<span class="req">*</span></label>
+              <input id="mobile" name="mobile" type="tel" maxlength="20" inputmode="tel" required />
+              <span class="hint">Up to 20 characters.</span>
             </div>
           </div>
         </fieldset>
 
         <fieldset class="fieldset">
-          <legend>Academic Background</legend>
+          <legend>Academic Details</legend>
           <div class="grid">
             <div class="field">
-              <label for="highest_degree">Highest degree</label>
-              <input id="highest_degree" name="highest_degree" type="text" maxlength="100" />
+              <label for="phd_completion_year">Year of PhD Completion<span class="req">*</span></label>
+              <input id="phd_completion_year" name="phd_completion_year" type="number" min="1900" max="2100" step="1" required />
             </div>
             <div class="field">
-              <label for="university">University</label>
-              <input id="university" name="university" type="text" maxlength="200" />
+              <label for="university">University of PhD<span class="req">*</span></label>
+              <input id="university" name="university" type="text" maxlength="200" required />
             </div>
             <div class="field full">
-              <label for="specialization">Specialization</label>
-              <input id="specialization" name="specialization" type="text" maxlength="200" />
+              <label for="phd_research_title">Title of PhD Research<span class="req">*</span></label>
+              <input id="phd_research_title" name="phd_research_title" type="text" maxlength="300" required />
+            </div>
+            <div class="field">
+              <label for="total_publications">Total Number of Publications<span class="req">*</span></label>
+              <input id="total_publications" name="total_publications" type="number" min="0" max="1000" step="1" required />
+            </div>
+            <div class="field full">
+              <label for="prospective_topic">Prospective Topic for D.Litt Research<span class="req">*</span></label>
+              <input id="prospective_topic" name="prospective_topic" type="text" maxlength="500" required />
+              <span class="hint">Up to 500 characters.</span>
             </div>
           </div>
         </fieldset>
 
         <fieldset class="fieldset">
-          <legend>Professional Background</legend>
+          <legend>Professional Details</legend>
           <div class="grid">
             <div class="field">
-              <label for="current_position">Current position</label>
-              <input id="current_position" name="current_position" type="text" maxlength="200" />
-            </div>
-            <div class="field">
-              <label for="organization">Organization</label>
-              <input id="organization" name="organization" type="text" maxlength="200" />
-            </div>
-            <div class="field">
-              <label for="experience_years">Experience (years)</label>
-              <input id="experience_years" name="experience_years" type="number" min="0" max="80" step="1" />
+              <label for="experience_years">Total Experience in Years<span class="req">*</span></label>
+              <input id="experience_years" name="experience_years" type="number" min="0" max="80" step="1" required />
             </div>
           </div>
         </fieldset>
 
         <fieldset class="fieldset">
-          <legend>Research</legend>
+          <legend>Research Motivation</legend>
           <div class="grid">
             <div class="field full">
-              <label for="research_statement">Research statement</label>
-              <textarea id="research_statement" name="research_statement" maxlength="5000"></textarea>
-              <span class="hint">Optional. Up to 5000 characters.</span>
+              <label for="research_statement">Why do you want to pursue D.Litt Research?<span class="req">*</span></label>
+              <textarea id="research_statement" name="research_statement" maxlength="5000" required></textarea>
+              <span class="hint">Up to 5000 characters.</span>
             </div>
           </div>
         </fieldset>
