@@ -20,8 +20,11 @@ export default function ApprovalsPage() {
   const [revisionTarget, setRevisionTarget] = useState(null)
   const [revisionComment, setRevisionComment] = useState('')
   const [suggestedTitle, setSuggestedTitle] = useState('')
+  const [approveTarget, setApproveTarget] = useState(null)
+  const [approveComment, setApproveComment] = useState('')
+  const [acting, setActing] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
-  useScrollLock(Boolean(revisionTarget || selected))
+  useScrollLock(Boolean(revisionTarget || selected || approveTarget))
   // getUsers requires users:read (guide/mentor lack it). Gate it so it never 403s.
   const canReadUsers = usePermStore((s) => s.can('users', 'read'))
 
@@ -59,16 +62,31 @@ export default function ApprovalsPage() {
 
   if (!rows) return <SkeletonCard rows={8} />
 
-  const approve = async (r) => {
-    const res = await reviewSubmission(r.submission_id, {
-      stage: r.stage,
-      stage_order: r.stage_order,
-      approver_id: r.approver_id,
-      status: 'approved',
-      comments: 'Approved for the next stage.',
-    })
-    setRows((xs) => xs.map((x) => (x.id === r.id ? { ...x, ...res.data } : x)))
-    addToast({ type: 'success', title: 'Submission approved' })
+  // Approve opens a small feedback modal first, so the admin can add institute
+  // feedback (optional) that is sent as `comments` on the real action endpoint.
+  const openApprove = (row) => {
+    setApproveTarget(row)
+    setApproveComment('')
+  }
+
+  const confirmApprove = async () => {
+    if (!approveTarget) return
+    setActing(true)
+    try {
+      // Real endpoint: POST /approvals/:approvalId/action { action, comments }
+      const res = await reviewSubmission(approveTarget.id, {
+        action: 'approve',
+        ...(approveComment.trim() ? { comments: approveComment.trim() } : {}),
+      })
+      setRows((xs) => xs.map((x) => (x.id === approveTarget.id ? { ...x, ...res.data } : x)))
+      addToast({ type: 'success', title: 'Approved' + (approveComment.trim() ? ' with feedback' : '') })
+      setApproveTarget(null)
+      setSelected(null)
+    } catch (err) {
+      addToast({ type: 'error', title: 'Could not approve', message: err.response?.data?.message || err.message })
+    } finally {
+      setActing(false)
+    }
   }
 
   const openRevision = (row) => {
@@ -82,17 +100,22 @@ export default function ApprovalsPage() {
       addToast({ type: 'warning', title: 'Add a revision comment first' })
       return
     }
-    const res = await reviewSubmission(revisionTarget.submission_id, {
-      stage: revisionTarget.stage,
-      stage_order: revisionTarget.stage_order,
-      approver_id: revisionTarget.approver_id,
-      status: 'needs_revision',
-      comments: revisionComment.trim(),
-      suggested_title: suggestedTitle.trim() || null,
-    })
-    setRows((xs) => xs.map((x) => (x.id === revisionTarget.id ? { ...x, ...res.data } : x)))
-    setRevisionTarget(null)
-    addToast({ type: 'success', title: 'Revision request sent to student' })
+    setActing(true)
+    try {
+      const res = await reviewSubmission(revisionTarget.id, {
+        action: 'request_revision',
+        comments: revisionComment.trim(),
+        suggested_title: suggestedTitle.trim() || null,
+      })
+      setRows((xs) => xs.map((x) => (x.id === revisionTarget.id ? { ...x, ...res.data } : x)))
+      setRevisionTarget(null)
+      setSelected(null)
+      addToast({ type: 'success', title: 'Revision request sent to scholar' })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Could not send revision', message: err.response?.data?.message || err.message })
+    } finally {
+      setActing(false)
+    }
   }
 
   return (
@@ -127,7 +150,7 @@ export default function ApprovalsPage() {
                 <td>
                   <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                     <button className="mobile-compact-button inline-flex items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 py-2 text-xs font-semibold text-[color:var(--accent)]" onClick={() => setSelected(r)}><Eye size={15} /> Detail</button>
-                    <button className="mobile-compact-button inline-flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700" onClick={() => approve(r)}><CheckCircle2 size={15} /> Approve</button>
+                    <button className="mobile-compact-button inline-flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700" onClick={() => openApprove(r)}><CheckCircle2 size={15} /> Approve</button>
                     <button className="mobile-compact-button inline-flex items-center gap-2 rounded-2xl bg-orange-50 px-4 py-2 text-xs font-semibold text-orange-700" onClick={() => openRevision(r)}><RotateCcw size={15} /> Needs Revision</button>
                   </div>
                 </td>
@@ -161,7 +184,7 @@ export default function ApprovalsPage() {
                   </div>
                 </div>
                 <div className="safe-actions">
-                  <button className="mobile-compact-button inline-flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700" onClick={() => approve(selected)}><CheckCircle2 size={16} /> Approve</button>
+                  <button className="mobile-compact-button inline-flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700" onClick={() => openApprove(selected)}><CheckCircle2 size={16} /> Approve</button>
                   <button className="mobile-compact-button inline-flex items-center gap-2 rounded-2xl bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700" onClick={() => openRevision(selected)}><RotateCcw size={16} /> Needs Revision</button>
                 </div>
               </div>
@@ -214,7 +237,37 @@ export default function ApprovalsPage() {
             </div>
             <div className="safe-actions mt-5 justify-end">
               <button className="h-11 rounded-[14px] bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setRevisionTarget(null)}>Cancel</button>
-              <button className="btn-primary" onClick={submitRevision}>Submit Revision</button>
+              <button className="btn-primary disabled:opacity-50" onClick={submitRevision} disabled={acting}>{acting ? 'Sending…' : 'Submit Revision'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {approveTarget && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4 backdrop-blur-sm" onClick={() => setApproveTarget(null)}>
+          <div className="card w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="safe-row items-start">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Approve submission</p>
+                <h2 className="mt-2 line-clamp-2 text-xl font-semibold text-[color:var(--text)]">{approveTarget.submission?.title}</h2>
+                <p className="mt-1 text-sm text-[color:var(--secondary)]">{studentName(approveTarget.submission?.student_id)} · {approveTarget.stage?.replaceAll('_', ' ')}</p>
+              </div>
+              <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setApproveTarget(null)}><XCircle size={18} /></button>
+            </div>
+            <label className="mt-5 block">
+              <span className="text-sm font-semibold text-[color:var(--text)]">Feedback to scholar</span>
+              <textarea
+                className="textarea mt-2 h-32 w-full"
+                value={approveComment}
+                onChange={(e) => setApproveComment(e.target.value)}
+                placeholder="Optional — add feedback the scholar will see with the approval."
+              />
+            </label>
+            <div className="safe-actions mt-5 justify-end">
+              <button className="h-11 rounded-[14px] bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setApproveTarget(null)}>Cancel</button>
+              <button className="btn-primary inline-flex items-center gap-2 disabled:opacity-50" onClick={confirmApprove} disabled={acting}>
+                <CheckCircle2 size={16} /> {acting ? 'Approving…' : 'Approve'}
+              </button>
             </div>
           </div>
         </div>
