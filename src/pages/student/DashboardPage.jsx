@@ -1,4 +1,4 @@
-import { Bell, Calendar, Clock } from 'lucide-react'
+import { Bell, Calendar, Clock, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import http from '../../api/http.js'
@@ -22,8 +22,13 @@ export default function DashboardPage() {
     const load = async () => {
       try {
         if (!USE_MOCK && currentUser?.id) {
-          const { data: res } = await http.get('/dashboard/student')
-          setData({ dashboard: res.data, isMock: false })
+          // Also fetch the scholar's real submissions (with titles + statuses) —
+          // the dashboard endpoint only returns a count-by-status aggregate.
+          const [{ data: res }, subs] = await Promise.all([
+            http.get('/dashboard/student'),
+            getSubmissionsByStudent(currentUser.id),
+          ])
+          setData({ dashboard: res.data, submissionsList: subs.data ?? [], isMock: false })
           return
         }
         const [student, submissions, notifications] = await Promise.all([
@@ -46,13 +51,19 @@ export default function DashboardPage() {
   if (!data.isMock && data.dashboard) {
     const d = data.dashboard
     const completion = d.progress?.completion_percentage ?? 0
-    const submissions = d.submissions ?? []
+    const submissions = data.submissionsList ?? []
     const notifications = d.unread_notifications ?? 0
+
+    // "Pending" = awaiting review (submitted or under_review). needs_revision is
+    // the scholar's own to-do and is surfaced separately, never counted as pending.
+    const pending = submissions.filter((s) => s.status === 'submitted' || s.status === 'under_review').length
+    const needsRevision = submissions.filter((s) => s.status === 'needs_revision').length
 
     const stats = [
       [d.enrollment?.batch_name ?? 'Fellowship', <Calendar size={20} />],
       [`Overall Progress: ${completion}%`, <ProgressRing value={completion} />],
-      [`${d.submissions?.filter((s) => s.status === 'pending').length ?? 0} Pending Approvals`, <Clock size={20} />],
+      [`${pending} Pending Approvals`, <Clock size={20} />],
+      [`${needsRevision} Needs your revision`, <RotateCcw size={20} />],
       [`${notifications} Unread Notifications`, <Bell size={20} />],
     ]
 
@@ -88,7 +99,7 @@ export default function DashboardPage() {
             <div className="card p-6">
               <h2 className="text-xl font-semibold text-[color:var(--text)]">Quick Actions</h2>
               <div className="safe-actions mt-4">
-                <Link className="btn-primary inline-flex items-center" to="/student/submit">Submit Title</Link>
+                <Link className="btn-primary inline-flex items-center" to="/student/submit">Submit Progress Report</Link>
                 <Link className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 font-semibold text-[color:var(--secondary)]" to="/student/progress">Progress Reports</Link>
                 <Link className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 font-semibold text-[color:var(--secondary)]" to="/student/profile/research">Research Profile</Link>
               </div>
@@ -158,7 +169,7 @@ export default function DashboardPage() {
           <div className="card p-6">
             <h2 className="text-xl font-semibold text-[color:var(--text)]">Quick Actions</h2>
             <div className="safe-actions mt-4">
-              <Link className="btn-primary inline-flex items-center" to="/student/submit">Submit Title</Link>
+              <Link className="btn-primary inline-flex items-center" to="/student/submit">Submit Progress Report</Link>
               <Link className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 font-semibold text-[color:var(--secondary)]" to="/student/progress">Progress Reports</Link>
               <Link className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 font-semibold text-[color:var(--secondary)]" to="/student/profile/research">Research Profile</Link>
             </div>
