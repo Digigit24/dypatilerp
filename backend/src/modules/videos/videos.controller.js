@@ -7,7 +7,7 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { query } from '../../config/database.js';
 import { IncomingForm } from 'formidable';
-import { unlink } from 'fs/promises';
+import { unlink, open } from 'fs/promises';
 import { existsSync, createReadStream } from 'fs';
 
 // ─── Public-ish video listing ─────────────────────────────────────────────────
@@ -368,117 +368,134 @@ const SUBMISSION_MIME = {
 const SUBMISSION_EXTS = ['pdf', 'ppt', 'pptx'];
 const MAX_SUBMISSION_BYTES = 25 * 1024 * 1024; // 25 MB
 
+// Content-signature families keyed to the allowed extensions. Real detection
+// (magic bytes) on top of extension + declared MIME so a renamed file is caught.
+const EXT_FAMILY = { pdf: 'pdf', pptx: 'zip', ppt: 'ole' };
+const sniffFamily = (buf) => {
+  if (buf.length >= 5 && buf.slice(0, 5).toString('latin1') === '%PDF-') return 'pdf';
+  if (buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 0x03 && buf[3] === 0x04) return 'zip'; // pptx (OOXML/zip)
+  if (buf.length >= 4 && buf[0] === 0xd0 && buf[1] === 0xcf && buf[2] === 0x11 && buf[3] === 0xe0) return 'ole'; // ppt (legacy OLE)
+  return null;
+};
+
 /**
- * Submission upload URL — creates a PRIVATE, PENDING, submission-bound media row
- * and returns a presigned PUT URL. Authorized for the owning scholar or an admin.
- * No assignment is required (progress reports are standalone). The returned
- * media_id IS the real videos.id, so /videos/:id/session can resolve it later.
+ * Server-proxied submission attachment upload (no browser→Zata hop, so no extra
+ * CORS). The browser POSTs multipart/form-data (field "file") to OUR API; the
+ * backend streams it to Zata server-side, then records a private, submission-bound,
+ * 'ready' media row and appends a server-generated descriptor to file_urls.
+ *
+ * Route: POST /submissions/:submissionId/attachment
+ * Authorized for the owning scholar, or an admin (on-behalf). progress_report only.
  */
-export const requestSubmissionUploadUrl = asyncHandler(async (req, res) => {
+export const uploadSubmissionAttachment = asyncHandler(async (req, res) => {
   if (!s3.isConfigured()) {
     return res.status(503).json({ success: false, message: 'Storage not configured' });
   }
-  const { submission_id, filename, content_type } = req.body;
-  if (!submission_id || !filename) {
-    return badRequest(res, 'submission_id and filename are required');
-  }
 
-  // Load the draft + its course; authorize owner-or-admin.
+  // 1. Load + authorize BEFORE reading the body.
+  const submissionId = req.params.submissionId;
   const { rows: [sub] } = await query(
-    `SELECT s.id, s.student_user_id, s.status, s.batch_id, b.course_id, c.code AS course_code
+    `SELECT s.id, s.student_user_id, s.status, s.submission_type, b.course_id, c.code AS course_code
      FROM submissions s
      JOIN batches b ON b.id = s.batch_id
      JOIN courses c ON c.id = b.course_id
      WHERE s.id = $1`,
-    [submission_id]
+    [submissionId]
   );
   if (!sub) return notFound(res, 'Submission not found');
   const isAdmin = req.user.roles?.includes('admin');
   if (sub.student_user_id !== req.user.id && !isAdmin) return forbidden(res);
+  if (sub.submission_type !== 'progress_report') return badRequest(res, 'Attachments are only supported for progress reports');
   if (sub.status !== 'draft') return badRequest(res, 'Files can only be attached to a draft submission');
 
-  // Validate extension AND declared MIME against the allowlist {pdf, ppt, pptx}.
-  const ext = (filename.split('.').pop() || '').toLowerCase();
-  const mime = content_type || '';
-  if (!SUBMISSION_EXTS.includes(ext) || !SUBMISSION_MIME[mime]) {
-    return badRequest(res, 'Only PDF, PPT and PPTX files are allowed');
-  }
-
-  const folderId = await svc.getOrCreateDefaultFolder(sub.course_id, 'Submissions', req.user.id);
-  const objectKey = s3.buildVideoKey(sub.course_code, crypto.randomUUID(), filename);
-
-  const media = await svc.createVideo({
-    course_id: sub.course_id,
-    folder_id: folderId,
-    submission_id: sub.id,
-    upload_status: 'pending',
-    title: filename.replace(/\.[^.]+$/, ''),
-    description: `Progress-report file for submission ${sub.id}`,
-    object_key: objectKey,
-    file_size: 0,
-    media_type: 'document',
-    mime_type: mime,
-    is_published: false,
-    visibility: 'private', // only owner + admin + assigned reviewer may view
-    sort_order: 0,
-  }, req.user.id);
-
-  const uploadUrl = await s3.presignedUploadUrl(objectKey, 3600, mime);
-  ok(res, { upload_url: uploadUrl, object_key: objectKey, media_id: media.id });
-});
-
-/**
- * Finalize a submission upload: HEAD-verify size + content-type, then attach the
- * descriptor to the submission's file_urls (server-side). On verification failure
- * the object and the pending media row are deleted so nothing dangles.
- */
-export const finalizeSubmissionUpload = asyncHandler(async (req, res) => {
-  if (!s3.isConfigured()) {
-    return res.status(503).json({ success: false, message: 'Storage not configured' });
-  }
-  const { submission_id, media_id } = req.body;
-  if (!submission_id || !media_id) return badRequest(res, 'submission_id and media_id are required');
-
-  const { rows: [sub] } = await query(
-    'SELECT id, student_user_id, status FROM submissions WHERE id=$1', [submission_id]
-  );
-  if (!sub) return notFound(res, 'Submission not found');
-  const isAdmin = req.user.roles?.includes('admin');
-  if (sub.student_user_id !== req.user.id && !isAdmin) return forbidden(res);
-
-  const media = await svc.getVideoById(media_id);
-  if (!media || media.submission_id !== submission_id) {
-    return notFound(res, 'Attachment not found for this submission');
-  }
-  if (media.upload_status !== 'pending') return badRequest(res, 'Attachment already finalized');
-
-  // HEAD-verify the uploaded object.
-  let head;
+  // 2. Stream-parse the multipart body to a temp file (never buffered in memory),
+  //    with a hard 25 MB cap enforced by formidable.
+  const form = new IncomingForm({ maxFileSize: MAX_SUBMISSION_BYTES, maxFiles: 1, keepExtensions: true });
+  let files;
   try {
-    head = await s3.headObject(media.object_key);
-  } catch {
-    return badRequest(res, 'Uploaded file not found in storage');
-  }
-  const size = Number(head.ContentLength || 0);
-  const storedType = head.ContentType || media.mime_type || '';
-  const extLower = (media.object_key.split('.').pop() || '').toLowerCase();
-  const typeOk = !!SUBMISSION_MIME[storedType] || SUBMISSION_EXTS.includes(extLower);
-
-  if (size <= 0 || size > MAX_SUBMISSION_BYTES || !typeOk) {
-    try { await s3.deleteObject(media.object_key); } catch { /* ignore */ }
-    await svc.deleteVideo(media.id).catch(() => {});
-    return badRequest(res, size > MAX_SUBMISSION_BYTES ? 'File exceeds the 25MB limit' : 'File type not allowed');
+    ({ files } = await new Promise((resolve, reject) =>
+      form.parse(req, (err, f, fi) => (err ? reject(err) : resolve({ fields: f, files: fi })))
+    ));
+  } catch (err) {
+    const tooBig = /maxFileSize|maxTotalFileSize|biggerThan|options\.maxFileSize/i.test(err?.message || '') || err?.code === 1009;
+    return badRequest(res, tooBig ? 'File exceeds the 25MB limit' : 'Upload failed — please try again');
   }
 
-  await svc.updateVideo(media.id, { upload_status: 'ready', file_size: size });
+  const file = Array.isArray(files.file) ? files.file[0] : files.file;
+  if (!file) return badRequest(res, 'No file uploaded (field name must be "file")');
 
-  const submission = await subSvc.appendFileDescriptor(submission_id, {
-    name: media.title || 'attachment',
-    media_id: media.id,
-    type: SUBMISSION_MIME[storedType] || extLower,
-    size,
-  });
-  ok(res, { submission, media_id: media.id }, 'Attachment finalized');
+  const cleanup = async () => { if (file?.filepath) await unlink(file.filepath).catch(() => {}); };
+
+  try {
+    const origName = file.originalFilename || 'upload';
+    const ext = (origName.split('.').pop() || '').toLowerCase();
+    const declaredMime = file.mimetype || '';
+    const size = file.size || 0;
+
+    // 3. Validate size + extension + declared MIME + real content signature.
+    if (size <= 0 || size > MAX_SUBMISSION_BYTES) {
+      await cleanup();
+      return badRequest(res, 'File exceeds the 25MB limit');
+    }
+    if (!SUBMISSION_EXTS.includes(ext) || !SUBMISSION_MIME[declaredMime]) {
+      await cleanup();
+      return badRequest(res, 'Only PDF, PPT and PPTX files are allowed');
+    }
+    const fh = await open(file.filepath, 'r');
+    const head = Buffer.alloc(8);
+    try { await fh.read(head, 0, 8, 0); } finally { await fh.close(); }
+    if (sniffFamily(head) !== EXT_FAMILY[ext]) {
+      await cleanup();
+      return badRequest(res, 'File content does not match its type');
+    }
+
+    // 4. Upload to Zata server-side. If this throws → nothing is written to the DB.
+    const objectKey = s3.buildVideoKey(sub.course_code, crypto.randomUUID(), origName);
+    await s3.uploadFile(objectKey, file.filepath, declaredMime, size);
+
+    // 5. Create the media row. On failure, delete the just-uploaded object.
+    let media;
+    try {
+      const folderId = await svc.getOrCreateDefaultFolder(sub.course_id, 'Submissions', req.user.id);
+      media = await svc.createVideo({
+        course_id: sub.course_id,
+        folder_id: folderId,
+        submission_id: sub.id,
+        upload_status: 'ready',
+        title: origName.replace(/\.[^.]+$/, ''),
+        description: `Progress-report file for submission ${sub.id}`,
+        object_key: objectKey,
+        file_size: size,
+        media_type: 'document',
+        mime_type: declaredMime,
+        is_published: false,
+        visibility: 'private',
+        sort_order: 0,
+      }, req.user.id);
+    } catch (dbErr) {
+      try { await s3.deleteObject(objectKey); } catch { /* ignore */ }
+      throw dbErr;
+    }
+
+    // 6. Append the server-generated descriptor. On failure, delete object + row.
+    let submission;
+    try {
+      submission = await subSvc.appendFileDescriptor(sub.id, {
+        name: media.title || 'attachment',
+        media_id: media.id,
+        type: SUBMISSION_MIME[declaredMime],
+        size,
+      });
+    } catch (attErr) {
+      try { await s3.deleteObject(objectKey); } catch { /* ignore */ }
+      await svc.deleteVideo(media.id).catch(() => {});
+      throw attErr;
+    }
+
+    ok(res, { submission, media_id: media.id }, 'Attachment uploaded');
+  } finally {
+    await cleanup();
+  }
 });
 
 export const initCourseFolder = asyncHandler(async (req, res) => {

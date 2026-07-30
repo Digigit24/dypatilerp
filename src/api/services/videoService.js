@@ -128,28 +128,7 @@ export const getVideoAnalytics = async (videoId) => {
   return ok(res.data)
 }
 
-// ─── Student submission upload ────────────────────────────────────────────────
-
-/**
- * Request a presigned Zata PUT URL for a student file submission.
- * The file is stored in the course's "Assignments" media folder, linked to the assignment.
- * Returns { upload_url, object_key, media_id }.
- */
-export const requestSubmissionUploadUrl = async (payload) => {
-  if (USE_MOCK) return ok({ upload_url: '#', object_key: `mock/${Date.now()}/file`, media_id: `mid_${Date.now()}` })
-  const { data: res } = await http.post('/videos/upload/submission-url', payload)
-  return ok(res.data)
-}
-
-/**
- * Finalize a submission upload: the backend HEAD-verifies the stored object and
- * appends the descriptor to the submission's file_urls. Payload: { submission_id, media_id }.
- */
-export const finalizeSubmissionUpload = async (payload) => {
-  if (USE_MOCK) return ok({ media_id: payload.media_id })
-  const { data: res } = await http.post('/videos/upload/submission-finalize', payload)
-  return ok(res.data)
-}
+// ─── Student submission download ──────────────────────────────────────────────
 
 /**
  * Resolve an authorized, time-limited download URL for a stored submission file

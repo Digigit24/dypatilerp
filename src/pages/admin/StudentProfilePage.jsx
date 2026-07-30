@@ -3,24 +3,12 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sendCredentials } from '../../api/services/userService.js'
 import { getStudentById } from '../../api/services/studentService.js'
-import { createSubmissionOnBehalf, submitForReviewOnBehalf } from '../../api/services/submissionService.js'
-import { requestSubmissionUploadUrl, finalizeSubmissionUpload } from '../../api/services/videoService.js'
+import { createSubmissionOnBehalf, submitForReviewOnBehalf, uploadSubmissionAttachment } from '../../api/services/submissionService.js'
 import StudentProfileView from '../../components/shared/StudentProfileView.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import { useLabels } from '../../store/labelStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { usePermStore } from '../../store/permStore.js'
-
-const MIME_BY_EXT = {
-  pdf:  'application/pdf',
-  ppt:  'application/vnd.ms-powerpoint',
-  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-}
-const guessMime = (f) => {
-  const allowed = Object.values(MIME_BY_EXT)
-  if (f.type && allowed.includes(f.type)) return f.type
-  return MIME_BY_EXT[(f.name.split('.').pop() || '').toLowerCase()] || f.type || ''
-}
 
 export default function StudentProfilePage() {
   const { id } = useParams()
@@ -116,12 +104,8 @@ function UploadProgressReportModal({ studentUserId, onClose }) {
       const submissionId = created.data?.id
       if (!submissionId) throw new Error('Could not create the submission')
 
-      // 2. Presign → PUT → finalize (server HEAD-verifies + attaches).
-      const mime = guessMime(file)
-      const presign = await requestSubmissionUploadUrl({ submission_id: submissionId, filename: file.name, content_type: mime })
-      const putRes = await fetch(presign.data.upload_url, { method: 'PUT', headers: { 'Content-Type': mime }, body: file })
-      if (!putRes.ok) throw new Error('File upload failed — please try again')
-      await finalizeSubmissionUpload({ submission_id: submissionId, media_id: presign.data.media_id })
+      // 2. Upload the file through our own API (backend streams it to storage).
+      await uploadSubmissionAttachment(submissionId, file)
 
       // 3. Submit for review on behalf of the scholar.
       await submitForReviewOnBehalf(submissionId)

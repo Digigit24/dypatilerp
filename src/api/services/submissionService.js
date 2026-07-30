@@ -49,4 +49,14 @@ export const submitForReviewOnBehalf = async (id) => {
   return ok(res.data)
 }
 
+// Server-proxied progress-report upload: POST the file (multipart) to our own API,
+// which streams it to storage server-side. Returns the updated submission.
+export const uploadSubmissionAttachment = async (submissionId, file) => {
+  if (USE_MOCK) return ok({ submission: { id: submissionId }, media_id: `mid_${Date.now()}` })
+  const form = new FormData()
+  form.append('file', file)
+  const { data: res } = await http.post(`/submissions/${submissionId}/attachment`, form)
+  return ok(res.data)
+}
+
 export const getSubmissionsByStudent = async (student_user_id) => getSubmissions({ student_user_id })

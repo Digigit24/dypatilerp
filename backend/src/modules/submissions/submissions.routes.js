@@ -3,6 +3,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requirePermission, requireRole } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import * as ctrl from './submissions.controller.js';
+import { uploadSubmissionAttachment } from '../videos/videos.controller.js';
 import { createSubmissionSchema, updateSubmissionSchema, createSubmissionOnBehalfSchema } from './submissions.schema.js';
 
 const router = Router();
@@ -96,6 +97,20 @@ router.put('/:id', requirePermission('submissions', 'update'), validate(updateSu
  *         description: Submission sent for review
  */
 router.post('/:id/submit', requirePermission('submissions', 'update'), ctrl.submit);
+
+/**
+ * @swagger
+ * /submissions/{submissionId}/attachment:
+ *   post:
+ *     tags: [Submissions]
+ *     summary: Server-proxied progress-report file upload (multipart, field "file")
+ *     description: |
+ *       The browser POSTs multipart/form-data to our own API; the backend streams
+ *       the file to Zata server-side (no browser→Zata hop, no extra CORS). Records
+ *       a private, submission-bound media row and appends the descriptor to
+ *       file_urls. Authorized for the owning scholar or an admin (on-behalf).
+ */
+router.post('/:submissionId/attachment', requirePermission('submissions', 'create'), uploadSubmissionAttachment);
 
 /**
  * @swagger
