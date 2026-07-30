@@ -140,3 +140,24 @@ export const requestSubmissionUploadUrl = async (payload) => {
   const { data: res } = await http.post('/videos/upload/submission-url', payload)
   return ok(res.data)
 }
+
+/**
+ * Finalize a submission upload: the backend HEAD-verifies the stored object and
+ * appends the descriptor to the submission's file_urls. Payload: { submission_id, media_id }.
+ */
+export const finalizeSubmissionUpload = async (payload) => {
+  if (USE_MOCK) return ok({ media_id: payload.media_id })
+  const { data: res } = await http.post('/videos/upload/submission-finalize', payload)
+  return ok(res.data)
+}
+
+/**
+ * Resolve an authorized, time-limited download URL for a stored submission file
+ * from its media_id (creates a streaming session, then builds the download URL).
+ */
+export const getSubmissionFileUrl = async (mediaId) => {
+  if (!mediaId) return ok({ url: null })
+  if (USE_MOCK) return ok({ url: '#' })
+  const { data: res } = await http.post(`/videos/${mediaId}/session`)
+  return ok({ url: buildDownloadUrl(mediaId, res.data.token) })
+}

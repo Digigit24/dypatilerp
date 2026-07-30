@@ -36,4 +36,17 @@ export const submitForReview = async (id) => {
   return ok(res.data)
 }
 
+// Admin uploads a progress report on behalf of a scholar (owner = scholar).
+export const createSubmissionOnBehalf = async (payload) => {
+  if (USE_MOCK) return ok({ id: `sub_${Date.now()}`, status: 'draft', ...payload })
+  const { data: res } = await http.post('/submissions/on-behalf', payload)
+  return ok(res.data)
+}
+
+export const submitForReviewOnBehalf = async (id) => {
+  if (USE_MOCK) return ok({})
+  const { data: res } = await http.post(`/submissions/${id}/submit-on-behalf`)
+  return ok(res.data)
+}
+
 export const getSubmissionsByStudent = async (student_user_id) => getSubmissions({ student_user_id })

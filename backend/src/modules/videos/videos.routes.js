@@ -59,6 +59,15 @@ router.post('/upload/submission-url', authenticate, requirePermission('submissio
 
 /**
  * @swagger
+ * /videos/upload/submission-finalize:
+ *   post:
+ *     tags: [Videos]
+ *     summary: Finalize a submission upload — HEAD-verify size/type, attach to file_urls
+ */
+router.post('/upload/submission-finalize', authenticate, requirePermission('submissions', 'create'), ctrl.finalizeSubmissionUpload);
+
+/**
+ * @swagger
  * /videos/upload/request-url:
  *   post:
  *     tags: [Videos]

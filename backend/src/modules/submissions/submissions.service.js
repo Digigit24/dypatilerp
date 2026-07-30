@@ -39,24 +39,71 @@ export const getSubmissionById = async (id) => {
   return rows[0] || null;
 };
 
-export const createSubmission = async (payload, studentId) => {
+/**
+ * Resolve the batch a student is actively enrolled in. Returns the batch_id or
+ * null. If the student is active in more than one batch the caller must supply
+ * batch_id explicitly (we return null so the controller can 400).
+ */
+export const resolveActiveBatchForStudent = async (studentUserId) => {
+  const { rows } = await query(
+    `SELECT DISTINCT batch_id FROM batch_enrollments
+     WHERE user_id=$1 AND status='active'`,
+    [studentUserId]
+  );
+  return rows.length === 1 ? rows[0].batch_id : null;
+};
+
+/** Confirm a scholar is actively enrolled in a specific batch. */
+export const isStudentEnrolledInBatch = async (studentUserId, batchId) => {
+  const { rows } = await query(
+    `SELECT 1 FROM batch_enrollments WHERE user_id=$1 AND batch_id=$2 AND status='active' LIMIT 1`,
+    [studentUserId, batchId]
+  );
+  return rows.length > 0;
+};
+
+/**
+ * Create a submission. ownerId is always the scholar (student_user_id).
+ * createdByUserId records who created the row (scholar for self-serve, admin
+ * for on-behalf). Defaults to the owner to preserve the pre-existing behaviour.
+ */
+export const createSubmission = async (payload, ownerId, createdByUserId = null) => {
   // One submission per assignment per student (also enforced by a DB unique index)
   if (payload.assignment_id) {
     const { rows: [dup] } = await query(
       'SELECT id FROM submissions WHERE assignment_id=$1 AND student_user_id=$2',
-      [payload.assignment_id, studentId]
+      [payload.assignment_id, ownerId]
     );
     if (dup) {
       throw Object.assign(new Error('You have already created a submission for this assignment.'), { status: 400 });
     }
   }
   const { rows } = await query(
-    `INSERT INTO submissions (batch_id,student_user_id,title,submission_type,semester,content,file_urls,assignment_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [payload.batch_id, studentId, payload.title, payload.submission_type, payload.semester,
-     payload.content||null, JSON.stringify(payload.file_urls||[]), payload.assignment_id||null]
+    `INSERT INTO submissions
+       (batch_id,student_user_id,title,submission_type,semester,content,file_urls,assignment_id,created_by_user_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    [payload.batch_id, ownerId, payload.title, payload.submission_type, payload.semester,
+     payload.content||null, JSON.stringify(payload.file_urls||[]), payload.assignment_id||null,
+     createdByUserId || ownerId]
   );
   return rows[0];
+};
+
+/**
+ * Admin-on-behalf create: owner = scholar, created_by = admin. Batch must be one
+ * the scholar is actively enrolled in.
+ */
+export const createSubmissionOnBehalf = async (payload, adminUserId) => {
+  const enrolled = await isStudentEnrolledInBatch(payload.student_user_id, payload.batch_id);
+  if (!enrolled) {
+    throw Object.assign(new Error('Scholar is not actively enrolled in this batch.'), { status: 400 });
+  }
+  return createSubmission(
+    { batch_id: payload.batch_id, title: payload.title, submission_type: payload.submission_type,
+      semester: payload.semester, content: null, file_urls: [], assignment_id: null },
+    payload.student_user_id,
+    adminUserId
+  );
 };
 
 export const updateSubmission = async (id, payload) => {
@@ -74,18 +121,54 @@ export const updateSubmission = async (id, payload) => {
   return rows[0] || null;
 };
 
-export const submitForReview = async (id, studentId) => {
+/**
+ * Append a verified attachment descriptor to a submission's file_urls, server-side.
+ * The client never supplies the descriptor — the finalize step builds it after a
+ * successful HEAD-verify, so an arbitrary url/object_key can't be injected.
+ */
+export const appendFileDescriptor = async (submissionId, descriptor) => {
+  const { rows: [s] } = await query('SELECT file_urls FROM submissions WHERE id=$1', [submissionId]);
+  if (!s) return null;
+  const current = Array.isArray(s.file_urls)
+    ? s.file_urls
+    : (typeof s.file_urls === 'string' ? JSON.parse(s.file_urls || '[]') : []);
+  current.push(descriptor);
+  const { rows: [u] } = await query(
+    'UPDATE submissions SET file_urls=$1, updated_at=NOW() WHERE id=$2 RETURNING *',
+    [JSON.stringify(current), submissionId]
+  );
+  return u;
+};
+
+/**
+ * Submit a draft for review.
+ * ownerId is the scholar who owns the submission (for a student self-submit this
+ * equals the caller). submittedByUserId records who clicked Submit (scholar or
+ * admin) for audit — it never affects workflow selection, which comes solely from
+ * the batch's approval_config.
+ */
+export const submitForReview = async (id, ownerId, submittedByUserId = null) => {
   const client = await getClient();
   try {
     await client.query('BEGIN');
 
-    // 1. Mark submission as submitted
+    // 1. Mark submission as submitted (owner + status guard preserved)
     const { rows: [sub] } = await client.query(
-      `UPDATE submissions SET status='submitted', submitted_at=NOW(), updated_at=NOW()
+      `UPDATE submissions SET status='submitted', submitted_at=NOW(),
+              submitted_by_user_id=$3, updated_at=NOW()
        WHERE id=$1 AND student_user_id=$2 AND status IN ('draft','needs_revision') RETURNING *`,
-      [id, studentId]
+      [id, ownerId, submittedByUserId || ownerId]
     );
     if (!sub) throw Object.assign(new Error('Cannot submit — not found or wrong status'), { status: 400 });
+
+    // 1b. A progress report must carry a verified ('ready') attachment before it
+    //     can go for review — never mark submitted without a stored file.
+    if (sub.submission_type === 'progress_report') {
+      const { rows: [att] } = await client.query(
+        `SELECT 1 FROM videos WHERE submission_id=$1 AND upload_status='ready' LIMIT 1`, [id]
+      );
+      if (!att) throw Object.assign(new Error('Attach a file before submitting this report.'), { status: 400 });
+    }
 
     // 2. Determine the approval depth from the linked assignment (if any):
     //    optional assignment  → ONE layer (coordinator only)
@@ -98,7 +181,7 @@ export const submitForReview = async (id, studentId) => {
       isOptionalAssignment = asg ? asg.is_mandatory === false : false;
     }
 
-    // 3. Build stage list
+    // 3. Build stage list — batch approval_config is the sole source of truth.
     const { rows: [batch] } = await client.query(
       'SELECT approval_config FROM batches WHERE id=$1', [sub.batch_id]
     );
@@ -117,7 +200,8 @@ export const submitForReview = async (id, studentId) => {
       `DELETE FROM approvals WHERE submission_id=$1 AND status='pending'`, [id]
     );
 
-    // 5. Resolve reviewer IDs and insert approval rows
+    // 5. Resolve reviewer IDs and insert approval rows. Guide resolution is keyed
+    //    to the OWNER (the scholar), never the acting submitter.
     let firstReviewerId = null;
     for (const s of stages) {
       let resolvedReviewerId = null;
@@ -128,15 +212,16 @@ export const submitForReview = async (id, studentId) => {
         const { rows: [guide] } = await client.query(
           `SELECT guide_user_id FROM student_guides
            WHERE student_user_id=$1 AND guide_type=$2 AND is_active=true LIMIT 1`,
-          [studentId, s.guide_type]
+          [ownerId, s.guide_type]
         );
         resolvedReviewerId = guide?.guide_user_id || null;
       } else if (s.type === 'specific_user') {
         resolvedReviewerId = s.user_id || null;
       } else if (s.type === 'role') {
-        // Leave reviewer_user_id null; anyone with that role can claim it.
-        // Optionally auto-assign to the batch's coordinator if one exists.
-        if (s.role) {
+        // For an 'admin' role stage (the single institute-review stage) leave the
+        // reviewer unassigned so ANY authorized admin can act. For other roles the
+        // existing auto-assign is preserved byte-for-byte.
+        if (s.role && s.role !== 'admin') {
           const { rows: [coord] } = await client.query(
             `SELECT ur.user_id FROM user_roles ur
              JOIN roles r ON r.id=ur.role_id

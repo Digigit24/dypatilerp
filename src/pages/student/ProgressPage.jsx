@@ -23,7 +23,7 @@ export default function ProgressPage() {
 
   return (
     <div className="fade-page">
-      <PageHeader title="Progress Reports" subtitle="Priya Sharma · Batch 2024-A · Overall completion 62%" />
+      <PageHeader title="Progress Reports" />
       <div className="mobile-filter-scroll mb-5 flex gap-2">
         {reports.map((_, i) => (
           <button className={`mobile-compact-button shrink-0 rounded-full px-4 py-2 ${tab === i ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)]'}`} onClick={() => setTab(i)} key={i}>Report {i + 1}</button>

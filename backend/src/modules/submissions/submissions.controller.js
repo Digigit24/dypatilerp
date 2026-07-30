@@ -1,5 +1,5 @@
 import * as svc from './submissions.service.js';
-import { ok, created, notFound, forbidden } from '../../utils/response.js';
+import { ok, created, notFound, forbidden, badRequest } from '../../utils/response.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { isOwnScope, allowedBatchIds } from '../../middleware/rbac.js';
@@ -27,8 +27,24 @@ export const getOne = asyncHandler(async (req, res) => {
 });
 
 export const create = asyncHandler(async (req, res) => {
-  const submission = await svc.createSubmission(req.body, req.user.id);
+  const payload = { ...req.body };
+  // Resolve the batch for a self-serve student when not supplied (a scholar's
+  // batch comes from their active enrollment, not from the request).
+  if (!payload.batch_id) {
+    payload.batch_id = await svc.resolveActiveBatchForStudent(req.user.id);
+    if (!payload.batch_id) {
+      return badRequest(res, 'Could not determine your batch — please contact your coordinator.');
+    }
+  }
+  const submission = await svc.createSubmission(payload, req.user.id, req.user.id);
   created(res, submission, 'Submission created');
+});
+
+// Admin uploads a progress report on behalf of a scholar. Owner = scholar;
+// created_by = admin. Route is gated by requireRole('admin').
+export const createOnBehalf = asyncHandler(async (req, res) => {
+  const submission = await svc.createSubmissionOnBehalf(req.body, req.user.id);
+  created(res, submission, 'Submission created on behalf of scholar');
 });
 
 export const update = asyncHandler(async (req, res) => {
@@ -42,6 +58,16 @@ export const update = asyncHandler(async (req, res) => {
 });
 
 export const submit = asyncHandler(async (req, res) => {
-  const submission = await svc.submitForReview(req.params.id, req.user.id);
+  // Student self-submit: owner and submitter are both the caller.
+  const submission = await svc.submitForReview(req.params.id, req.user.id, req.user.id);
   ok(res, submission, 'Submitted for review');
+});
+
+// Admin submits on behalf of the scholar. Owner is taken from the submission;
+// the acting admin is recorded as submitted_by. Route gated by requireRole('admin').
+export const submitOnBehalf = asyncHandler(async (req, res) => {
+  const existing = await svc.getSubmissionById(req.params.id);
+  if (!existing) return notFound(res, 'Submission not found');
+  const submission = await svc.submitForReview(req.params.id, existing.student_user_id, req.user.id);
+  ok(res, submission, 'Submitted for review on behalf of scholar');
 });
