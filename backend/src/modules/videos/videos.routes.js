@@ -46,28 +46,6 @@ router.delete('/folders/:id', authenticate, requireRole('admin', 'coordinator'),
 
 /**
  * @swagger
- * /videos/upload/submission-url:
- *   post:
- *     tags: [Videos]
- *     summary: Student endpoint — get a presigned URL to upload a submission file to Zata
- *     description: |
- *       Creates a video entry in the course's Assignments folder and returns
- *       a presigned PUT URL. The student uploads directly to Zata, then links
- *       the returned object_key to their submission via POST /submissions.
- */
-router.post('/upload/submission-url', authenticate, requirePermission('submissions', 'create'), ctrl.requestSubmissionUploadUrl);
-
-/**
- * @swagger
- * /videos/upload/submission-finalize:
- *   post:
- *     tags: [Videos]
- *     summary: Finalize a submission upload — HEAD-verify size/type, attach to file_urls
- */
-router.post('/upload/submission-finalize', authenticate, requirePermission('submissions', 'create'), ctrl.finalizeSubmissionUpload);
-
-/**
- * @swagger
  * /videos/upload/request-url:
  *   post:
  *     tags: [Videos]
