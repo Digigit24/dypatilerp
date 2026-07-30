@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { sendCredentials } from '../../api/services/userService.js'
 import { getStudentById } from '../../api/services/studentService.js'
 import { createSubmissionOnBehalf, submitForReviewOnBehalf, uploadSubmissionAttachment } from '../../api/services/submissionService.js'
+import { getApprovalsBySubmission, reviewSubmission } from '../../api/services/approvalService.js'
 import StudentProfileView from '../../components/shared/StudentProfileView.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import { useLabels } from '../../store/labelStore.js'
@@ -82,6 +83,7 @@ function UploadProgressReportModal({ studentUserId, onClose }) {
   const [student, setStudent] = useState(null)
   const [title, setTitle] = useState('')
   const [file, setFile] = useState(null)
+  const [feedback, setFeedback] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -109,7 +111,25 @@ function UploadProgressReportModal({ studentUserId, onClose }) {
 
       // 3. Submit for review on behalf of the scholar.
       await submitForReviewOnBehalf(submissionId)
-      addToast({ type: 'success', title: `Progress report submitted for ${scholarName || 'the scholar'}.` })
+
+      // 4. Optional: if the admin entered feedback, approve now — this records the
+      //    institute feedback, marks the report approved/completed, and notifies
+      //    the scholar. If feedback is blank the report stays submitted (pending).
+      const note = feedback.trim()
+      if (note) {
+        try {
+          const appr = await getApprovalsBySubmission(submissionId)
+          const pending = (appr.data || []).find((a) => a.status === 'pending') || (appr.data || [])[0]
+          if (!pending?.id) throw new Error('No review stage found to approve')
+          await reviewSubmission(pending.id, { action: 'approve', comments: note })
+          addToast({ type: 'success', title: `Progress report approved with feedback for ${scholarName || 'the scholar'}.` })
+        } catch (approveErr) {
+          // The report is still saved & submitted — only the approve step failed.
+          addToast({ type: 'error', title: 'Report submitted, but the feedback/approval step failed', message: approveErr.response?.data?.message || approveErr.message })
+        }
+      } else {
+        addToast({ type: 'success', title: `Progress report submitted for ${scholarName || 'the scholar'}.` })
+      }
       onClose()
     } catch (err) {
       addToast({ type: 'error', title: 'Upload failed', message: err.response?.data?.message || err.message })
@@ -149,11 +169,21 @@ function UploadProgressReportModal({ studentUserId, onClose }) {
         </label>
         {file && <p className="mt-2 text-xs text-[color:var(--secondary)]">{file.name} · {(file.size / 1024 / 1024).toFixed(2)} MB</p>}
 
+        <label className="mt-4 block">
+          <span className="text-sm font-semibold text-[color:var(--text)]">Feedback to scholar <span className="font-normal text-[color:var(--muted)]">(optional)</span></span>
+          <textarea
+            className="textarea mt-2 h-24 w-full"
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="Add feedback to approve and complete now, or leave blank to submit for review."
+          />
+        </label>
+
         <div className="safe-actions mt-6 justify-end">
           <button className="h-11 rounded-[14px] bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={onClose}>Cancel</button>
           <button className="btn-primary inline-flex items-center gap-2 disabled:opacity-50" disabled={!canSubmit} onClick={submit}>
             {busy ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
-            {busy ? 'Uploading…' : 'Upload & Submit'}
+            {busy ? 'Uploading…' : (feedback.trim() ? 'Upload, Submit & Approve' : 'Upload & Submit')}
           </button>
         </div>
       </div>
