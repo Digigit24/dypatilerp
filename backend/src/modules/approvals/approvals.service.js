@@ -93,25 +93,38 @@ export const takeAction = async (approvalId, action, reviewerId, comments, actor
   return approval;
 };
 
-export const listApprovals = async ({ submission_id, stage, status, allowed_batch_ids, limit, offset }) => {
+export const listApprovals = async ({ submission_id, stage, status, course_id, batch_id, allowed_batch_ids, limit, offset }) => {
   const params = [];
   const conditions = [];
   if (submission_id) { params.push(submission_id); conditions.push(`a.submission_id=$${params.length}`); }
+  // RBAC scoping (never weakened) AND-combined with the picker's batch/course.
   if (allowed_batch_ids) {
     params.push(allowed_batch_ids);
     conditions.push(`s.batch_id = ANY($${params.length}::uuid[])`);
   }
-  if (stage) { params.push(stage); conditions.push(`a.stage=$${params.length}`); }
+  if (batch_id)  { params.push(batch_id);  conditions.push(`s.batch_id=$${params.length}`); }
+  if (course_id) { params.push(course_id); conditions.push(`b.course_id=$${params.length}`); }
+  if (stage)  { params.push(stage);  conditions.push(`a.stage=$${params.length}`); }
   if (status) { params.push(status); conditions.push(`a.status=$${params.length}`); }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const { rows } = await query(
-    `SELECT a.*, s.title, u.first_name, u.last_name FROM approvals a
+    `SELECT a.*, s.title, s.student_user_id, s.batch_id,
+            stu.first_name AS student_first_name, stu.last_name AS student_last_name, stu.email AS student_email,
+            b.name AS batch_name, c.name AS course_name,
+            rev.first_name AS reviewer_first_name, rev.last_name AS reviewer_last_name
+     FROM approvals a
      JOIN submissions s ON s.id=a.submission_id
-     LEFT JOIN users u ON u.id=a.reviewer_user_id
+     JOIN batches b ON b.id=s.batch_id
+     LEFT JOIN courses c ON c.id=b.course_id
+     LEFT JOIN users stu ON stu.id=s.student_user_id
+     LEFT JOIN users rev ON rev.id=a.reviewer_user_id
      ${where} ORDER BY a.created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
     [...params, limit, offset]
   );
   const { rows: [{ total }] } = await query(
-    `SELECT COUNT(*) AS total FROM approvals a JOIN submissions s ON s.id=a.submission_id ${where}`, params);
+    `SELECT COUNT(*) AS total FROM approvals a
+     JOIN submissions s ON s.id=a.submission_id
+     JOIN batches b ON b.id=s.batch_id
+     ${where}`, params);
   return { data: rows, total: parseInt(total) };
 };

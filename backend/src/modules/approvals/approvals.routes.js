@@ -32,6 +32,10 @@ router.use(authenticate);
 router.get('/', requirePermission('approvals', 'read'), asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
   const filters = { ...req.query, limit, offset };
+  // The app's course/batch picker sends X-Course-Id / X-Batch-Id (header wins
+  // over any query param); scope the queue by it, AND-combined with RBAC below.
+  if (req.courseId) filters.course_id = req.courseId;
+  if (req.batchId)  filters.batch_id  = req.batchId;
   const ab = allowedBatchIds(req);
   if (ab) filters.allowed_batch_ids = ab;
   const { data, total } = await svc.listApprovals(filters);

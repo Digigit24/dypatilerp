@@ -3,19 +3,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { getApprovals, reviewSubmission } from '../../api/services/approvalService.js'
 import { getSubmissions } from '../../api/services/submissionService.js'
 import { getSubmissionFileUrl } from '../../api/services/videoService.js'
-import { getStudents } from '../../api/services/studentService.js'
-import { getUsers } from '../../api/services/userService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { useUiStore } from '../../store/uiStore.js'
-import { usePermStore } from '../../store/permStore.js'
+import { useCourseStore } from '../../store/courseStore.js'
 
 export default function ApprovalsPage() {
   const [rows, setRows] = useState(null)
-  const [students, setStudents] = useState([])
-  const [users, setUsers] = useState([])
   const [selected, setSelected] = useState(null)
   const [revisionTarget, setRevisionTarget] = useState(null)
   const [revisionComment, setRevisionComment] = useState('')
@@ -25,40 +21,31 @@ export default function ApprovalsPage() {
   const [acting, setActing] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
   useScrollLock(Boolean(revisionTarget || selected || approveTarget))
-  // getUsers requires users:read (guide/mentor lack it). Gate it so it never 403s.
-  const canReadUsers = usePermStore((s) => s.can('users', 'read'))
+  const { currentCourse, currentBatch } = useCourseStore()
 
-  // Core data — approvals + submissions + students are all permitted for guide/mentor.
+  // Approvals now carry the scholar name, batch, and course directly (see
+  // GET /approvals). Refetch whenever the course/batch picker changes so the
+  // queue is scoped to the selection (the API reads X-Course-Id / X-Batch-Id).
   useEffect(() => {
-    Promise.all([getApprovals(), getSubmissions(), getStudents()]).then(([a, s, st]) => {
+    let alive = true
+    Promise.all([getApprovals(), getSubmissions()]).then(([a, s]) => {
+      if (!alive) return
       setRows(a.data.map((ap) => ({ ...ap, submission: s.data.find((x) => x.id === ap.submission_id) })))
-      setStudents(st.data)
-    })
-  }, [])
+    }).catch(() => { if (alive) setRows([]) })
+    return () => { alive = false }
+  }, [currentCourse?.id, currentBatch?.id])
 
-  // Optional user enrichment — only for roles allowed to read users, non-blocking.
-  useEffect(() => {
-    if (!canReadUsers) { setUsers([]); return }
-    getUsers().then((u) => setUsers(u.data)).catch(() => setUsers([]))
-  }, [canReadUsers])
+  const fullName = (first, last) => `${first || ''} ${last || ''}`.trim()
+  const scholarName = (r) => fullName(r?.student_first_name, r?.student_last_name) || '—'
+  const reviewerName = (r) => fullName(r?.reviewer_first_name, r?.reviewer_last_name) || '—'
+  const threadFor = (submissionId) => rows.filter((row) => row.submission_id === submissionId).sort((a, b) => ((a.order_index ?? a.stage_order ?? 0) - (b.order_index ?? b.stage_order ?? 0)))
 
-  const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users])
-  const studentMap = useMemo(() => Object.fromEntries(students.map((s) => [s.id, s])), [students])
-  // Student names come from the students data everyone here can read; users
-  // enrichment is only a fallback. Never render a raw UUID — use "—".
-  const studentName = (studentId) => {
-    const student = studentMap[studentId]
-    if (student && (student.first_name || student.last_name)) return `${student.first_name || ''} ${student.last_name || ''}`.trim()
-    const user = student ? userMap[student.user_id] : null
-    return user ? `${user.first_name} ${user.last_name}` : '—'
-  }
-  // Reviewer/user names can only be resolved from the (admin-only) users list;
-  // when it isn't available, show a safe placeholder rather than a raw UUID.
-  const userName = (userId) => {
-    const user = userMap[userId]
-    return user ? `${user.first_name} ${user.last_name}` : '—'
-  }
-  const threadFor = (submissionId) => rows.filter((row) => row.submission_id === submissionId).sort((a, b) => (a.stage_order || 0) - (b.stage_order || 0))
+  // Stage summary cards derived from the returned rows — no hardcoded stages.
+  const stageSummary = useMemo(() => {
+    const counts = {}
+    for (const r of (rows || [])) counts[r.stage] = (counts[r.stage] || 0) + 1
+    return Object.entries(counts)
+  }, [rows])
 
   if (!rows) return <SkeletonCard rows={8} />
 
@@ -92,7 +79,7 @@ export default function ApprovalsPage() {
   const openRevision = (row) => {
     setRevisionTarget(row)
     setRevisionComment('')
-    setSuggestedTitle(row.submission?.title || '')
+    setSuggestedTitle(row.title || row.submission?.title || '')
   }
 
   const submitRevision = async () => {
@@ -120,32 +107,34 @@ export default function ApprovalsPage() {
 
   return (
     <div className="fade-page">
-      <PageHeader title="Approval Queue" subtitle="Review coordinator, academic guide, and industry mentor stages in one stream." />
-      <div className="mb-5 grid gap-3 sm:grid-cols-3">
-        {['coordinator', 'academic_guide', 'industry_mentor'].map((stage) => {
-          const count = rows.filter((row) => row.stage === stage).length
-          return <div key={stage} className="card p-4">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">{stage.replaceAll('_', ' ')}</p>
-            <p className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{count}</p>
-            <p className="mt-1 text-xs text-[color:var(--secondary)]">items in approval stream</p>
-          </div>
-        })}
-      </div>
+      <PageHeader title="Approval Queue" subtitle="Review reports across the selected course and batch in one stream." />
+      {stageSummary.length > 0 && (
+        <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {stageSummary.map(([stage, count]) => (
+            <div key={stage} className="card p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">{stage?.replaceAll('_', ' ')}</p>
+              <p className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{count}</p>
+              <p className="mt-1 text-xs text-[color:var(--secondary)]">items in approval stream</p>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="card overflow-x-auto">
         <table className="min-w-[900px] w-full text-left text-sm">
           <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
             <tr>
-              <th className="w-44 px-6 py-4">Student</th>
-              {['Title', 'Stage', 'Approver', 'Status', 'Actions'].map((h) => <th className="px-6 py-4" key={h}>{h}</th>)}
+              <th className="w-44 px-6 py-4">Scholar</th>
+              {['Batch', 'Course', 'Report', 'Stage', 'Status', 'Actions'].map((h) => <th className="px-6 py-4" key={h}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="table-row cursor-pointer border-b border-[color:var(--border)]" onClick={() => setSelected(r)}>
-                <td className="w-44 px-6 py-5 font-semibold whitespace-nowrap text-[color:var(--text)]">{studentName(r.submission?.student_id)}</td>
-                <td className="max-w-md truncate">{r.submission?.title}</td>
+                <td className="w-44 px-6 py-5 font-semibold whitespace-nowrap text-[color:var(--text)]">{scholarName(r)}</td>
+                <td className="whitespace-nowrap">{r.batch_name || '—'}</td>
+                <td className="whitespace-nowrap">{r.course_name || '—'}</td>
+                <td className="max-w-md truncate">{r.title}</td>
                 <td className="capitalize">{r.stage?.replaceAll('_', ' ')}</td>
-                <td>{userName(r.approver_id)}</td>
                 <td><StatusBadge status={r.status} /></td>
                 <td>
                   <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
@@ -166,8 +155,10 @@ export default function ApprovalsPage() {
             <div className="safe-row shrink-0 border-b border-[color:var(--border)] p-6">
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Submission Detail</p>
-                <h2 className="mt-2 line-clamp-2 text-xl font-semibold text-[color:var(--text)]">{selected.submission?.title}</h2>
-                <p className="mt-1 text-sm text-[color:var(--secondary)]">{studentName(selected.submission?.student_id)} · {selected.stage?.replaceAll('_', ' ')}</p>
+                <h2 className="mt-2 line-clamp-2 text-xl font-semibold text-[color:var(--text)]">{selected.title}</h2>
+                <p className="mt-1 text-sm text-[color:var(--secondary)]">
+                  {scholarName(selected)}{selected.batch_name ? ` · ${selected.batch_name}` : ''}{selected.course_name ? ` · ${selected.course_name}` : ''} · {selected.stage?.replaceAll('_', ' ')}
+                </p>
               </div>
               <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setSelected(null)}><XCircle size={18} /></button>
             </div>
@@ -199,7 +190,7 @@ export default function ApprovalsPage() {
                       <div className="safe-row items-start">
                         <div>
                           <p className="text-sm font-semibold capitalize text-[color:var(--text)]">{approval.stage?.replaceAll('_', ' ')}</p>
-                          <p className="text-xs text-[color:var(--secondary)]">{userName(approval.approver_id)}</p>
+                          <p className="text-xs text-[color:var(--secondary)]">{reviewerName(approval)}</p>
                         </div>
                         <StatusBadge status={approval.status} />
                       </div>
@@ -220,8 +211,8 @@ export default function ApprovalsPage() {
             <div className="safe-row items-start">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Revision Comment</p>
-                <h2 className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{studentName(revisionTarget.submission?.student_id)}</h2>
-                <p className="mt-1 line-clamp-2 text-sm text-[color:var(--secondary)]">{revisionTarget.submission?.title}</p>
+                <h2 className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{scholarName(revisionTarget)}</h2>
+                <p className="mt-1 line-clamp-2 text-sm text-[color:var(--secondary)]">{revisionTarget.title}</p>
               </div>
               <button className="grid h-10 w-10 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setRevisionTarget(null)}><XCircle size={18} /></button>
             </div>
@@ -249,8 +240,8 @@ export default function ApprovalsPage() {
             <div className="safe-row items-start">
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Approve submission</p>
-                <h2 className="mt-2 line-clamp-2 text-xl font-semibold text-[color:var(--text)]">{approveTarget.submission?.title}</h2>
-                <p className="mt-1 text-sm text-[color:var(--secondary)]">{studentName(approveTarget.submission?.student_id)} · {approveTarget.stage?.replaceAll('_', ' ')}</p>
+                <h2 className="mt-2 line-clamp-2 text-xl font-semibold text-[color:var(--text)]">{approveTarget.title}</h2>
+                <p className="mt-1 text-sm text-[color:var(--secondary)]">{scholarName(approveTarget)} · {approveTarget.batch_name || '—'} · {approveTarget.stage?.replaceAll('_', ' ')}</p>
               </div>
               <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setApproveTarget(null)}><XCircle size={18} /></button>
             </div>
