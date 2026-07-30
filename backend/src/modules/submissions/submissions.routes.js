@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requirePermission } from '../../middleware/rbac.js';
+import { requirePermission, requireRole } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import * as ctrl from './submissions.controller.js';
-import { createSubmissionSchema, updateSubmissionSchema } from './submissions.schema.js';
+import { createSubmissionSchema, updateSubmissionSchema, createSubmissionOnBehalfSchema } from './submissions.schema.js';
 
 const router = Router();
 router.use(authenticate);
@@ -58,6 +58,18 @@ router.post('/', requirePermission('submissions', 'create'), validate(createSubm
 
 /**
  * @swagger
+ * /submissions/on-behalf:
+ *   post:
+ *     tags: [Submissions]
+ *     summary: Admin creates a progress-report draft on behalf of a scholar (owner = scholar)
+ *     responses:
+ *       201:
+ *         description: Draft created, owned by the scholar
+ */
+router.post('/on-behalf', requireRole('admin'), validate(createSubmissionOnBehalfSchema), ctrl.createOnBehalf);
+
+/**
+ * @swagger
  * /submissions/{id}:
  *   put:
  *     tags: [Submissions]
@@ -84,5 +96,17 @@ router.put('/:id', requirePermission('submissions', 'update'), validate(updateSu
  *         description: Submission sent for review
  */
 router.post('/:id/submit', requirePermission('submissions', 'update'), ctrl.submit);
+
+/**
+ * @swagger
+ * /submissions/{id}/submit-on-behalf:
+ *   post:
+ *     tags: [Submissions]
+ *     summary: Admin submits a scholar's draft for review (owner stays the scholar)
+ *     responses:
+ *       200:
+ *         description: Submission sent for review on behalf of the scholar
+ */
+router.post('/:id/submit-on-behalf', requireRole('admin'), ctrl.submitOnBehalf);
 
 export default router;

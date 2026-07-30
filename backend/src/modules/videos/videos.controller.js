@@ -1,7 +1,8 @@
 import * as svc from './videos.service.js';
+import * as subSvc from '../submissions/submissions.service.js';
 import * as s3 from '../../services/s3.js';
 import * as local from '../../services/localVideo.js';
-import { ok, created, notFound, noContent } from '../../utils/response.js';
+import { ok, created, notFound, noContent, forbidden, badRequest } from '../../utils/response.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { query } from '../../config/database.js';
@@ -103,8 +104,30 @@ export const remove = asyncHandler(async (req, res) => {
 
 export const createSession = asyncHandler(async (req, res) => {
   const video = await svc.getVideoById(req.params.id);
-  const isAdmin = req.user?.roles?.some((r) => ['admin', 'coordinator', 'academic_guide', 'industry_mentor'].includes(r));
-  if (!video || (!video.is_published && !isAdmin)) return notFound(res, 'Video not found or not published');
+  if (!video) return notFound(res, 'Video not found or not published');
+  const roles = req.user?.roles || [];
+  const isAdmin = roles.some((r) => ['admin', 'coordinator', 'academic_guide', 'industry_mentor'].includes(r));
+
+  if (video.submission_id) {
+    // Private submission file: only the owning scholar, an admin, or an assigned
+    // reviewer for that submission. is_published is never used for these.
+    const { rows: [sub] } = await query('SELECT student_user_id FROM submissions WHERE id=$1', [video.submission_id]);
+    const isOwner = sub && sub.student_user_id === req.user.id;
+    const isSiteAdmin = roles.includes('admin');
+    let isReviewer = false;
+    if (sub && !isOwner && !isSiteAdmin) {
+      const { rows: [a] } = await query(
+        `SELECT 1 FROM approvals WHERE submission_id=$1
+           AND (reviewer_user_id=$2 OR (reviewer_user_id IS NULL AND reviewer_role = ANY($3::text[]))) LIMIT 1`,
+        [video.submission_id, req.user.id, roles]
+      );
+      isReviewer = !!a;
+    }
+    if (!(isOwner || isSiteAdmin || isReviewer)) return forbidden(res);
+  } else if (!video.is_published && !isAdmin) {
+    return notFound(res, 'Video not found or not published');
+  }
+
   const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
   const session = await svc.createSession(req.user.id, video.id, ip, req.headers['user-agent']);
 
@@ -336,67 +359,127 @@ export const requestUploadUrl = asyncHandler(async (req, res) => {
   ok(res, { upload_url: uploadUrl, object_key: objectKey });
 });
 
+// Allowed submission formats — validated server-side (never trust the browser).
+const SUBMISSION_MIME = {
+  'application/pdf': 'pdf',
+  'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+};
+const SUBMISSION_EXTS = ['pdf', 'ppt', 'pptx'];
+const MAX_SUBMISSION_BYTES = 25 * 1024 * 1024; // 25 MB
+
 /**
- * Student submission upload URL — creates a video entry in the Assignments
- * folder for the course and returns a presigned PUT URL for direct-to-Zata upload.
- * Students can ONLY use this endpoint (restricted to own submissions linked to an assignment).
+ * Submission upload URL — creates a PRIVATE, PENDING, submission-bound media row
+ * and returns a presigned PUT URL. Authorized for the owning scholar or an admin.
+ * No assignment is required (progress reports are standalone). The returned
+ * media_id IS the real videos.id, so /videos/:id/session can resolve it later.
  */
 export const requestSubmissionUploadUrl = asyncHandler(async (req, res) => {
   if (!s3.isConfigured()) {
     return res.status(503).json({ success: false, message: 'Storage not configured' });
   }
-  const { filename, course_id, assignment_id, content_type } = req.body;
-  if (!filename || !course_id || !assignment_id) {
-    return res.status(400).json({ success: false, message: 'filename, course_id and assignment_id are required' });
+  const { submission_id, filename, content_type } = req.body;
+  if (!submission_id || !filename) {
+    return badRequest(res, 'submission_id and filename are required');
   }
 
-  // Verify the assignment belongs to the student's course
-  const { rows: [assignment] } = await query(
-    `SELECT a.id, a.title, c.code AS course_code
-     FROM assignments a
-     JOIN batches b ON b.id = a.batch_id
+  // Load the draft + its course; authorize owner-or-admin.
+  const { rows: [sub] } = await query(
+    `SELECT s.id, s.student_user_id, s.status, s.batch_id, b.course_id, c.code AS course_code
+     FROM submissions s
+     JOIN batches b ON b.id = s.batch_id
      JOIN courses c ON c.id = b.course_id
-     WHERE a.id = $1 AND c.id = $2`,
-    [assignment_id, course_id]
+     WHERE s.id = $1`,
+    [submission_id]
   );
-  if (!assignment) {
-    return res.status(404).json({ success: false, message: 'Assignment not found in this course' });
+  if (!sub) return notFound(res, 'Submission not found');
+  const isAdmin = req.user.roles?.includes('admin');
+  if (sub.student_user_id !== req.user.id && !isAdmin) return forbidden(res);
+  if (sub.status !== 'draft') return badRequest(res, 'Files can only be attached to a draft submission');
+
+  // Validate extension AND declared MIME against the allowlist {pdf, ppt, pptx}.
+  const ext = (filename.split('.').pop() || '').toLowerCase();
+  const mime = content_type || '';
+  if (!SUBMISSION_EXTS.includes(ext) || !SUBMISSION_MIME[mime]) {
+    return badRequest(res, 'Only PDF, PPT and PPTX files are allowed');
   }
 
-  // Ensure the "Assignments" default folder exists for this course
-  const folderId = await svc.getOrCreateDefaultFolder(course_id, 'Assignments', req.user.id);
+  const folderId = await svc.getOrCreateDefaultFolder(sub.course_id, 'Submissions', req.user.id);
+  const objectKey = s3.buildVideoKey(sub.course_code, crypto.randomUUID(), filename);
 
-  const mediaId = crypto.randomUUID();
-  const mime = content_type || 'application/octet-stream';
-  const objectKey = s3.buildVideoKey(assignment.course_code, mediaId, filename);
-
-  // Pre-register the video entry so the DB record exists before upload completes
-  await svc.createVideo({
-    course_id,
+  const media = await svc.createVideo({
+    course_id: sub.course_id,
     folder_id: folderId,
-    assignment_id,
+    submission_id: sub.id,
+    upload_status: 'pending',
     title: filename.replace(/\.[^.]+$/, ''),
-    description: `Submission file for: ${assignment.title}`,
+    description: `Progress-report file for submission ${sub.id}`,
     object_key: objectKey,
     file_size: 0,
-    media_type: detectMediaType(mime),
+    media_type: 'document',
     mime_type: mime,
     is_published: false,
-    visibility: 'private', // only the student + admin can see submission files
+    visibility: 'private', // only owner + admin + assigned reviewer may view
     sort_order: 0,
   }, req.user.id);
 
   const uploadUrl = await s3.presignedUploadUrl(objectKey, 3600, mime);
-  ok(res, { upload_url: uploadUrl, object_key: objectKey, media_id: mediaId });
+  ok(res, { upload_url: uploadUrl, object_key: objectKey, media_id: media.id });
 });
 
-const detectMediaType = (mime = '') => {
-  if (mime.startsWith('video/')) return 'video';
-  if (mime.startsWith('image/')) return 'image';
-  if (mime.startsWith('audio/')) return 'audio';
-  if (/pdf|msword|officedocument|text\/|csv|rtf|spreadsheet|presentation/.test(mime)) return 'document';
-  return 'other';
-};
+/**
+ * Finalize a submission upload: HEAD-verify size + content-type, then attach the
+ * descriptor to the submission's file_urls (server-side). On verification failure
+ * the object and the pending media row are deleted so nothing dangles.
+ */
+export const finalizeSubmissionUpload = asyncHandler(async (req, res) => {
+  if (!s3.isConfigured()) {
+    return res.status(503).json({ success: false, message: 'Storage not configured' });
+  }
+  const { submission_id, media_id } = req.body;
+  if (!submission_id || !media_id) return badRequest(res, 'submission_id and media_id are required');
+
+  const { rows: [sub] } = await query(
+    'SELECT id, student_user_id, status FROM submissions WHERE id=$1', [submission_id]
+  );
+  if (!sub) return notFound(res, 'Submission not found');
+  const isAdmin = req.user.roles?.includes('admin');
+  if (sub.student_user_id !== req.user.id && !isAdmin) return forbidden(res);
+
+  const media = await svc.getVideoById(media_id);
+  if (!media || media.submission_id !== submission_id) {
+    return notFound(res, 'Attachment not found for this submission');
+  }
+  if (media.upload_status !== 'pending') return badRequest(res, 'Attachment already finalized');
+
+  // HEAD-verify the uploaded object.
+  let head;
+  try {
+    head = await s3.headObject(media.object_key);
+  } catch {
+    return badRequest(res, 'Uploaded file not found in storage');
+  }
+  const size = Number(head.ContentLength || 0);
+  const storedType = head.ContentType || media.mime_type || '';
+  const extLower = (media.object_key.split('.').pop() || '').toLowerCase();
+  const typeOk = !!SUBMISSION_MIME[storedType] || SUBMISSION_EXTS.includes(extLower);
+
+  if (size <= 0 || size > MAX_SUBMISSION_BYTES || !typeOk) {
+    try { await s3.deleteObject(media.object_key); } catch { /* ignore */ }
+    await svc.deleteVideo(media.id).catch(() => {});
+    return badRequest(res, size > MAX_SUBMISSION_BYTES ? 'File exceeds the 25MB limit' : 'File type not allowed');
+  }
+
+  await svc.updateVideo(media.id, { upload_status: 'ready', file_size: size });
+
+  const submission = await subSvc.appendFileDescriptor(submission_id, {
+    name: media.title || 'attachment',
+    media_id: media.id,
+    type: SUBMISSION_MIME[storedType] || extLower,
+    size,
+  });
+  ok(res, { submission, media_id: media.id }, 'Attachment finalized');
+});
 
 export const initCourseFolder = asyncHandler(async (req, res) => {
   if (!s3.isConfigured()) {

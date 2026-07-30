@@ -2,6 +2,7 @@ import { CheckCircle2, Download, Eye, FileText, MessageSquare, RotateCcw, XCircl
 import { useEffect, useMemo, useState } from 'react'
 import { getApprovals, reviewSubmission } from '../../api/services/approvalService.js'
 import { getSubmissions } from '../../api/services/submissionService.js'
+import { getSubmissionFileUrl } from '../../api/services/videoService.js'
 import { getStudents } from '../../api/services/studentService.js'
 import { getUsers } from '../../api/services/userService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
@@ -153,10 +154,10 @@ export default function ApprovalsPage() {
                 <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                   <p className="font-semibold text-[color:var(--text)]">Submission</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <Info label="Report Period" value={`Report ${selected.submission?.report_period}`} />
-                    <Info label="Version" value={`v${selected.submission?.title_version || 1}`} />
-                    <Info label="File" value={selected.submission?.presentation_filename || 'Not uploaded'} />
-                    <Info label="Type" value={selected.submission?.presentation_type?.toUpperCase() || '-'} />
+                    <Info label="Type" value={selected.submission?.submission_type?.replaceAll('_', ' ') || '-'} />
+                    <Info label="Version" value={`v${selected.submission?.version || 1}`} />
+                    <Info label="File" value={selected.submission?.file_urls?.[0]?.name || 'Not uploaded'} />
+                    <Info label="Format" value={selected.submission?.file_urls?.[0]?.type?.toUpperCase() || '-'} />
                   </div>
                 </div>
                 <div className="safe-actions">
@@ -223,27 +224,30 @@ export default function ApprovalsPage() {
 }
 
 function MediaPreview({ submission }) {
-  const type = submission?.presentation_type
-  const url = submission?.presentation_url
+  const file = Array.isArray(submission?.file_urls) ? submission.file_urls[0] : null
+  const [fetchedUrl, setFetchedUrl] = useState(null)
+  useEffect(() => {
+    let alive = true
+    if (file?.media_id) getSubmissionFileUrl(file.media_id).then((r) => { if (alive) setFetchedUrl(r.data.url) }).catch(() => {})
+    return () => { alive = false }
+  }, [file?.media_id])
+  const url = file?.media_id ? fetchedUrl : (file?.url || null)
   return <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
     <div className="safe-row">
       <div>
-        <p className="font-semibold text-[color:var(--text)]">Presentation Media</p>
-        <p className="mt-1 text-xs text-[color:var(--secondary)]">{submission?.presentation_filename || 'No file attached'}</p>
+        <p className="font-semibold text-[color:var(--text)]">Submission File</p>
+        <p className="mt-1 text-xs text-[color:var(--secondary)]">{file?.name || 'No file attached'}</p>
       </div>
       {url && <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 text-sm font-semibold text-[color:var(--accent)]"><Download size={15} /> Open</a>}
     </div>
-    <div className="mt-4 overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)]">
-      {type === 'pdf' && url ? <iframe title="Presentation preview" src={url} className="h-72 w-full" />
-        : type === 'video' && url ? <video src={url} controls className="h-72 w-full bg-black" />
-          : <div className="grid h-72 place-items-center p-6 text-center">
-            <div>
-              <FileText className="mx-auto text-[color:var(--accent)]" size={34} />
-              <p className="mt-3 font-semibold text-[color:var(--text)]">Preview unavailable</p>
-              <p className="mt-1 text-sm text-[color:var(--secondary)]">Open the uploaded PPT/PDF file to review it.</p>
-            </div>
-          </div>}
-    </div>
+    {!file && (
+      <div className="mt-4 grid h-40 place-items-center rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
+        <div>
+          <FileText className="mx-auto text-[color:var(--accent)]" size={30} />
+          <p className="mt-3 text-sm text-[color:var(--secondary)]">No file attached to this submission.</p>
+        </div>
+      </div>
+    )}
   </div>
 }
 

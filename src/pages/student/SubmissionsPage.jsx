@@ -2,6 +2,7 @@ import { Download, FileText, MessageSquare, XCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { getApprovalsBySubmission } from '../../api/services/approvalService.js'
 import { getSubmissionsByStudent } from '../../api/services/submissionService.js'
+import { getSubmissionFileUrl } from '../../api/services/videoService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
@@ -35,7 +36,7 @@ export default function SubmissionsPage() {
               <div className="safe-row items-start">
                 <div>
                   <h2 className="text-xl font-semibold text-[color:var(--text)]">{s.title}</h2>
-                  <p className="text-sm text-[color:var(--secondary)]">Report {s.report_period} · {formatDate(s.submitted_at)}</p>
+                  <p className="text-sm text-[color:var(--secondary)]">{formatDate(s.submitted_at)}</p>
                 </div>
                 <StatusBadge status={s.status} />
               </div>
@@ -64,7 +65,7 @@ export default function SubmissionsPage() {
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Submission Detail</p>
                 <h2 className="mt-2 line-clamp-2 text-xl font-semibold text-[color:var(--text)]">{detail.title}</h2>
-                <p className="mt-1 text-sm text-[color:var(--secondary)]">Report {detail.report_period} · {formatDate(detail.submitted_at)}</p>
+                <p className="mt-1 text-sm text-[color:var(--secondary)]">{formatDate(detail.submitted_at)}</p>
               </div>
               <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setDetail(null)}><XCircle size={18} /></button>
             </div>
@@ -75,9 +76,9 @@ export default function SubmissionsPage() {
                   <p className="font-semibold text-[color:var(--text)]">Submission Summary</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <Info label="Status" value={<StatusBadge status={detail.status} />} />
-                    <Info label="Title Version" value={`v${detail.title_version}`} />
-                    <Info label="File" value={detail.presentation_filename || 'Not uploaded'} />
-                    <Info label="Type" value={detail.presentation_type?.toUpperCase() || '-'} />
+                    <Info label="Version" value={`v${detail.version || 1}`} />
+                    <Info label="File" value={detail.file_urls?.[0]?.name || 'Not uploaded'} />
+                    <Info label="Type" value={detail.file_urls?.[0]?.type?.toUpperCase() || '-'} />
                   </div>
                 </div>
               </div>
@@ -109,27 +110,30 @@ export default function SubmissionsPage() {
 }
 
 function MediaPreview({ submission }) {
-  const type = submission?.presentation_type
-  const url = submission?.presentation_url
+  const file = Array.isArray(submission?.file_urls) ? submission.file_urls[0] : null
+  const [fetchedUrl, setFetchedUrl] = useState(null)
+  useEffect(() => {
+    let alive = true
+    if (file?.media_id) getSubmissionFileUrl(file.media_id).then((r) => { if (alive) setFetchedUrl(r.data.url) }).catch(() => {})
+    return () => { alive = false }
+  }, [file?.media_id])
+  const url = file?.media_id ? fetchedUrl : (file?.url || null)
   return <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
     <div className="safe-row">
       <div>
-        <p className="font-semibold text-[color:var(--text)]">Uploaded Presentation</p>
-        <p className="mt-1 text-xs text-[color:var(--secondary)]">{submission?.presentation_filename || 'No file attached'}</p>
+        <p className="font-semibold text-[color:var(--text)]">Uploaded File</p>
+        <p className="mt-1 text-xs text-[color:var(--secondary)]">{file?.name || 'No file attached'}</p>
       </div>
       {url && <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 text-sm font-semibold text-[color:var(--accent)]"><Download size={15} /> Open</a>}
     </div>
-    <div className="mt-4 overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)]">
-      {type === 'pdf' && url ? <iframe title="Presentation preview" src={url} className="h-72 w-full" />
-        : type === 'video' && url ? <video src={url} controls className="h-72 w-full bg-black" />
-          : <div className="grid h-72 place-items-center p-6 text-center">
-            <div>
-              <FileText className="mx-auto text-[color:var(--accent)]" size={34} />
-              <p className="mt-3 font-semibold text-[color:var(--text)]">Preview unavailable</p>
-              <p className="mt-1 text-sm text-[color:var(--secondary)]">Open the uploaded file to review it.</p>
-            </div>
-          </div>}
-    </div>
+    {!file && (
+      <div className="mt-4 grid h-40 place-items-center rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
+        <div>
+          <FileText className="mx-auto text-[color:var(--accent)]" size={30} />
+          <p className="mt-3 text-sm text-[color:var(--secondary)]">No file attached to this submission.</p>
+        </div>
+      </div>
+    )}
   </div>
 }
 

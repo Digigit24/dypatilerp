@@ -1,20 +1,27 @@
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { ArrowRight, CheckCircle2, Clock3, FileText, Info, Paperclip, RotateCcw, UploadCloud, X } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Clock3, FileText, Info, Paperclip, UploadCloud, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { useSearchParams } from 'react-router-dom'
 import { createSubmission, submitForReview } from '../../api/services/submissionService.js'
+import { requestSubmissionUploadUrl, finalizeSubmissionUpload } from '../../api/services/videoService.js'
 import { getMyAssignments } from '../../api/services/assignmentService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
-import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
-const history = [
-  { version: 2, title: 'Machine Learning Applications in Early Cancer Detection', date: '20 Sep 2024', status: 'approved' },
-  { version: 1, title: 'AI in Cancer Detection', date: '15 Sep 2024', status: 'needs_revision' },
-]
+// Allowed formats mapped for a reliable Content-Type when the browser omits one.
+const MIME_BY_EXT = {
+  pdf:  'application/pdf',
+  ppt:  'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+}
+const guessMime = (f) => {
+  const allowed = Object.values(MIME_BY_EXT)
+  if (f.type && allowed.includes(f.type)) return f.type
+  return MIME_BY_EXT[(f.name.split('.').pop() || '').toLowerCase()] || f.type || ''
+}
 
 export default function SubmitPage() {
   const [searchParams] = useSearchParams()
@@ -24,7 +31,6 @@ export default function SubmitPage() {
   const [confirm, setConfirm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
-  const currentUser = useAuthStore((s) => s.currentUser)
 
   // When arriving from the Assignments page, load the linked assignment
   useEffect(() => {
@@ -37,7 +43,7 @@ export default function SubmitPage() {
 
   const editor = useEditor({
     extensions: [StarterKit],
-    content: '<p>CRISPR Screening for Biomarker Discovery</p>',
+    content: '<p></p>',
     editorProps: {
       attributes: {
         class: 'min-h-[150px] rounded-[24px] bg-transparent text-2xl font-semibold leading-snug outline-none md:text-[32px]',
@@ -51,7 +57,6 @@ export default function SubmitPage() {
       'application/pdf': ['.pdf'],
       'application/vnd.ms-powerpoint': ['.ppt'],
       'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
-      'video/mp4': ['.mp4'],
     },
   })
 
@@ -62,16 +67,27 @@ export default function SubmitPage() {
   const submit = async () => {
     setSubmitting(true)
     try {
+      // 1. Create the draft (batch resolved server-side for a standalone report).
       const created = await createSubmission({
-        batch_id: assignment?.batch_id || currentUser?.batch_id,
+        batch_id: assignment?.batch_id,
         assignment_id: assignment?.id || null,
         title,
-        submission_type: assignment ? 'assignment' : 'research_paper',
+        submission_type: assignment ? 'assignment' : 'progress_report',
         semester: assignment?.semester || 1,
         content: title,
-        file_urls: [],
       })
-      if (created.data?.id) await submitForReview(created.data.id)
+      const submissionId = created.data?.id
+      if (!submissionId) throw new Error('Could not create the submission')
+
+      // 2. Presign → direct PUT to storage → finalize (HEAD-verify + attach).
+      const mime = guessMime(file)
+      const presign = await requestSubmissionUploadUrl({ submission_id: submissionId, filename: file.name, content_type: mime })
+      const putRes = await fetch(presign.data.upload_url, { method: 'PUT', headers: { 'Content-Type': mime }, body: file })
+      if (!putRes.ok) throw new Error('File upload failed — please try again')
+      await finalizeSubmissionUpload({ submission_id: submissionId, media_id: presign.data.media_id })
+
+      // 3. Only now send for review — never submit without a verified file.
+      await submitForReview(submissionId)
       addToast({
         type: 'success',
         title: assignment
@@ -205,24 +221,6 @@ export default function SubmitPage() {
             </div>
           </div>
 
-          <div className="card p-6">
-            <div className="safe-row">
-              <h2 className="text-lg font-semibold text-[color:var(--text)]">Submission History</h2>
-              <RotateCcw size={17} className="text-[color:var(--muted)]" />
-            </div>
-            <div className="mt-4 space-y-3">
-              {history.map((item) => (
-                <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4" key={item.version}>
-                  <div className="safe-row items-start">
-                    <p className="text-sm font-semibold text-[color:var(--text)]">Version {item.version}</p>
-                    <StatusBadge status={item.status} />
-                  </div>
-                  <p className="mt-2 line-clamp-2 text-sm text-[color:var(--secondary)]">{item.title}</p>
-                  <p className="mt-2 text-xs text-[color:var(--muted)]">{item.date}</p>
-                </div>
-              ))}
-            </div>
-          </div>
         </aside>
       </div>
 

@@ -66,8 +66,8 @@ export const getVideoById = async (id) => {
 
 export const createVideo = async (payload, uploadedBy) => {
   const { rows } = await query(
-    `INSERT INTO videos (course_id, batch_id, title, description, duration_sec, object_key, file_size, thumbnail_key, sort_order, uploaded_by, is_published, media_type, mime_type, folder_id, visibility, assignment_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+    `INSERT INTO videos (course_id, batch_id, title, description, duration_sec, object_key, file_size, thumbnail_key, sort_order, uploaded_by, is_published, media_type, mime_type, folder_id, visibility, assignment_id, submission_id, upload_status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
     [
       payload.course_id, payload.batch_id || null, payload.title,
       payload.description || null, payload.duration_sec || 0,
@@ -78,13 +78,15 @@ export const createVideo = async (payload, uploadedBy) => {
       payload.folder_id || null,
       payload.visibility || 'course',
       payload.assignment_id || null,
+      payload.submission_id || null,
+      payload.upload_status || 'ready',
     ]
   );
   return rows[0];
 };
 
 export const updateVideo = async (id, payload) => {
-  const allowed = ['title','description','duration_sec','is_published','sort_order','thumbnail_key','media_type','mime_type','folder_id','visibility','batch_id','assignment_id'];
+  const allowed = ['title','description','duration_sec','is_published','sort_order','thumbnail_key','media_type','mime_type','folder_id','visibility','batch_id','assignment_id','submission_id','upload_status','file_size'];
   const fields = [];
   const params = [];
   for (const k of allowed) {

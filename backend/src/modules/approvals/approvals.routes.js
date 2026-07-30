@@ -80,7 +80,7 @@ router.get('/pending', requirePermission('approvals', 'read'), asyncHandler(asyn
  */
 router.post('/:id/action', requirePermission('approvals', 'update'), asyncHandler(async (req, res) => {
   const { action, comments } = req.body;
-  const result = await svc.takeAction(req.params.id, action, req.user.id, comments);
+  const result = await svc.takeAction(req.params.id, action, req.user.id, comments, req.user.roles);
   ok(res, result, 'Action recorded');
 }));
 

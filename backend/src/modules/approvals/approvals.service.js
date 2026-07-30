@@ -15,7 +15,7 @@ export const listPendingForUser = async (userId, roles) => {
        AND (
          a.reviewer_user_id = $1
          OR (a.reviewer_user_id IS NULL AND a.reviewer_role = ANY($2::text[]))
-         OR (a.reviewer_user_id IS NULL AND a.stage = ANY($2::text[]))
+         OR (a.reviewer_user_id IS NULL AND a.reviewer_role IS NULL AND a.stage = ANY($2::text[]))
        )
      ORDER BY a.created_at ASC`,
     [userId, roles]
@@ -28,10 +28,20 @@ export const getApprovalById = async (id) => {
   return rows[0] || null;
 };
 
-export const takeAction = async (approvalId, action, reviewerId, comments) => {
+export const takeAction = async (approvalId, action, reviewerId, comments, actorRoles = []) => {
   const statusMap = { approve: 'approved', reject: 'rejected', request_revision: 'needs_revision' };
   const newStatus = statusMap[action];
   if (!newStatus) throw Object.assign(new Error('Invalid action'), { status: 400 });
+
+  // Per-row authorization (the route only checks the approvals:update permission).
+  // An actor may act only on a review assigned to them, or on an unassigned
+  // role-slot whose reviewer_role they currently hold. No blanket admin override.
+  const { rows: [existing] } = await query('SELECT * FROM approvals WHERE id=$1', [approvalId]);
+  if (!existing) throw Object.assign(new Error('Approval not found'), { status: 404 });
+  const authorized =
+    existing.reviewer_user_id === reviewerId ||
+    (existing.reviewer_user_id === null && existing.reviewer_role !== null && actorRoles.includes(existing.reviewer_role));
+  if (!authorized) throw Object.assign(new Error('You are not authorized to action this review.'), { status: 403 });
 
   const { rows: [approval] } = await query(
     `UPDATE approvals SET status=$1, reviewer_user_id=$2, action_at=NOW(), comments=$3
