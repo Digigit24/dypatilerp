@@ -9,7 +9,7 @@
  *  4. Guides + Fees Summary sections visible to admin.
  */
 import {
-  Award, BookOpen, Camera, CheckCircle, Circle, Clock,
+  Award, BookOpen, Camera, Clock,
   DollarSign, ExternalLink, FileText, Globe, GraduationCap,
   Link2, Pencil, Plus, Save, Shield, Upload, User, X,
 } from 'lucide-react'
@@ -28,6 +28,7 @@ import { formatDate } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
 import SkeletonCard from './SkeletonCard.jsx'
 import StatusBadge from './StatusBadge.jsx'
+import SubmissionFileLink from './SubmissionFileLink.jsx'
 
 const CERT_TYPES = [
   { key: 'phd_certificate',   label: 'PhD Certificate',       desc: 'Doctoral degree certificate from your institution' },
@@ -512,14 +513,14 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                     <div className="min-w-0">
                       <p className="line-clamp-2 font-semibold text-[color:var(--text)]">{sub.title}</p>
                       <p className="mt-1 text-xs text-[color:var(--secondary)]">
-                        Report {sub.report_period} · v{sub.title_version || 1} · {formatDate(sub.submitted_at)}
+                        v{sub.version || 1} · {formatDate(sub.submitted_at)}
                       </p>
                     </div>
                     <StatusBadge status={sub.status} />
                   </div>
-                  {sub.presentation_filename && (
+                  {sub.file_urls?.[0]?.name && (
                     <p className="mt-2 flex items-center gap-1.5 text-xs text-[color:var(--muted)]">
-                      <FileText size={11} /> {sub.presentation_filename}
+                      <FileText size={11} /> {sub.file_urls[0].name}
                     </p>
                   )}
                 </button>
@@ -699,42 +700,31 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
 
             <div className="flex-1 overflow-auto overscroll-contain p-6 space-y-5 xl:grid xl:grid-cols-[1fr_300px] xl:gap-5 xl:space-y-0">
               <div className="space-y-5">
-                {/* Media preview */}
+                {/* Submission file */}
                 <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                   <div className="safe-row">
                     <div>
-                      <p className="font-semibold text-[color:var(--text)]">Presentation Media</p>
-                      <p className="mt-1 text-xs text-[color:var(--secondary)]">{selectedSub.presentation_filename || 'No file attached'}</p>
+                      <p className="font-semibold text-[color:var(--text)]">Submission File</p>
+                      <p className="mt-1 text-xs text-[color:var(--secondary)]">{selectedSub.file_urls?.[0]?.name || 'No file attached'}</p>
                     </div>
-                    {selectedSub.presentation_url && (
-                      <a href={selectedSub.presentation_url} target="_blank" rel="noreferrer"
-                        className="inline-flex h-10 items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 text-sm font-semibold text-[color:var(--accent)]">
-                        <ExternalLink size={14} /> Open
-                      </a>
-                    )}
+                    {selectedSub.file_urls?.[0] && <SubmissionFileLink file={selectedSub.file_urls[0]} />}
                   </div>
-                  <div className="mt-4 overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)]">
-                    {selectedSub.presentation_type === 'pdf' && selectedSub.presentation_url
-                      ? <iframe title="Preview" src={selectedSub.presentation_url} className="h-64 w-full" />
-                      : selectedSub.presentation_type === 'video' && selectedSub.presentation_url
-                        ? <video src={selectedSub.presentation_url} controls className="h-64 w-full bg-black" />
-                        : <div className="grid h-64 place-items-center text-center p-6">
-                            <div>
-                              <FileText className="mx-auto text-[color:var(--accent)]" size={32} />
-                              <p className="mt-3 font-semibold text-[color:var(--text)]">Preview unavailable</p>
-                              <p className="mt-1 text-sm text-[color:var(--secondary)]">Open the uploaded file to review it.</p>
-                            </div>
-                          </div>
-                    }
-                  </div>
+                  {!selectedSub.file_urls?.[0] && (
+                    <div className="mt-4 grid h-40 place-items-center rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
+                      <div>
+                        <FileText className="mx-auto text-[color:var(--accent)]" size={30} />
+                        <p className="mt-3 text-sm text-[color:var(--secondary)]">No file attached to this submission.</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Submission metadata */}
                 <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                   <p className="font-semibold text-[color:var(--text)]">Submission Info</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <IR label="Report Period" value={`Report ${selectedSub.report_period}`} />
-                    <IR label="Version"       value={`v${selectedSub.title_version || 1}`} />
+                    <IR label="Type"          value={(selectedSub.submission_type || '—').replaceAll('_', ' ')} />
+                    <IR label="Version"       value={`v${selectedSub.version || 1}`} />
                     <IR label="Status"        value={<StatusBadge status={selectedSub.status} />} />
                     <IR label="Submitted"     value={formatDate(selectedSub.submitted_at)} />
                   </div>

@@ -1,6 +1,6 @@
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { ArrowRight, CheckCircle2, Clock3, FileText, Info, Paperclip, UploadCloud, X } from 'lucide-react'
+import { ArrowRight, FileText, Info, Paperclip, UploadCloud, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { useSearchParams } from 'react-router-dom'
@@ -48,7 +48,7 @@ export default function SubmitPage() {
   })
 
   const title = editor?.getText().trim() || ''
-  const validTitle = title.length >= 20 && title.length <= 200
+  const validTitle = title.length >= 3 && title.length <= 200
   const canSubmit = validTitle && file && !submitting && !(assignment && assignment.my_submission_id)
 
   const submit = async () => {
@@ -92,8 +92,8 @@ export default function SubmitPage() {
   return (
     <div className="fade-page">
       <PageHeader
-        title="Submit Title & Presentation"
-        subtitle="Prepare a clean research title and upload your presentation for the approval chain."
+        title="Submit Progress Report"
+        subtitle="Give your report a clear title and upload the file for institute review."
         action={<button className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--secondary)]">Save Draft</button>}
       />
 
@@ -122,8 +122,8 @@ export default function SubmitPage() {
             <div className="border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-5">
               <div className="safe-row">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--muted)]">Research Title</p>
-                  <p className="mt-1 text-sm text-[color:var(--secondary)]">Use a specific, measurable title. Keep it between 20 and 200 characters.</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--muted)]">Report Title</p>
+                  <p className="mt-1 text-sm text-[color:var(--secondary)]">Use a clear title, e.g. "Progress Report 1". Keep it between 3 and 200 characters.</p>
                 </div>
                 <StatusBadge status={validTitle ? 'approved' : 'draft'} />
               </div>
@@ -147,8 +147,8 @@ export default function SubmitPage() {
           <div className="card p-5 md:p-7">
             <div className="safe-row items-start">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--muted)]">Presentation Upload</p>
-                <h2 className="mt-2 text-xl font-semibold text-[color:var(--text)]">Attach your presentation file</h2>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--muted)]">Report Upload</p>
+                <h2 className="mt-2 text-xl font-semibold text-[color:var(--text)]">Attach your report file</h2>
               </div>
               <Paperclip className="text-[color:var(--accent)]" size={22} />
             </div>
@@ -163,7 +163,7 @@ export default function SubmitPage() {
                   <UploadCloud size={28} />
                 </div>
                 <p className="mt-4 text-lg font-semibold text-[color:var(--text)]">{isDragActive ? 'Drop it here' : 'Drop your file here or click to upload'}</p>
-                <p className="mt-1 text-sm text-[color:var(--secondary)]">Supported: PDF, PPT, PPTX, MP4. Max 100MB.</p>
+                <p className="mt-1 text-sm text-[color:var(--secondary)]">Supported: PDF, PPT, PPTX. Max 25MB.</p>
               </div>
             </div>
 
@@ -184,24 +184,13 @@ export default function SubmitPage() {
 
         <aside className="space-y-6">
           <div className="card p-6">
-            <h2 className="text-lg font-semibold text-[color:var(--text)]">Approval Chain</h2>
-            <div className="mt-5 space-y-4">
-              <Step icon={Clock3} title="Coordinator Review" subtitle="Initial scope and title check" />
-              {(!assignment || assignment.is_mandatory) && (
-                <>
-                  <Step icon={CheckCircle2} title="Academic Guide" subtitle="Academic rigor review" />
-                  <Step icon={CheckCircle2} title="Industry Mentor" subtitle="Practice relevance review" />
-                </>
-              )}
-              {assignment && !assignment.is_mandatory && (
-                <p className="rounded-2xl bg-[color:var(--surface)] px-3 py-2 text-xs text-[color:var(--secondary)]">
-                  Optional assignment — only coordinator approval is required.
-                </p>
-              )}
-            </div>
+            <h2 className="text-lg font-semibold text-[color:var(--text)]">Review</h2>
+            <p className="mt-3 text-sm leading-6 text-[color:var(--secondary)]">
+              Your report will be reviewed per your batch's approval workflow.
+            </p>
             <div className="mt-5 rounded-3xl bg-[color:var(--accent-tint)] p-4 text-sm leading-6 text-[color:var(--secondary)]">
               <Info size={16} className="mb-2 text-[color:var(--accent)]" />
-              You can save a draft anytime. Submit only when your title and file are ready for review.
+              Submit only when your title and file are ready for review.
             </div>
           </div>
 
@@ -212,7 +201,7 @@ export default function SubmitPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="px-2">
             <p className="text-sm font-semibold text-[color:var(--text)]">Ready to submit?</p>
-            <p className="text-xs text-[color:var(--secondary)]">{validTitle ? 'Title looks good' : 'Title must be 20-200 characters'} · {file ? 'File attached' : 'Attach a presentation file'}</p>
+            <p className="text-xs text-[color:var(--secondary)]">{validTitle ? 'Title looks good' : 'Title must be 3-200 characters'} · {file ? 'File attached' : 'Attach a report file'}</p>
           </div>
           <div className="safe-actions">
             <button className="h-11 rounded-[14px] bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]">Save Draft</button>
@@ -227,7 +216,7 @@ export default function SubmitPage() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4 backdrop-blur-sm">
           <div className="card w-full max-w-lg p-7">
             <h2 className="text-2xl font-semibold text-[color:var(--text)]">Confirm submission</h2>
-            <p className="mt-3 text-sm leading-6 text-[color:var(--secondary)]">Your submission will go through Coordinator Review, Academic Guide, and Industry Mentor approval.</p>
+            <p className="mt-3 text-sm leading-6 text-[color:var(--secondary)]">Your report will be sent for review per your batch's approval workflow.</p>
             <div className="safe-actions mt-6 justify-end">
               <button className="h-11 rounded-[14px] bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setConfirm(false)}>Cancel</button>
               <button className="btn-primary" onClick={submit} disabled={submitting}>{submitting ? 'Submitting...' : 'Confirm Submission'}</button>
@@ -235,20 +224,6 @@ export default function SubmitPage() {
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-function Step({ icon: Icon, title, subtitle }) {
-  return (
-    <div className="flex gap-3">
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--accent-tint)] text-[color:var(--accent)]">
-        <Icon size={17} />
-      </div>
-      <div className="min-w-0">
-        <p className="font-semibold text-[color:var(--text)]">{title}</p>
-        <p className="text-sm text-[color:var(--secondary)]">{subtitle}</p>
-      </div>
     </div>
   )
 }

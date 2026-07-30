@@ -1,72 +1,109 @@
 import { useEffect, useState } from 'react'
-import { generateProgressReportPDF, getProgressReportByStudent } from '../../api/services/progressReportService.js'
+import { Link } from 'react-router-dom'
+import { UploadCloud, FileText } from 'lucide-react'
+import { getSubmissionsByStudent } from '../../api/services/submissionService.js'
+import { getApprovalsBySubmission } from '../../api/services/approvalService.js'
+import { getProgressReportByStudent } from '../../api/services/progressReportService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
+import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
+import { formatDate } from '../../lib/formatters.js'
 import { useAuthStore } from '../../store/authStore.js'
-import { useUiStore } from '../../store/uiStore.js'
 
 export default function ProgressPage() {
-  const [reports, setReports] = useState(null)
-  const [tab, setTab] = useState(0)
-  const addToast = useUiStore((s) => s.addToast)
   const currentUser = useAuthStore((s) => s.currentUser)
-  useEffect(() => { if (currentUser?.id) getProgressReportByStudent(currentUser.id).then((r) => setReports(r.data)) }, [currentUser])
-  if (!reports) return <SkeletonCard />
-  if (!reports.length) return (
-    <div className="fade-page">
-      <PageHeader title="Progress Reports" />
-      <div className="card p-6 text-center text-[color:var(--secondary)]">No progress reports available yet.</div>
-    </div>
-  )
-  const r = reports[Math.min(tab, reports.length - 1)]
+  const [reports, setReports] = useState(null)
+  const [modules, setModules] = useState([])
+
+  useEffect(() => {
+    if (!currentUser?.id) return
+    // Primary: the scholar's progress-report submissions + their institute feedback.
+    getSubmissionsByStudent(currentUser.id).then(async (r) => {
+      const prs = (r.data || []).filter((s) => s.submission_type === 'progress_report')
+      const withFeedback = await Promise.all(prs.map(async (s) => {
+        let approvals = []
+        try { approvals = (await getApprovalsBySubmission(s.id)).data || [] } catch { /* feedback is non-fatal */ }
+        return { ...s, approvals }
+      }))
+      setReports(withFeedback)
+    }).catch(() => setReports([]))
+    // Secondary: module-completion tracker (retained — also used by admin views).
+    getProgressReportByStudent(currentUser.id).then((r) => setModules(r.data || [])).catch(() => setModules([]))
+  }, [currentUser])
+
+  if (!reports) return <SkeletonCard rows={5} />
 
   return (
     <div className="fade-page">
-      <PageHeader title="Progress Reports" />
-      <div className="mobile-filter-scroll mb-5 flex gap-2">
-        {reports.map((_, i) => (
-          <button className={`mobile-compact-button shrink-0 rounded-full px-4 py-2 ${tab === i ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)]'}`} onClick={() => setTab(i)} key={i}>Report {i + 1}</button>
-        ))}
-      </div>
-      <div className="card p-6">
-        <div className="safe-row items-start">
-          <h2 className="text-xl font-semibold text-[color:var(--text)]">{r.period_label}</h2>
-          <StatusBadge status={r.status} />
-        </div>
-        <ProgressDonut value={r.completion_percentage} />
-        {r.submissions.map((s) => (
-          <div className="safe-row border-t border-[color:var(--border)] py-4" key={s.submission_id}>
-            <span className="line-clamp-2">{s.title}</span>
-            <StatusBadge status={s.final_status} />
-          </div>
-        ))}
-        <button className="btn-primary mt-6" onClick={async () => { await generateProgressReportPDF(r.id); addToast({ type: 'success', title: 'PDF generated' }) }}>Download PDF</button>
-      </div>
-    </div>
-  )
-}
-
-function ProgressDonut({ value }) {
-  const radius = 42
-  const circumference = 2 * Math.PI * radius
-  const offset = circumference - (value / 100) * circumference
-  return (
-    <svg viewBox="0 0 120 120" className="my-6 h-40 max-w-full">
-      <circle cx="60" cy="60" r={radius} fill="none" stroke="var(--surface-strong)" strokeWidth="16" />
-      <circle
-        cx="60"
-        cy="60"
-        r={radius}
-        fill="none"
-        stroke="#36B37E"
-        strokeWidth="16"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-        transform="rotate(-90 60 60)"
+      <PageHeader
+        title="Progress Reports"
+        subtitle="Upload your progress reports and track institute feedback."
+        action={
+          <Link to="/student/submit" className="btn-primary inline-flex items-center gap-2">
+            <UploadCloud size={16} /> Upload Progress Report
+          </Link>
+        }
       />
-      <text x="60" y="65" textAnchor="middle" fontSize="18" fontWeight="600" fill="var(--text)">{value}%</text>
-    </svg>
+
+      {reports.length === 0 ? (
+        <div className="card grid place-items-center p-10 text-center">
+          <div>
+            <FileText className="mx-auto text-[color:var(--accent)]" size={30} />
+            <p className="mt-3 text-[color:var(--secondary)]">No progress reports yet — click Upload Progress Report to add one.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {reports.map((s) => {
+            const feedback = (s.approvals || []).filter((a) => a.comments)
+            const file = Array.isArray(s.file_urls) ? s.file_urls[0] : null
+            return (
+              <div className="card p-6" key={s.id}>
+                <div className="safe-row items-start">
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold text-[color:var(--text)]">{s.title}</h2>
+                    <p className="mt-1 text-xs text-[color:var(--secondary)]">Submitted {formatDate(s.submitted_at)}</p>
+                  </div>
+                  <StatusBadge status={s.status} />
+                </div>
+                {file && (
+                  <div className="mt-4 flex items-center gap-3">
+                    <span className="truncate text-sm text-[color:var(--secondary)]">{file.name}</span>
+                    <SubmissionFileLink file={file} />
+                  </div>
+                )}
+                {feedback.length > 0 && (
+                  <div className="mt-4 rounded-2xl bg-[color:var(--surface)] p-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">Institute Feedback</p>
+                    {feedback.map((a) => (
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]" key={a.id}>{a.comments}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Secondary — module completion (kept for continuity with the admin views) */}
+      {modules.length > 0 && (
+        <div className="mt-8">
+          <h3 className="text-sm font-bold uppercase tracking-wide text-[color:var(--muted)]">Module Completion</h3>
+          <div className="mt-3 space-y-2">
+            {modules.map((m) => (
+              <div className="card flex items-center justify-between p-4" key={m.id}>
+                <span className="truncate text-sm font-medium text-[color:var(--text)]">{m.module_name || m.period_label || 'Module'}</span>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="text-sm text-[color:var(--secondary)]">{m.completion_percentage ?? 0}%</span>
+                  <StatusBadge status={m.status || 'in_progress'} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
