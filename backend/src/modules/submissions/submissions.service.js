@@ -1,7 +1,7 @@
 import { query, getClient } from '../../config/database.js';
 import { notifyStageOpened } from '../notifications/notify.service.js';
 
-export const listSubmissions = async ({ batch_id, student_user_id, status, allowed_batch_ids, limit, offset }) => {
+export const listSubmissions = async ({ batch_id, assignment_id, student_user_id, status, search, allowed_batch_ids, limit, offset }) => {
   const params = [];
   const conditions = [];
   if (batch_id) { params.push(batch_id); conditions.push(`s.batch_id=$${params.length}`); }
@@ -9,8 +9,13 @@ export const listSubmissions = async ({ batch_id, student_user_id, status, allow
     params.push(allowed_batch_ids);
     conditions.push(`s.batch_id = ANY($${params.length}::uuid[])`);
   }
+  if (assignment_id) { params.push(assignment_id); conditions.push(`s.assignment_id=$${params.length}`); }
   if (student_user_id) { params.push(student_user_id); conditions.push(`s.student_user_id=$${params.length}`); }
   if (status) { params.push(status); conditions.push(`s.status=$${params.length}`); }
+  if (search?.trim()) {
+    params.push(`%${search.trim()}%`);
+    conditions.push(`(u.first_name ILIKE $${params.length} OR u.last_name ILIKE $${params.length} OR u.email ILIKE $${params.length} OR s.title ILIKE $${params.length})`);
+  }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const { rows: data } = await query(
     `SELECT s.*, u.first_name, u.last_name, u.email, b.name as batch_name,
@@ -22,7 +27,10 @@ export const listSubmissions = async ({ batch_id, student_user_id, status, allow
      ${where} ORDER BY s.created_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
     [...params, limit, offset]
   );
-  const { rows: [{ total }] } = await query(`SELECT COUNT(*) AS total FROM submissions s ${where}`, params);
+  const { rows: [{ total }] } = await query(
+    `SELECT COUNT(*) AS total FROM submissions s JOIN users u ON u.id=s.student_user_id ${where}`,
+    params
+  );
   return { data, total: parseInt(total) };
 };
 
@@ -60,6 +68,23 @@ export const isStudentEnrolledInBatch = async (studentUserId, batchId) => {
     [studentUserId, batchId]
   );
   return rows.length > 0;
+};
+
+/**
+ * Look up an actively-enrolled student in a given batch by email. Used by the
+ * admin bulk-import flow to resolve each Excel row to a real account without
+ * ever trusting a client-supplied user id — the match is server-side only.
+ */
+export const findEnrolledStudentByEmail = async (email, batchId) => {
+  const { rows: [row] } = await query(
+    `SELECT u.id, u.first_name, u.last_name, u.email
+     FROM users u
+     JOIN batch_enrollments be ON be.user_id = u.id
+     WHERE LOWER(u.email) = LOWER($1) AND be.batch_id = $2 AND be.status = 'active'
+     LIMIT 1`,
+    [email, batchId]
+  );
+  return row || null;
 };
 
 /**
@@ -104,6 +129,32 @@ export const createSubmissionOnBehalf = async (payload, adminUserId) => {
     payload.student_user_id,
     adminUserId
   );
+};
+
+/**
+ * Admin bulk-import: create one assignment submission on behalf of a student
+ * from a single (already-validated) Excel row — a link to the student's
+ * already-hosted file, never a re-uploaded file — then immediately run it
+ * through the normal submit-for-review flow, exactly as if the student had
+ * clicked Submit themselves. Reuses createSubmission's built-in one-per-
+ * assignment duplicate guard, so re-running the same sheet safely skips rows
+ * that already have a submission instead of creating duplicates.
+ */
+export const createAndSubmitAssignmentSubmission = async (assignment, studentUserId, file, adminUserId) => {
+  const submission = await createSubmission(
+    {
+      batch_id: assignment.batch_id,
+      assignment_id: assignment.id,
+      title: assignment.title,
+      submission_type: 'assignment',
+      semester: assignment.semester || 1,
+      content: file.notes || null,
+      file_urls: [{ name: file.name || 'Submission', url: file.url }],
+    },
+    studentUserId,
+    adminUserId
+  );
+  return submitForReview(submission.id, studentUserId, adminUserId);
 };
 
 export const updateSubmission = async (id, payload) => {

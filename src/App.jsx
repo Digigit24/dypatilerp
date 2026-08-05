@@ -28,6 +28,7 @@ import LecturePlayerPage from './pages/student/LecturePlayerPage.jsx'
 import MediaManagerPage from './pages/admin/MediaManagerPage.jsx'
 import FormatsPage from './pages/admin/FormatsPage.jsx'
 import AssignmentsPage from './pages/admin/AssignmentsPage.jsx'
+import AdminSubmissionsPage from './pages/admin/SubmissionsPage.jsx'
 import AdminWizardPage from './pages/admin/AdminWizardPage.jsx'
 import StudentFormatsPage from './pages/student/FormatsPage.jsx'
 import StudentAssignmentsPage from './pages/student/AssignmentsPage.jsx'
@@ -124,6 +125,7 @@ export default function App() {
           <Route path="batches/students" element={<BatchStudentsPage />} />
           <Route path="batches/:batchId/students" element={<BatchStudentsPage />} />
           <Route path="approvals" element={<ApprovalsPage />} />
+          <Route path="submissions" element={<AdminSubmissionsPage />} />
           <Route path="fees" element={<FeesPage />} />
           <Route path="test-builder" element={<TestBuilderPage />} />
           <Route path="applicants/:applicantId/test-results" element={<ApplicantTestResultsPage />} />

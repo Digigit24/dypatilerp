@@ -8,10 +8,11 @@
  */
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requirePermission, scopeBatchSQL } from '../../middleware/rbac.js';
+import { requirePermission, requireRole, scopeBatchSQL } from '../../middleware/rbac.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { ok, created, notFound } from '../../utils/response.js';
+import { ok, created, notFound, badRequest } from '../../utils/response.js';
 import { query } from '../../config/database.js';
+import { createAndSubmitAssignmentSubmission, findEnrolledStudentByEmail } from '../submissions/submissions.service.js';
 
 const router = Router();
 router.use(authenticate);
@@ -118,6 +119,72 @@ router.get('/:id/submissions', requirePermission('assignments', 'read'), asyncHa
     [req.params.id]
   );
   ok(res, rows);
+}));
+
+/**
+ * POST /assignments/:id/submissions/bulk-import
+ * Admin bulk-uploads assignment submissions from a mapped Excel/CSV (the
+ * frontend import wizard parses the file client-side and sends clean JSON
+ * rows here — no raw file ever hits this endpoint). Each row needs:
+ *   - email     — must match an actively-enrolled student in this
+ *                 assignment's batch
+ *   - file_url  — a link (Drive/Dropbox/etc.) to the student's already-
+ *                 hosted file
+ *   - file_name — optional display name
+ *   - notes     — optional, stored as the submission's content
+ * Every matched row is created AND immediately submitted for review — the
+ * exact same approval chain a self-submit would trigger. One bad row never
+ * blocks the rest; per-row failures come back in `errors` so the admin can
+ * fix just those rows and re-upload (duplicates are safely skipped, not
+ * re-created, thanks to the one-submission-per-assignment guard).
+ */
+router.post('/:id/submissions/bulk-import', requireRole('admin'), asyncHandler(async (req, res) => {
+  const { rows: [assignment] } = await query('SELECT * FROM assignments WHERE id=$1', [req.params.id]);
+  if (!assignment) return notFound(res, 'Assignment not found');
+
+  const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
+  if (!rows.length) return badRequest(res, 'No rows provided');
+  if (rows.length > 2000) return badRequest(res, 'Max 2000 rows per import');
+
+  let imported = 0;
+  let skipped = 0;
+  const errors = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const rowNum = i + 1;
+    const email = (r.email || '').trim().toLowerCase();
+    const fileUrl = (r.file_url || '').trim();
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.push({ row: rowNum, email: r.email || '—', error: 'Missing or invalid email' });
+      skipped++; continue;
+    }
+    if (!fileUrl || !/^https?:\/\//i.test(fileUrl)) {
+      errors.push({ row: rowNum, email, error: 'Missing or invalid file link (must start with http:// or https://)' });
+      skipped++; continue;
+    }
+
+    try {
+      const student = await findEnrolledStudentByEmail(email, assignment.batch_id);
+      if (!student) {
+        errors.push({ row: rowNum, email, error: "No actively-enrolled student with this email in the assignment's batch" });
+        skipped++; continue;
+      }
+      await createAndSubmitAssignmentSubmission(
+        assignment,
+        student.id,
+        { name: r.file_name?.trim() || undefined, url: fileUrl, notes: r.notes?.trim() || undefined },
+        req.user.id
+      );
+      imported++;
+    } catch (err) {
+      errors.push({ row: rowNum, email, error: err.message || 'Failed to create submission' });
+      skipped++;
+    }
+  }
+
+  ok(res, { imported, skipped, errors, total: rows.length }, `Imported ${imported} submission(s)`);
 }));
 
 export default router;

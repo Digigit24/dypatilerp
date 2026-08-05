@@ -3,13 +3,15 @@
  * mandatory/optional approval depth. Grouped by semester for fast planning.
  */
 import {
-  CalendarDays, CheckCircle2, ClipboardList, Loader2, PenLine, Plus, Trash2, Users, XCircle,
+  CalendarDays, CheckCircle2, ClipboardList, Loader2, PenLine, Plus, Trash2, UploadCloud, Users, XCircle,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   createAssignment, deleteAssignment, getAssignments, updateAssignment,
 } from '../../api/services/assignmentService.js'
 import { getBatches } from '../../api/services/batchService.js'
+import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
+import { buildAssignmentSubmissionImportConfig } from '../../components/admin/assignmentSubmissionImportConfig.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import { useCourseStore } from '../../store/courseStore.js'
@@ -25,7 +27,8 @@ export default function AssignmentsPage() {
   const [batches, setBatches] = useState([])
   const [batchFilter, setBatchFilter] = useState('')
   const [drawer, setDrawer] = useState(null)  // null | { item? }
-  useScrollLock(!!drawer)
+  const [importFor, setImportFor] = useState(null)  // null | assignment object
+  useScrollLock(!!drawer || !!importFor)
 
   const load = () => {
     if (!currentCourse?.id) { setItems([]); return }
@@ -132,6 +135,13 @@ export default function AssignmentsPage() {
                       className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${a.is_published ? 'bg-emerald-100 text-emerald-700' : 'bg-[color:var(--surface)] text-[color:var(--muted)]'}`}>
                       {a.is_published ? 'Published' : 'Hidden'}
                     </button>
+                    <button
+                      className="inline-flex h-7 items-center gap-1.5 rounded-full bg-[color:var(--accent-tint)] px-3 text-[11px] font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white"
+                      onClick={() => setImportFor(a)}
+                      title="Bulk-upload submissions from an Excel/CSV sheet"
+                    >
+                      <UploadCloud size={12} /> Bulk Upload
+                    </button>
                     <div className="flex gap-0.5 opacity-0 transition group-hover:opacity-100">
                       <button className="grid h-7 w-7 place-items-center rounded-full text-[color:var(--secondary)] hover:bg-[color:var(--surface)]" onClick={() => setDrawer({ item: a })} title="Edit"><PenLine size={13} /></button>
                       <button className="grid h-7 w-7 place-items-center rounded-full text-[color:var(--muted)] hover:bg-red-50 hover:text-red-500" onClick={() => handleDelete(a)} title="Delete"><Trash2 size={13} /></button>
@@ -152,6 +162,14 @@ export default function AssignmentsPage() {
           defaultBatch={batchFilter}
           onClose={(changed) => { setDrawer(null); if (changed) load() }}
           addToast={addToast}
+        />
+      )}
+
+      {importFor && (
+        <ImportDrawer
+          config={buildAssignmentSubmissionImportConfig(importFor)}
+          onClose={() => setImportFor(null)}
+          onImported={load}
         />
       )}
     </div>

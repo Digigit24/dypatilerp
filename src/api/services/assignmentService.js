@@ -39,3 +39,14 @@ export const getAssignmentSubmissions = async (id) => {
   const { data: res } = await http.get(`/assignments/${id}/submissions`)
   return ok(res.data)
 }
+
+/**
+ * Admin: bulk-create + submit assignment submissions from the mapped JSON
+ * rows produced by the import wizard. Each row is { email, file_url,
+ * file_name?, notes? } — see assignmentSubmissionImportConfig.js.
+ */
+export const bulkImportAssignmentSubmissions = async (assignmentId, rows) => {
+  if (USE_MOCK) return ok({ imported: rows.length, skipped: 0, errors: [], total: rows.length })
+  const { data: res } = await http.post(`/assignments/${assignmentId}/submissions/bulk-import`, { rows })
+  return ok(res.data)
+}

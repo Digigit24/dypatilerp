@@ -1,4 +1,4 @@
-import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Search, Settings, Shield, Sun, UserCog, Users, Wand2 } from 'lucide-react'
+import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, ListChecks, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Search, Settings, Shield, Sun, UserCog, Users, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -84,6 +84,7 @@ export default function AdminLayout() {
       title: 'ACADEMIC',
       items: [
         { to: '/admin/assignments', label: 'Assignments', icon: ClipboardCheck, perm: 'assignments' },
+        { to: '/admin/submissions', label: 'Submissions', icon: ListChecks, perm: 'submissions' },
         { to: '/admin/approvals', label: 'Approvals', icon: ClipboardCheck, perm: 'approvals' },
         { to: '/admin/fees',      label: 'Fees',      icon: IndianRupee, perm: 'fees' },
       ],
