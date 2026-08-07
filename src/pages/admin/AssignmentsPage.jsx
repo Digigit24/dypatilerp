@@ -3,7 +3,7 @@
  * mandatory/optional approval depth. Grouped by semester for fast planning.
  */
 import {
-  CalendarDays, CheckCircle2, ClipboardList, Loader2, PenLine, Plus, Trash2, UploadCloud, Users, XCircle,
+  CalendarDays, CheckCircle2, ClipboardList, Loader2, PenLine, Plus, Trash2, UploadCloud, UserPlus, Users, XCircle,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
@@ -12,6 +12,7 @@ import {
 import { getBatches } from '../../api/services/batchService.js'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
 import { buildAssignmentSubmissionImportConfig } from '../../components/admin/assignmentSubmissionImportConfig.js'
+import UploadAssignmentSubmissionModal from '../../components/admin/UploadAssignmentSubmissionModal.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import { useCourseStore } from '../../store/courseStore.js'
@@ -28,7 +29,8 @@ export default function AssignmentsPage() {
   const [batchFilter, setBatchFilter] = useState('')
   const [drawer, setDrawer] = useState(null)  // null | { item? }
   const [importFor, setImportFor] = useState(null)  // null | assignment object
-  useScrollLock(!!drawer || !!importFor)
+  const [uploadFor, setUploadFor] = useState(null)  // null | assignment object
+  useScrollLock(!!drawer || !!importFor || !!uploadFor)
 
   const load = () => {
     if (!currentCourse?.id) { setItems([]); return }
@@ -137,6 +139,13 @@ export default function AssignmentsPage() {
                     </button>
                     <button
                       className="inline-flex h-7 items-center gap-1.5 rounded-full bg-[color:var(--accent-tint)] px-3 text-[11px] font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white"
+                      onClick={() => setUploadFor(a)}
+                      title="Upload a presentation/report and submit on behalf of one student"
+                    >
+                      <UserPlus size={12} /> Upload for Student
+                    </button>
+                    <button
+                      className="inline-flex h-7 items-center gap-1.5 rounded-full bg-[color:var(--accent-tint)] px-3 text-[11px] font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white"
                       onClick={() => setImportFor(a)}
                       title="Bulk-upload submissions from an Excel/CSV sheet"
                     >
@@ -170,6 +179,14 @@ export default function AssignmentsPage() {
           config={buildAssignmentSubmissionImportConfig(importFor)}
           onClose={() => setImportFor(null)}
           onImported={load}
+        />
+      )}
+
+      {uploadFor && (
+        <UploadAssignmentSubmissionModal
+          assignment={uploadFor}
+          onClose={() => setUploadFor(null)}
+          onUploaded={load}
         />
       )}
     </div>

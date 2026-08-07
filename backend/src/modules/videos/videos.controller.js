@@ -405,7 +405,7 @@ export const uploadSubmissionAttachment = asyncHandler(async (req, res) => {
   if (!sub) return notFound(res, 'Submission not found');
   const isAdmin = req.user.roles?.includes('admin');
   if (sub.student_user_id !== req.user.id && !isAdmin) return forbidden(res);
-  if (sub.submission_type !== 'progress_report') return badRequest(res, 'Attachments are only supported for progress reports');
+  if (!['progress_report', 'assignment'].includes(sub.submission_type)) return badRequest(res, 'Attachments are only supported for progress reports and assignments');
   if (sub.status !== 'draft') return badRequest(res, 'Files can only be attached to a draft submission');
 
   // 2. Stream-parse the multipart body to a temp file (never buffered in memory),
@@ -463,7 +463,7 @@ export const uploadSubmissionAttachment = asyncHandler(async (req, res) => {
         submission_id: sub.id,
         upload_status: 'ready',
         title: origName.replace(/\.[^.]+$/, ''),
-        description: `Progress-report file for submission ${sub.id}`,
+        description: `${sub.submission_type === 'assignment' ? 'Assignment' : 'Progress-report'} file for submission ${sub.id}`,
         object_key: objectKey,
         file_size: size,
         media_type: 'document',

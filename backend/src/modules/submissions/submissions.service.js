@@ -117,15 +117,31 @@ export const createSubmission = async (payload, ownerId, createdByUserId = null)
 /**
  * Admin-on-behalf create: owner = scholar, created_by = admin. Batch must be one
  * the scholar is actively enrolled in.
+ *
+ * When payload.assignment_id is supplied, this is an assignment submission —
+ * batch_id, title and semester are resolved from the assignment itself (the
+ * client only needs to say which scholar and which assignment), and the usual
+ * one-submission-per-assignment guard in createSubmission applies.
  */
 export const createSubmissionOnBehalf = async (payload, adminUserId) => {
-  const enrolled = await isStudentEnrolledInBatch(payload.student_user_id, payload.batch_id);
+  let { batch_id, title, submission_type, semester, assignment_id } = payload;
+
+  if (assignment_id) {
+    const { rows: [assignment] } = await query('SELECT * FROM assignments WHERE id=$1', [assignment_id]);
+    if (!assignment) throw Object.assign(new Error('Assignment not found'), { status: 404 });
+    batch_id = assignment.batch_id;
+    title = assignment.title;
+    semester = assignment.semester || 1;
+    submission_type = 'assignment';
+  }
+
+  const enrolled = await isStudentEnrolledInBatch(payload.student_user_id, batch_id);
   if (!enrolled) {
     throw Object.assign(new Error('Scholar is not actively enrolled in this batch.'), { status: 400 });
   }
   return createSubmission(
-    { batch_id: payload.batch_id, title: payload.title, submission_type: payload.submission_type,
-      semester: payload.semester, content: null, file_urls: [], assignment_id: null },
+    { batch_id, title, submission_type: submission_type || 'progress_report',
+      semester: semester || 1, content: null, file_urls: [], assignment_id: assignment_id || null },
     payload.student_user_id,
     adminUserId
   );

@@ -26,14 +26,20 @@ export const createSubmissionSchema = z.object({
 
 export const updateSubmissionSchema = createSubmissionSchema.partial().omit({ batch_id: true });
 
-// Admin uploads a progress report on behalf of a scholar. Owner is always the
-// scholar; the acting admin is recorded separately for audit.
+// Admin uploads a progress report OR an assignment submission on behalf of a
+// scholar. Owner is always the scholar; the acting admin is recorded separately
+// for audit. When assignment_id is supplied, batch_id/title/semester/
+// submission_type are all resolved server-side from the assignment — the
+// client only needs to say which scholar and which assignment.
 export const createSubmissionOnBehalfSchema = z.object({
   student_user_id: z.string().uuid(),
-  batch_id: z.string().uuid(),
-  title: z.string().min(2).max(500),
-  submission_type: z.literal('progress_report').default('progress_report'),
+  assignment_id: z.string().uuid().optional(),
+  batch_id: z.string().uuid().optional(),
+  title: z.string().min(2).max(500).optional(),
+  submission_type: z.enum(['progress_report', 'assignment']).default('progress_report'),
   semester: z.number().int().min(1).default(1),
+}).refine((b) => !!(b.assignment_id || (b.batch_id && b.title)), {
+  message: 'Either assignment_id, or batch_id and title, is required',
 });
 
 export const reviewActionSchema = z.object({
