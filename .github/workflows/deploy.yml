@@ -40,6 +40,7 @@ jobs:
                npm install && \
                VITE_API_URL=https://app.dyperf.com/api npm run build && \
                cp -r dist/* ../ && \
+               cp -r dist/* /home/divineblisspuna/public_html/postdoc.dyperf.com/ && \
                cd backend && \
                npm install && \
                pm2 restart dyperf-api --update-env && \
