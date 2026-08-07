@@ -13,7 +13,7 @@
  */
 import { FileText, Loader2, Presentation, Search, UploadCloud, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { getStudents } from '../../api/services/studentService.js'
+import { getBatchStudents } from '../../api/services/batchService.js'
 import { getAssignmentSubmissions } from '../../api/services/assignmentService.js'
 import {
   createSubmissionOnBehalf, submitForReviewOnBehalf, updateSubmission, uploadSubmissionAttachment,
@@ -33,12 +33,18 @@ export default function UploadAssignmentSubmissionModal({ assignment, onClose, o
 
   useEffect(() => {
     let alive = true
+    // Scoped to the assignment's own batch via the path param (GET
+    // /batches/:id/students) — NOT the generic /students list, which honours a
+    // global "current batch" header from the top course switcher and would
+    // silently show the wrong batch's roster if that selection differs from
+    // this assignment's batch. Filtered to active enrollments client-side
+    // since this endpoint returns every enrollment status.
     Promise.all([
-      getStudents({ batch_id: assignment.batch_id, status: 'active', limit: 500 }),
+      getBatchStudents(assignment.batch_id, { limit: 500 }),
       getAssignmentSubmissions(assignment.id),
     ]).then(([studentsRes, subsRes]) => {
       if (!alive) return
-      setStudents(studentsRes.data || [])
+      setStudents((studentsRes.data || []).filter((s) => s.status === 'active'))
       setSubmittedIds(new Set((subsRes.data || []).map((s) => s.student_user_id)))
     }).catch(() => { if (alive) setStudents([]) })
     return () => { alive = false }
