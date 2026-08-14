@@ -26,9 +26,20 @@ const ROLE_LABEL = {
 
 const STAFF_ROLES = ['admin', 'coordinator', 'academic_guide', 'industry_mentor']
 
+// Roles an admin can post a remark "as" — the author stays the admin, only
+// the displayed tag changes, so a coordinator/guide/mentor's feedback can be
+// recorded on their behalf when they're not the one typing it in.
+const POST_AS_OPTIONS = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'coordinator', label: 'Coordinator' },
+  { value: 'academic_guide', label: 'Academic Guide' },
+  { value: 'industry_mentor', label: 'Industry Mentor' },
+]
+
 export default function SubmissionRemarks({ submissionId, onCountChange }) {
   const [remarks, setRemarks] = useState(null)
   const [draft, setDraft] = useState('')
+  const [postAs, setPostAs] = useState('admin')
   const [busy, setBusy] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
   const currentUser = useAuthStore((s) => s.currentUser)
@@ -50,7 +61,7 @@ export default function SubmissionRemarks({ submissionId, onCountChange }) {
     if (!text || busy) return
     setBusy(true)
     try {
-      const r = await addSubmissionRemark(submissionId, text)
+      const r = await addSubmissionRemark(submissionId, text, isAdmin ? postAs : null)
       const next = [r.data, ...(remarks || [])]
       setRemarks(next)
       onCountChange?.(next.length)
@@ -85,7 +96,21 @@ export default function SubmissionRemarks({ submissionId, onCountChange }) {
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Add feedback or a remark for this report…"
           />
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            {isAdmin ? (
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-[color:var(--secondary)]">
+                Post as
+                <select
+                  className="input h-9 py-0 text-xs"
+                  value={postAs}
+                  onChange={(e) => setPostAs(e.target.value)}
+                >
+                  {POST_AS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </label>
+            ) : <span />}
             <button
               type="button"
               className="btn-primary inline-flex items-center gap-2 disabled:opacity-50"
@@ -96,6 +121,11 @@ export default function SubmissionRemarks({ submissionId, onCountChange }) {
               {busy ? 'Posting…' : 'Post Remark'}
             </button>
           </div>
+          {isAdmin && postAs !== 'admin' && (
+            <p className="mt-1.5 text-[11px] text-[color:var(--muted)]">
+              Posted under your name, tagged as {POST_AS_OPTIONS.find((o) => o.value === postAs)?.label} on their behalf.
+            </p>
+          )}
         </div>
       )}
 

@@ -1,18 +1,19 @@
 import {
-  CheckSquare, Download, ExternalLink, FileText, Filter, KeyRound,
+  CheckSquare, ClipboardList, Download, ExternalLink, FileText, Filter, KeyRound,
   Loader2, RotateCcw, Square, Trash2, Upload, Users, XCircle,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getApprovals } from '../../api/services/approvalService.js'
-import { getProgressReportByStudent } from '../../api/services/progressReportService.js'
-import { getSubmissionsByStudent } from '../../api/services/submissionService.js'
+import { getApprovalsBySubmission } from '../../api/services/approvalService.js'
+import { getProgressReportsByStudent, getSubmissionsByStudent } from '../../api/services/submissionService.js'
 import { archiveStudent, bulkStudentAction, exportStudents, getStudents } from '../../api/services/studentService.js'
 import { bulkSendCredentials, getUsers, sendCredentials } from '../../api/services/userService.js'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
+import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
+import SubmissionRemarks from '../../components/shared/SubmissionRemarks.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
@@ -52,8 +53,11 @@ export default function StudentsPage() {
   const sentinelRef      = useRef(null)
   const [users,          setUsers]          = useState([])
   const [selected,       setSelected]       = useState(null)        // row detail drawer
+  // 'full' shows the whole profile snapshot; 'submissions'/'progress' jump
+  // straight to that one section — used by the list columns' count links.
+  const [drawerMode,     setDrawerMode]     = useState('full')
   const [studentSubs,    setStudentSubs]    = useState([])
-  const [studentReports, setStudentReports] = useState([])
+  const [studentReports, setStudentReports] = useState([])           // uploaded progress-report submissions
   const [selectedSub,    setSelectedSub]    = useState(null)
   const [subApprovals,   setSubApprovals]   = useState([])
   const [statusFilter,   setStatusFilter]   = useState('all')
@@ -155,22 +159,32 @@ export default function StudentsPage() {
   const filtered = items || []
 
   // ── Row detail ────────────────────────────────────────────────────────────
-  const openStudent = async (student) => {
+  // student.id is the batch_enrollment row's own PK — NOT the user id. Every
+  // fetch keyed to "this scholar" must use student.user_id (as the rest of
+  // this file already does for archive/restore/credentials).
+  const openStudent = async (student, mode = 'full') => {
     setSelected(student)
+    setDrawerMode(mode)
     setSelectedSub(null)
+    setStudentSubs([])
     setStudentReports([])
     const [subs, reports] = await Promise.all([
-      getSubmissionsByStudent(student.id),
-      getProgressReportByStudent(student.id),
+      getSubmissionsByStudent(student.user_id),
+      getProgressReportsByStudent(student.user_id),
     ])
-    setStudentSubs(subs.data)
-    setStudentReports(reports.data)
+    setStudentSubs(subs.data || [])
+    setStudentReports(reports.data || [])
   }
 
   const openSubmission = async (sub) => {
     setSelectedSub(sub)
-    const approvalRes = await getApprovals()
-    setSubApprovals(approvalRes.data.filter((a) => a.submission_id === sub.id))
+    setSubApprovals([])
+    try {
+      const approvalRes = await getApprovalsBySubmission(sub.id)
+      setSubApprovals(approvalRes.data || [])
+    } catch {
+      setSubApprovals([])
+    }
   }
 
   // ── Bulk selection ────────────────────────────────────────────────────────
@@ -353,7 +367,7 @@ export default function StudentsPage() {
 
         {/* ── Table ── */}
         <div className="overflow-x-auto">
-          <table className="min-w-[900px] w-full text-left text-sm">
+          <table className="min-w-[1180px] w-full text-left text-sm">
             <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
               <tr>
                 {/* Checkbox select-all */}
@@ -370,7 +384,7 @@ export default function StudentsPage() {
                         : <Square size={18} />}
                   </button>
                 </th>
-                {['Name', 'Permanent ID', 'Batch', 'Enrolled', 'Progress', 'Status'].map((h) => (
+                {['Name', 'Permanent ID', 'Batch', 'Enrolled', 'Progress', 'Submissions', 'Progress Reports', 'Status'].map((h) => (
                   <th key={h} className="px-6 py-4">{h}</th>
                 ))}
                 <th className="px-6 py-4 text-right">Actions</th>
@@ -379,7 +393,7 @@ export default function StudentsPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-16 text-center text-sm text-[color:var(--muted)]">
+                  <td colSpan={10} className="px-6 py-16 text-center text-sm text-[color:var(--muted)]">
                     <Users className="mx-auto mb-3 text-[color:var(--border)]" size={32} />
                     No students found.
                   </td>
@@ -428,6 +442,26 @@ export default function StudentsPage() {
                           {s.progress_summary?.completion_percentage ?? 0}%
                         </span>
                       </div>
+                    </td>
+                    <td className="px-6" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-[color:var(--secondary)] transition hover:bg-[color:var(--accent-tint)] hover:text-[color:var(--accent)]"
+                        onClick={() => openStudent(s, 'submissions')}
+                        title="View this scholar's submissions"
+                      >
+                        <FileText size={13} /> {s.submissions_count ?? 0}
+                      </button>
+                    </td>
+                    <td className="px-6" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-[color:var(--secondary)] transition hover:bg-[color:var(--accent-tint)] hover:text-[color:var(--accent)]"
+                        onClick={() => openStudent(s, 'progress')}
+                        title="View this scholar's progress reports"
+                      >
+                        <ClipboardList size={13} /> {s.progress_reports_count ?? 0}
+                      </button>
                     </td>
                     <td className="px-6"><StatusBadge status={s.status} /></td>
                     <td className="px-6 text-right" onClick={(e) => e.stopPropagation()}>
@@ -550,6 +584,11 @@ export default function StudentsPage() {
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Student Details</p>
                 <h2 className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{nameOf(selected)}</h2>
                 <p className="mt-1 text-sm text-[color:var(--secondary)]">{selected.permanent_id} · {emailOf(selected)}</p>
+                {drawerMode !== 'full' && (
+                  <span className="mt-2 inline-flex items-center rounded-full bg-[color:var(--accent-tint)] px-3 py-1 text-xs font-semibold text-[color:var(--accent)]">
+                    {drawerMode === 'submissions' ? 'Submissions' : 'Progress Reports'}
+                  </span>
+                )}
               </div>
               <button
                 className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)]"
@@ -560,68 +599,88 @@ export default function StudentsPage() {
             </div>
 
             <div className="flex-1 overflow-auto overscroll-contain p-6 space-y-5">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Info label="Batch"    value={selected.batch_name || selected.batch_id} />
-                <Info label="Status"   value={<StatusBadge status={selected.status} />} />
-                <Info label="Enrolled" value={formatDate(selected.enrolled_at)} />
-                <Info label="Progress" value={`${selected.progress_summary?.completion_percentage ?? 0}%`} />
-              </div>
-
-              <div className="rounded-3xl bg-[color:var(--surface)] p-5">
-                <p className="font-semibold text-[color:var(--text)]">Profile</p>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]">
-                  {selected.profile?.bio || 'No bio available.'}
-                </p>
-              </div>
-
-              <div>
-                <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Submissions</p>
-                {studentSubs.length === 0
-                  ? <p className="text-sm text-[color:var(--secondary)]">No submissions found.</p>
-                  : <div className="space-y-2">
-                    {studentSubs.map((sub) => (
-                      <button
-                        key={sub.id}
-                        className="w-full rounded-3xl border border-[color:var(--border)] p-4 text-left transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
-                        onClick={() => openSubmission(sub)}
-                      >
-                        <div className="safe-row items-start">
-                          <p className="line-clamp-2 text-sm font-semibold text-[color:var(--text)]">{sub.title}</p>
-                          <StatusBadge status={sub.status} />
-                        </div>
-                        <p className="mt-1 text-xs text-[color:var(--secondary)]">Report {sub.report_period} · {formatDate(sub.submitted_at)}</p>
-                      </button>
-                    ))}
+              {drawerMode === 'full' && (
+                <>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Info label="Batch"    value={selected.batch_name || selected.batch_id} />
+                    <Info label="Status"   value={<StatusBadge status={selected.status} />} />
+                    <Info label="Enrolled" value={formatDate(selected.enrolled_at)} />
+                    <Info label="Progress" value={`${selected.progress_summary?.completion_percentage ?? 0}%`} />
                   </div>
-                }
-              </div>
 
-              <div>
-                <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Progress Reports</p>
-                {studentReports.length === 0
-                  ? <p className="text-sm text-[color:var(--secondary)]">No progress reports yet.</p>
-                  : <div className="space-y-2">
-                    {studentReports.map((r) => (
-                      <div key={r.id} className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
-                        <div className="safe-row items-start">
-                          <div>
-                            <p className="text-sm font-semibold text-[color:var(--text)]">{r.period_label}</p>
-                            <p className="mt-0.5 text-xs text-[color:var(--secondary)]">{r.total_submissions} submissions · {r.approved_count} approved</p>
-                          </div>
-                          <StatusBadge status={r.status} />
-                        </div>
-                        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-[color:var(--border)]">
-                          <div
-                            className={`h-full rounded-full ${r.status === 'overdue' ? 'bg-orange-500' : r.status === 'completed' ? 'bg-emerald-500' : 'bg-[color:var(--accent)]'}`}
-                            style={{ width: `${r.completion_percentage}%` }}
-                          />
-                        </div>
-                        <p className="mt-1.5 text-right text-xs font-semibold text-[color:var(--secondary)]">{r.completion_percentage}%</p>
-                      </div>
-                    ))}
+                  <div className="rounded-3xl bg-[color:var(--surface)] p-5">
+                    <p className="font-semibold text-[color:var(--text)]">Profile</p>
+                    <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]">
+                      {selected.profile?.bio || 'No bio available.'}
+                    </p>
                   </div>
-                }
-              </div>
+                </>
+              )}
+
+              {(drawerMode === 'full' || drawerMode === 'submissions') && (
+                <div>
+                  <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Submissions</p>
+                  {studentSubs.length === 0
+                    ? <p className="text-sm text-[color:var(--secondary)]">No submissions found.</p>
+                    : <div className="space-y-2">
+                      {studentSubs.map((sub) => {
+                        const fileCount = Array.isArray(sub.file_urls) ? sub.file_urls.length : 0
+                        return (
+                          <button
+                            key={sub.id}
+                            className="w-full rounded-3xl border border-[color:var(--border)] p-4 text-left transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
+                            onClick={() => openSubmission(sub)}
+                          >
+                            <div className="safe-row items-start">
+                              <p className="line-clamp-2 text-sm font-semibold text-[color:var(--text)]">{sub.title}</p>
+                              <StatusBadge status={sub.status} />
+                            </div>
+                            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--secondary)]">
+                              <span className="capitalize">{(sub.submission_type || '').replaceAll('_', ' ')}</span>
+                              <span>Semester {sub.semester || 1}</span>
+                              <span>{fileCount} file{fileCount === 1 ? '' : 's'}</span>
+                              {sub.remarks_count > 0 && <span>{sub.remarks_count} remark{sub.remarks_count === 1 ? '' : 's'}</span>}
+                              <span>{formatDate(sub.submitted_at)}</span>
+                            </p>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  }
+                </div>
+              )}
+
+              {(drawerMode === 'full' || drawerMode === 'progress') && (
+                <div>
+                  <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Progress Reports</p>
+                  {studentReports.length === 0
+                    ? <p className="text-sm text-[color:var(--secondary)]">No progress reports yet.</p>
+                    : <div className="space-y-2">
+                      {studentReports.map((r) => {
+                        const fileCount = Array.isArray(r.file_urls) ? r.file_urls.length : 0
+                        return (
+                          <button
+                            key={r.id}
+                            className="w-full rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 text-left transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
+                            onClick={() => openSubmission(r)}
+                          >
+                            <div className="safe-row items-start">
+                              <p className="line-clamp-2 text-sm font-semibold text-[color:var(--text)]">{r.title}</p>
+                              <StatusBadge status={r.status} />
+                            </div>
+                            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--secondary)]">
+                              <span>Report {r.semester || 1}</span>
+                              <span>{fileCount} file{fileCount === 1 ? '' : 's'}</span>
+                              {r.remarks_count > 0 && <span>{r.remarks_count} remark{r.remarks_count === 1 ? '' : 's'}</span>}
+                              <span>{formatDate(r.submitted_at || r.created_at)}</span>
+                            </p>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  }
+                </div>
+              )}
 
               <Link
                 to={`/admin/students/${selected.user_id}`}
@@ -637,29 +696,59 @@ export default function StudentsPage() {
       {/* ── Submission detail (nested z-50) ── */}
       {selectedSub && (
         <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={() => setSelectedSub(null)}>
-          <div className="drawer-panel lg:!w-[min(840px,calc(100vw-32px))]" onClick={(e) => e.stopPropagation()}>
+          <div className="drawer-panel lg:!w-[min(900px,calc(100vw-32px))]" onClick={(e) => e.stopPropagation()}>
             <div className="shrink-0 safe-row border-b border-[color:var(--border)] p-6">
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Submission Detail</p>
                 <h2 className="mt-2 line-clamp-2 text-xl font-semibold text-[color:var(--text)]">{selectedSub.title}</h2>
-                <p className="mt-1 text-sm text-[color:var(--secondary)]">Report {selectedSub.report_period} · {nameOf(selected)}</p>
+                <p className="mt-1 text-sm text-[color:var(--secondary)]">Semester {selectedSub.semester || 1} · {nameOf(selected)}</p>
               </div>
               <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setSelectedSub(null)}>
                 <XCircle size={18} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-auto overscroll-contain p-6 space-y-5 xl:grid xl:grid-cols-[1fr_300px] xl:gap-5 xl:space-y-0">
+            <div className="flex-1 overflow-auto overscroll-contain p-6 space-y-5 xl:grid xl:grid-cols-[1fr_320px] xl:gap-5 xl:space-y-0">
               <div className="space-y-5">
-                <SubMediaPreview submission={selectedSub} />
+                {/* Uploaded documents — the file(s) actually attached to this submission */}
+                <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+                  <p className="font-semibold text-[color:var(--text)]">Documents</p>
+                  {!Array.isArray(selectedSub.file_urls) || selectedSub.file_urls.length === 0 ? (
+                    <div className="mt-4 grid h-32 place-items-center rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
+                      <div>
+                        <FileText className="mx-auto text-[color:var(--accent)]" size={28} />
+                        <p className="mt-3 text-sm text-[color:var(--secondary)]">No file attached to this submission.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-2">
+                      {selectedSub.file_urls.map((f, i) => (
+                        <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-[color:var(--text)]">{f.name}</p>
+                            {f.size ? <p className="text-xs text-[color:var(--muted)]">{(f.size / 1024 / 1024).toFixed(2)} MB</p> : null}
+                          </div>
+                          <SubmissionFileLink file={f} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                   <p className="font-semibold text-[color:var(--text)]">Submission Info</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <Info label="Report Period" value={`Report ${selectedSub.report_period}`} />
-                    <Info label="Version"       value={`v${selectedSub.title_version || 1}`} />
-                    <Info label="Status"        value={<StatusBadge status={selectedSub.status} />} />
-                    <Info label="Submitted"     value={formatDate(selectedSub.submitted_at)} />
+                    <Info label="Type"      value={(selectedSub.submission_type || '—').replaceAll('_', ' ')} />
+                    <Info label="Semester"  value={`Semester ${selectedSub.semester || 1}`} />
+                    <Info label="Version"   value={`v${selectedSub.version || 1}`} />
+                    <Info label="Status"    value={<StatusBadge status={selectedSub.status} />} />
+                    <Info label="Submitted" value={formatDate(selectedSub.submitted_at)} />
                   </div>
+                </div>
+
+                {/* Feedback thread — admin can post as any staff role on their behalf */}
+                <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+                  <SubmissionRemarks submissionId={selectedSub.id} />
                 </div>
               </div>
 
@@ -668,7 +757,7 @@ export default function StudentsPage() {
                 {subApprovals.length === 0
                   ? <p className="mt-3 text-sm text-[color:var(--secondary)]">No approval records yet.</p>
                   : <div className="mt-4 space-y-3">
-                    {subApprovals.map((a) => (
+                    {[...subApprovals].sort((a, b) => (a.order_index || 0) - (b.order_index || 0)).map((a) => (
                       <div key={a.id} className="rounded-3xl bg-[color:var(--card)] p-4">
                         <div className="safe-row items-start">
                           <p className="text-sm font-semibold capitalize text-[color:var(--text)]">{a.stage?.replaceAll('_', ' ')}</p>
@@ -702,41 +791,6 @@ export default function StudentsPage() {
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
-
-function SubMediaPreview({ submission }) {
-  const { presentation_type: type, presentation_url: url, presentation_filename: filename } = submission
-  return (
-    <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
-      <div className="safe-row">
-        <div>
-          <p className="font-semibold text-[color:var(--text)]">Presentation Media</p>
-          <p className="mt-1 text-xs text-[color:var(--secondary)]">{filename || 'No file attached'}</p>
-        </div>
-        {url && (
-          <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 text-sm font-semibold text-[color:var(--accent)]">
-            Open
-          </a>
-        )}
-      </div>
-      <div className="mt-4 overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)]">
-        {type === 'pdf' && url
-          ? <iframe title="Preview" src={url} className="h-64 w-full" />
-          : type === 'video' && url
-            ? <video src={url} controls className="h-64 w-full bg-black" />
-            : (
-              <div className="grid h-64 place-items-center text-center p-6">
-                <div>
-                  <FileText className="mx-auto text-[color:var(--accent)]" size={32} />
-                  <p className="mt-3 font-semibold text-[color:var(--text)]">Preview unavailable</p>
-                  <p className="mt-1 text-sm text-[color:var(--secondary)]">Open the uploaded file to review it.</p>
-                </div>
-              </div>
-            )
-        }
-      </div>
-    </div>
-  )
-}
 
 function Info({ label, value }) {
   return (

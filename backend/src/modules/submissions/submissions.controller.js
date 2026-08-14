@@ -83,6 +83,8 @@ export const listRemarks = asyncHandler(async (req, res) => {
   ok(res, await svc.listRemarks(req.params.id));
 });
 
+const STAFF_ROLES = ['admin', 'coordinator', 'academic_guide', 'industry_mentor'];
+
 export const addRemark = asyncHandler(async (req, res) => {
   const access = await svc.canAccessSubmission(req.params.id, req.user);
   if (!access.found) return notFound(res, 'Submission not found');
@@ -91,8 +93,16 @@ export const addRemark = asyncHandler(async (req, res) => {
   if (!access.allowed || access.isOwner) return forbidden(res);
   const remark = (req.body.remark || '').trim();
   if (!remark) return badRequest(res, 'Remark cannot be empty');
-  const authorRole = (req.user.roles || []).find((r) =>
-    ['admin', 'coordinator', 'academic_guide', 'industry_mentor'].includes(r)) || null;
+
+  const actorRoles = req.user.roles || [];
+  const isAdmin = actorRoles.includes('admin');
+  // An admin may tag the remark with any staff role (posting "on behalf of" a
+  // coordinator/guide/mentor who isn't available) — the author stays the admin
+  // for audit, only the displayed role tag changes. Everyone else is always
+  // tagged with their own actual role; the client can't spoof it.
+  const authorRole = (isAdmin && req.body.author_role)
+    ? req.body.author_role
+    : (actorRoles.find((r) => STAFF_ROLES.includes(r)) || null);
   created(res, await svc.addRemark(req.params.id, req.user.id, remark, authorRole), 'Remark added');
 });
 

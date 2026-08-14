@@ -82,9 +82,12 @@ export const getSubmissionRemarks = async (submissionId) => {
   return ok(res.data || [])
 }
 
-export const addSubmissionRemark = async (submissionId, remark) => {
-  if (USE_MOCK) return ok({ id: `rem_${Date.now()}`, remark, created_at: new Date().toISOString() })
-  const { data: res } = await http.post(`/submissions/${submissionId}/remarks`, { remark })
+// authorRole is only honoured server-side when the caller is an admin — it
+// lets an admin tag a remark as posted "on behalf of" a coordinator/guide/
+// mentor. Everyone else is always tagged with their own real role.
+export const addSubmissionRemark = async (submissionId, remark, authorRole = null) => {
+  if (USE_MOCK) return ok({ id: `rem_${Date.now()}`, remark, author_role: authorRole, created_at: new Date().toISOString() })
+  const { data: res } = await http.post(`/submissions/${submissionId}/remarks`, { remark, ...(authorRole ? { author_role: authorRole } : {}) })
   return ok(res.data)
 }
 

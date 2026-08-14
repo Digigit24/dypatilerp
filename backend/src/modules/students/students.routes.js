@@ -242,7 +242,12 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
 
   const { rows: data } = await query(
     `SELECT be.*, u.first_name, u.last_name, u.email, u.phone, u.avatar_url,
-            b.name as batch_name, b.code as batch_code, c.name as course_name
+            b.name as batch_name, b.code as batch_code, c.name as course_name,
+            (SELECT COUNT(*) FROM submissions s2 WHERE s2.student_user_id = be.user_id)::int
+              AS submissions_count,
+            (SELECT COUNT(*) FROM submissions s2 WHERE s2.student_user_id = be.user_id
+               AND s2.submission_type = 'progress_report')::int
+              AS progress_reports_count
      FROM batch_enrollments be
      JOIN users u ON u.id=be.user_id
      JOIN batches b ON b.id=be.batch_id

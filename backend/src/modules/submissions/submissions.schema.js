@@ -42,9 +42,13 @@ export const createSubmissionOnBehalfSchema = z.object({
   message: 'Either assignment_id, or batch_id and title, is required',
 });
 
-// A single free-form remark on a submission's feedback thread.
+// A single free-form remark on a submission's feedback thread. `author_role`
+// is normally resolved server-side from the poster's own roles; an admin may
+// override it to post "on behalf of" coordinator/guide/mentor (the author is
+// still recorded as the admin — this only changes the displayed role tag).
 export const createRemarkSchema = z.object({
   remark: z.string().min(1).max(5000),
+  author_role: z.enum(['admin', 'coordinator', 'academic_guide', 'industry_mentor']).optional(),
 });
 
 export const reviewActionSchema = z.object({
