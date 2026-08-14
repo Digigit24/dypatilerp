@@ -42,6 +42,11 @@ export const createSubmissionOnBehalfSchema = z.object({
   message: 'Either assignment_id, or batch_id and title, is required',
 });
 
+// A single free-form remark on a submission's feedback thread.
+export const createRemarkSchema = z.object({
+  remark: z.string().min(1).max(5000),
+});
+
 export const reviewActionSchema = z.object({
   comments: z.string().optional(),
 });

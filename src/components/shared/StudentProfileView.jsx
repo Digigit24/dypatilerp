@@ -9,9 +9,9 @@
  *  4. Guides + Fees Summary sections visible to admin.
  */
 import {
-  Award, BookOpen, Camera, Clock,
+  Award, BookOpen, Camera, ChevronDown, Clock,
   DollarSign, ExternalLink, FileText, Globe, GraduationCap,
-  Link2, Pencil, Plus, Save, Shield, Upload, User, X,
+  Link2, Pencil, Plus, Save, Shield, Upload, UploadCloud, User, X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -21,14 +21,17 @@ import {
   updateProfile, updateResearchItem,
 } from '../../api/services/researchProfileService.js'
 import { getStudentById, updateStudent } from '../../api/services/studentService.js'
-import { getSubmissionsByStudent } from '../../api/services/submissionService.js'
+import { getProgressReportsByStudent, getSubmissionsByStudent } from '../../api/services/submissionService.js'
 import { getProgressReportByStudent } from '../../api/services/progressReportService.js'
+import UploadProgressReportDrawer from '../admin/UploadProgressReportDrawer.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { usePermStore } from '../../store/permStore.js'
 import SkeletonCard from './SkeletonCard.jsx'
 import StatusBadge from './StatusBadge.jsx'
 import SubmissionFileLink from './SubmissionFileLink.jsx'
+import SubmissionRemarks from './SubmissionRemarks.jsx'
 
 const CERT_TYPES = [
   { key: 'phd_certificate',   label: 'PhD Certificate',       desc: 'Doctoral degree certificate from your institution' },
@@ -85,6 +88,11 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [research,        setResearch]        = useState(null)
   const [submissions,     setSubmissions]     = useState([])
   const [progressReports, setProgressReports] = useState([])
+  // Uploaded progress-report DOCUMENTS (submissions of type 'progress_report').
+  // Distinct from `progressReports` above, which is the milestone tracker.
+  const [reportDocs,      setReportDocs]      = useState([])
+  const [reportUploadOpen,setReportUploadOpen]= useState(false)
+  const [openReportId,    setOpenReportId]    = useState(null)
   const [selectedSub,     setSelectedSub]     = useState(null)
   const [subApprovals,    setSubApprovals]    = useState([])
   const [notFound,        setNotFound]        = useState(false)
@@ -96,7 +104,10 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [certs,           setCerts]           = useState({ phd_certificate: false, id_proof: false, publications_proof: false, recommendation: false, other: false })
   const [drawer,          setDrawer]          = useState(BLANK_DRAWER)
   const addToast = useUiStore((s) => s.addToast)
-  useScrollLock(drawer.open || Boolean(selectedSub))
+  // Only institute staff file a report on a scholar's behalf.
+  const isStaff = usePermStore((s) => s.hasRole('admin') || s.hasRole('coordinator'))
+  const canUploadReport = isAdminView && isStaff
+  useScrollLock(drawer.open || Boolean(selectedSub) || reportUploadOpen)
 
   // ── Data loading ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -106,6 +117,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
     setUser(null)
     setSubmissions([])
     setProgressReports([])
+    setReportDocs([])
 
     getStudentById(studentId)
       .then((r) => {
@@ -137,7 +149,17 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
     getProgressReportByStudent(studentId)
       .then((r) => setProgressReports(r.data || []))
       .catch(() => setProgressReports([]))
+
+    loadReportDocs()
   }, [studentId])
+
+  // Extracted so the upload drawer can refresh the list without a full reload.
+  function loadReportDocs() {
+    if (!studentId) return
+    getProgressReportsByStudent(studentId)
+      .then((r) => setReportDocs(r.data || []))
+      .catch(() => setReportDocs([]))
+  }
 
   // ── Error / loading states ──────────────────────────────────────────────────
   if (notFound) {
@@ -246,8 +268,9 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
 
   const TABS = [
     { key: 'profile',    label: 'Profile' },
+    { key: 'reports',    label: `Progress Reports${reportDocs.length ? ` (${reportDocs.length})` : ''}` },
     { key: 'submissions',label: `Submissions${submissions.length ? ` (${submissions.length})` : ''}` },
-    { key: 'progress',   label: `Progress${progressReports.length ? ` (${progressReports.length})` : ''}` },
+    { key: 'progress',   label: `Milestones${progressReports.length ? ` (${progressReports.length})` : ''}` },
     { key: 'research',   label: 'Research Profile' },
   ]
 
@@ -481,6 +504,93 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ══ Progress Reports tab ═════════════════════════════════════════════ */}
+      {tab === 'reports' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-[color:var(--text)]">Uploaded progress reports</p>
+              <p className="mt-0.5 text-sm text-[color:var(--secondary)]">
+                Documents filed for this scholar, with their review status and feedback thread.
+              </p>
+            </div>
+            {canUploadReport && (
+              <button
+                className="btn-primary inline-flex items-center gap-2"
+                onClick={() => setReportUploadOpen(true)}
+              >
+                <UploadCloud size={15} /> Upload Report
+              </button>
+            )}
+          </div>
+
+          {reportDocs.length === 0 ? (
+            <div className="card p-10 text-center">
+              <FileText className="mx-auto text-[color:var(--muted)]" size={32} />
+              <p className="mt-3 font-semibold text-[color:var(--text)]">No progress reports yet</p>
+              <p className="mt-1 text-sm text-[color:var(--secondary)]">
+                {canUploadReport
+                  ? 'Upload a report to file it under this scholar and send it for review.'
+                  : 'Reports appear here once they are uploaded.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {reportDocs.map((r) => {
+                const files = Array.isArray(r.file_urls) ? r.file_urls : []
+                const expanded = openReportId === r.id
+                return (
+                  <div key={r.id} className="card overflow-hidden">
+                    <button
+                      type="button"
+                      className="flex w-full items-start justify-between gap-3 p-5 text-left"
+                      onClick={() => setOpenReportId(expanded ? null : r.id)}
+                    >
+                      <div className="min-w-0">
+                        <p className="line-clamp-2 font-semibold text-[color:var(--text)]">{r.title}</p>
+                        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--secondary)]">
+                          <span>Report {r.semester || 1}</span>
+                          <span>{files.length} file{files.length === 1 ? '' : 's'}</span>
+                          {r.remarks_count > 0 && <span>{r.remarks_count} remark{r.remarks_count === 1 ? '' : 's'}</span>}
+                          <span>{formatDate(r.submitted_at || r.created_at)}</span>
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <StatusBadge status={r.status} />
+                        <ChevronDown size={16} className={`text-[color:var(--muted)] transition ${expanded ? 'rotate-180' : ''}`} />
+                      </div>
+                    </button>
+
+                    {expanded && (
+                      <div className="space-y-5 border-t border-[color:var(--border)] p-5">
+                        {files.length === 0 ? (
+                          <p className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
+                            No file attached to this report.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {files.map((f, i) => (
+                              <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-[color:var(--text)]">{f.name}</p>
+                                  {f.size ? <p className="text-xs text-[color:var(--muted)]">{(f.size / 1024 / 1024).toFixed(2)} MB</p> : null}
+                                </div>
+                                <SubmissionFileLink file={f} />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <SubmissionRemarks submissionId={r.id} onCountChange={loadReportDocs} />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -799,6 +909,15 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Upload progress report (admin / coordinator) ── */}
+      {reportUploadOpen && (
+        <UploadProgressReportDrawer
+          studentUserId={studentId}
+          onClose={() => setReportUploadOpen(false)}
+          onUploaded={loadReportDocs}
+        />
       )}
     </div>
   )

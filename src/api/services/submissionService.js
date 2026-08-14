@@ -60,3 +60,36 @@ export const uploadSubmissionAttachment = async (submissionId, file) => {
 }
 
 export const getSubmissionsByStudent = async (student_user_id) => getSubmissions({ student_user_id })
+
+// ─── Progress reports (uploaded documents) ───────────────────────────────────
+// A progress report IS a submission of type 'progress_report' — the document
+// lives in object storage and is reached through its media_id descriptor. This
+// is the single source of truth the admin Progress Reports page reads.
+
+export const getProgressReportSubmissions = async (filters = {}) =>
+  getSubmissions({ ...filters, submission_type: 'progress_report' })
+
+export const getProgressReportsByStudent = async (student_user_id) =>
+  getProgressReportSubmissions({ student_user_id })
+
+// ─── Remarks / feedback thread ───────────────────────────────────────────────
+// Independent of the approval chain: coordinators, guides and mentors can leave
+// notes on a report at any time without approving or rejecting it.
+
+export const getSubmissionRemarks = async (submissionId) => {
+  if (USE_MOCK) return ok([])
+  const { data: res } = await http.get(`/submissions/${submissionId}/remarks`)
+  return ok(res.data || [])
+}
+
+export const addSubmissionRemark = async (submissionId, remark) => {
+  if (USE_MOCK) return ok({ id: `rem_${Date.now()}`, remark, created_at: new Date().toISOString() })
+  const { data: res } = await http.post(`/submissions/${submissionId}/remarks`, { remark })
+  return ok(res.data)
+}
+
+export const deleteSubmissionRemark = async (submissionId, remarkId) => {
+  if (USE_MOCK) return ok({})
+  await http.delete(`/submissions/${submissionId}/remarks/${remarkId}`)
+  return ok({})
+}

@@ -113,7 +113,10 @@ export const createSession = asyncHandler(async (req, res) => {
     // reviewer for that submission. is_published is never used for these.
     const { rows: [sub] } = await query('SELECT student_user_id FROM submissions WHERE id=$1', [video.submission_id]);
     const isOwner = sub && sub.student_user_id === req.user.id;
-    const isSiteAdmin = roles.includes('admin');
+    // Coordinators administer progress-report uploads alongside admins, so they
+    // can open a submission-bound file even when they aren't the resolved
+    // reviewer on one of its stages.
+    const isSiteAdmin = roles.includes('admin') || roles.includes('coordinator');
     let isReviewer = false;
     if (sub && !isOwner && !isSiteAdmin) {
       const { rows: [a] } = await query(
@@ -385,7 +388,7 @@ const sniffFamily = (buf) => {
  * 'ready' media row and appends a server-generated descriptor to file_urls.
  *
  * Route: POST /submissions/:submissionId/attachment
- * Authorized for the owning scholar, or an admin (on-behalf). progress_report only.
+ * Authorized for the owning scholar, or an admin/coordinator (on-behalf).
  */
 export const uploadSubmissionAttachment = asyncHandler(async (req, res) => {
   if (!s3.isConfigured()) {
@@ -403,8 +406,11 @@ export const uploadSubmissionAttachment = asyncHandler(async (req, res) => {
     [submissionId]
   );
   if (!sub) return notFound(res, 'Submission not found');
-  const isAdmin = req.user.roles?.includes('admin');
-  if (sub.student_user_id !== req.user.id && !isAdmin) return forbidden(res);
+  // The owning scholar uploads their own file; an admin or coordinator uploads
+  // on behalf of a scholar.
+  const actorRoles = req.user.roles || [];
+  const isStaff = actorRoles.includes('admin') || actorRoles.includes('coordinator');
+  if (sub.student_user_id !== req.user.id && !isStaff) return forbidden(res);
   if (!['progress_report', 'assignment'].includes(sub.submission_type)) return badRequest(res, 'Attachments are only supported for progress reports and assignments');
   if (sub.status !== 'draft') return badRequest(res, 'Files can only be attached to a draft submission');
 

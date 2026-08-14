@@ -1,7 +1,7 @@
 import { query, getClient } from '../../config/database.js';
 import { notifyStageOpened } from '../notifications/notify.service.js';
 
-export const listSubmissions = async ({ batch_id, assignment_id, student_user_id, status, search, allowed_batch_ids, limit, offset }) => {
+export const listSubmissions = async ({ batch_id, assignment_id, student_user_id, status, submission_type, search, allowed_batch_ids, limit, offset }) => {
   const params = [];
   const conditions = [];
   if (batch_id) { params.push(batch_id); conditions.push(`s.batch_id=$${params.length}`); }
@@ -12,6 +12,7 @@ export const listSubmissions = async ({ batch_id, assignment_id, student_user_id
   if (assignment_id) { params.push(assignment_id); conditions.push(`s.assignment_id=$${params.length}`); }
   if (student_user_id) { params.push(student_user_id); conditions.push(`s.student_user_id=$${params.length}`); }
   if (status) { params.push(status); conditions.push(`s.status=$${params.length}`); }
+  if (submission_type) { params.push(submission_type); conditions.push(`s.submission_type=$${params.length}`); }
   if (search?.trim()) {
     params.push(`%${search.trim()}%`);
     conditions.push(`(u.first_name ILIKE $${params.length} OR u.last_name ILIKE $${params.length} OR u.email ILIKE $${params.length} OR s.title ILIKE $${params.length})`);
@@ -19,7 +20,8 @@ export const listSubmissions = async ({ batch_id, assignment_id, student_user_id
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const { rows: data } = await query(
     `SELECT s.*, u.first_name, u.last_name, u.email, b.name as batch_name,
-            a.title AS assignment_title, a.is_mandatory AS assignment_mandatory
+            a.title AS assignment_title, a.is_mandatory AS assignment_mandatory,
+            (SELECT COUNT(*) FROM submission_remarks sr WHERE sr.submission_id = s.id)::int AS remarks_count
      FROM submissions s
      JOIN users u ON u.id=s.student_user_id
      JOIN batches b ON b.id=s.batch_id
@@ -38,7 +40,8 @@ export const getSubmissionById = async (id) => {
   const { rows } = await query(
     `SELECT s.*, u.first_name, u.last_name, u.email, b.name as batch_name,
             (SELECT json_agg(a ORDER BY a.order_index)
-             FROM approvals a WHERE a.submission_id=s.id) as approvals
+             FROM approvals a WHERE a.submission_id=s.id) as approvals,
+            (SELECT COUNT(*) FROM submission_remarks sr WHERE sr.submission_id = s.id)::int AS remarks_count
      FROM submissions s
      JOIN users u ON u.id=s.student_user_id
      JOIN batches b ON b.id=s.batch_id
@@ -328,4 +331,67 @@ export const submitForReview = async (id, ownerId, submittedByUserId = null) => 
   } finally {
     client.release();
   }
+};
+
+// ─── Remarks / feedback thread ────────────────────────────────────────────────
+
+/**
+ * Remarks are the free-form feedback thread on a submission (typically an
+ * uploaded progress report). They are deliberately independent of the approval
+ * chain so a coordinator, academic guide or industry mentor can leave notes at
+ * any point without acting on — or being blocked by — their approval stage.
+ */
+export const listRemarks = async (submissionId) => {
+  const { rows } = await query(
+    `SELECT sr.*, u.first_name, u.last_name, u.email, u.avatar_url
+     FROM submission_remarks sr
+     JOIN users u ON u.id = sr.author_user_id
+     WHERE sr.submission_id = $1
+     ORDER BY sr.created_at DESC`,
+    [submissionId]
+  );
+  return rows;
+};
+
+export const addRemark = async (submissionId, authorUserId, remark, authorRole = null) => {
+  const { rows: [row] } = await query(
+    `INSERT INTO submission_remarks (submission_id, author_user_id, author_role, remark)
+     VALUES ($1,$2,$3,$4) RETURNING id`,
+    [submissionId, authorUserId, authorRole, remark]
+  );
+  const { rows: [full] } = await query(
+    `SELECT sr.*, u.first_name, u.last_name, u.email, u.avatar_url
+     FROM submission_remarks sr JOIN users u ON u.id = sr.author_user_id
+     WHERE sr.id = $1`,
+    [row.id]
+  );
+  return full;
+};
+
+/** A remark may only be removed by its author or an admin. */
+export const deleteRemark = async (remarkId, userId, isAdmin) => {
+  const { rows: [row] } = await query('SELECT * FROM submission_remarks WHERE id=$1', [remarkId]);
+  if (!row) return { deleted: false, notFound: true };
+  if (!isAdmin && row.author_user_id !== userId) return { deleted: false, forbidden: true };
+  await query('DELETE FROM submission_remarks WHERE id=$1', [remarkId]);
+  return { deleted: true };
+};
+
+/**
+ * Can this user see (and therefore comment on) a submission?
+ * Owning scholar, admin, coordinator, or a reviewer resolved onto one of the
+ * submission's approval stages (by user id or by role for unassigned stages).
+ */
+export const canAccessSubmission = async (submissionId, user) => {
+  const { rows: [sub] } = await query('SELECT student_user_id FROM submissions WHERE id=$1', [submissionId]);
+  if (!sub) return { found: false, allowed: false };
+  const roles = user.roles || [];
+  if (sub.student_user_id === user.id) return { found: true, allowed: true, isOwner: true };
+  if (roles.includes('admin') || roles.includes('coordinator')) return { found: true, allowed: true };
+  const { rows: [a] } = await query(
+    `SELECT 1 FROM approvals WHERE submission_id=$1
+       AND (reviewer_user_id=$2 OR (reviewer_user_id IS NULL AND reviewer_role = ANY($3::text[]))) LIMIT 1`,
+    [submissionId, user.id, roles]
+  );
+  return { found: true, allowed: !!a };
 };

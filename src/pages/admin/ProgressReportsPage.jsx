@@ -1,166 +1,320 @@
-import { BookOpen, CheckCircle2, Download, AlertTriangle, TrendingUp } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { generateProgressReportPDF, getProgressReports } from '../../api/services/progressReportService.js'
-import { getStudents } from '../../api/services/studentService.js'
-import { getUsers } from '../../api/services/userService.js'
+/**
+ * Admin → Progress Reports
+ *
+ * Lists the progress reports that actually exist as documents: submissions of
+ * type 'progress_report', whose files live in object storage and whose review
+ * runs through the batch approval chain. Admins and coordinators can upload a
+ * report for any scholar from here; coordinators, guides and mentors can open
+ * one and leave remarks on its feedback thread.
+ */
+import {
+  CheckCircle2, Clock, FileText, RefreshCcw, Search, UploadCloud, X,
+} from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { getApprovalsBySubmission } from '../../api/services/approvalService.js'
+import { getProgressReportSubmissions } from '../../api/services/submissionService.js'
+import UploadProgressReportDrawer from '../../components/admin/UploadProgressReportDrawer.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
+import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
+import SubmissionRemarks from '../../components/shared/SubmissionRemarks.jsx'
+import useScrollLock from '../../hooks/useScrollLock.js'
+import { formatDate } from '../../lib/formatters.js'
 import { useCourseStore } from '../../store/courseStore.js'
-import { useUiStore } from '../../store/uiStore.js'
 import { usePermStore } from '../../store/permStore.js'
+
+const STATUS_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'submitted', label: 'Pending Review' },
+  { key: 'under_review', label: 'Under Review' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'needs_revision', label: 'Needs Revision' },
+  { key: 'draft', label: 'Draft' },
+]
+
+const nameOf = (r) => `${r.first_name || ''} ${r.last_name || ''}`.trim() || r.email || '—'
 
 export default function AdminProgressReportsPage() {
   const [reports, setReports] = useState(null)
-  const [students, setStudents] = useState([])
-  const [users, setUsers] = useState([])
-  const [period, setPeriod] = useState(1)
-  const addToast = useUiStore((s) => s.addToast)
+  const [status, setStatus] = useState('all')
+  const [search, setSearch] = useState('')
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [detail, setDetail] = useState(null)
   const { currentCourse } = useCourseStore()
-  // getUsers requires users:read (guide/mentor lack it). Gate it so it never 403s.
-  const canReadUsers = usePermStore((s) => s.can('users', 'read'))
+  const canUpload = usePermStore((s) => s.hasRole('admin') || s.hasRole('coordinator'))
 
-  // Core data (progress_reports + students) — both permitted for guide/mentor.
-  useEffect(() => {
+  useScrollLock(uploadOpen || Boolean(detail))
+
+  const load = useCallback(() => {
     setReports(null)
-    Promise.all([getProgressReports(), getStudents()]).then(([r, s]) => {
-      setReports(r.data)
-      setStudents(s.data)
-    })
-  }, [currentCourse?.id])
+    getProgressReportSubmissions({ limit: 200 })
+      .then((r) => setReports(r.data || []))
+      .catch(() => setReports([]))
+  }, [])
 
-  // Optional enrichment — only fetched for roles allowed to read users, and never
-  // blocking: a failure here must not blank a page the role is authorized to view.
-  useEffect(() => {
-    if (!canReadUsers) { setUsers([]); return }
-    getUsers().then((u) => setUsers(u.data)).catch(() => setUsers([]))
-  }, [canReadUsers, currentCourse?.id])
+  useEffect(() => { load() }, [load, currentCourse?.id])
 
-  const userMap = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users])
-  const studentMap = useMemo(() => Object.fromEntries(students.map((s) => [s.id, s])), [students])
-  // Resolve names from the students data everyone here can read (first_name/
-  // last_name come from getStudents); users enrichment is only a fallback. Never
-  // render a raw UUID — show "—" when a name can't be resolved.
-  const nameOf = (studentId) => {
-    const s = studentMap[studentId]
-    if (s && (s.first_name || s.last_name)) return `${s.first_name || ''} ${s.last_name || ''}`.trim()
-    const u = s ? userMap[s.user_id] : null
-    return u ? `${u.first_name} ${u.last_name}` : '—'
-  }
+  const stats = useMemo(() => {
+    const list = reports || []
+    return {
+      total: list.length,
+      approved: list.filter((r) => r.status === 'approved').length,
+      pending: list.filter((r) => ['submitted', 'under_review'].includes(r.status)).length,
+      revision: list.filter((r) => ['needs_revision', 'rejected'].includes(r.status)).length,
+    }
+  }, [reports])
 
-  if (!reports) return <SkeletonCard rows={8} />
-
-  const periodReports = reports.filter((r) => r.period === period)
-  const completed = periodReports.filter((r) => r.status === 'completed').length
-  const overdue = periodReports.filter((r) => r.status === 'overdue').length
-  const inProgress = periodReports.filter((r) => r.status === 'in_progress').length
-  const avgCompletion = Math.round(periodReports.reduce((s, r) => s + r.completion_percentage, 0) / (periodReports.length || 1))
-
-  const handleDownload = async (report) => {
-    await generateProgressReportPDF(report.id)
-    addToast({ type: 'success', title: `PDF generated for ${nameOf(report.student_id)}` })
-  }
+  const visible = useMemo(() => {
+    let list = reports || []
+    if (status !== 'all') list = list.filter((r) => r.status === status)
+    const q = search.trim().toLowerCase()
+    if (q) {
+      list = list.filter((r) =>
+        nameOf(r).toLowerCase().includes(q)
+        || (r.title || '').toLowerCase().includes(q)
+        || (r.batch_name || '').toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [reports, status, search])
 
   return (
     <div className="fade-page">
-      <PageHeader title="Progress Reports" subtitle="Overview of all student progress across report periods." />
+      <PageHeader
+        title="Progress Reports"
+        subtitle="Every uploaded progress report, its review status and its feedback thread."
+        action={
+          <div className="flex flex-wrap gap-2">
+            {canUpload && (
+              <button
+                className="btn-primary inline-flex items-center gap-2"
+                onClick={() => setUploadOpen(true)}
+              >
+                <UploadCloud size={15} /> Upload Progress Report
+              </button>
+            )}
+            <button
+              className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
+              onClick={load}
+              title="Refresh"
+            >
+              <RefreshCcw size={15} /> Refresh
+            </button>
+          </div>
+        }
+      />
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard icon={CheckCircle2} label="Completed" value={completed} tone="green" />
-        <StatCard icon={AlertTriangle} label="Overdue" value={overdue} tone="orange" />
-        <StatCard icon={BookOpen} label="In Progress" value={inProgress} tone="blue" />
-        <StatCard icon={TrendingUp} label="Avg. Completion" value={`${avgCompletion}%`} tone="accent" />
+        <StatCard icon={FileText} label="Total Reports" value={stats.total} tone="accent" />
+        <StatCard icon={CheckCircle2} label="Approved" value={stats.approved} tone="green" />
+        <StatCard icon={Clock} label="Awaiting Review" value={stats.pending} tone="blue" />
+        <StatCard icon={RefreshCcw} label="Needs Revision" value={stats.revision} tone="orange" />
       </div>
 
-      <div className="mb-5 flex gap-2">
-        {[1, 2, 3, 4].map((n) => (
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <label className="admin-search soft-panel flex h-11 min-w-[240px] flex-1 items-center gap-2 rounded-full px-4">
+          <Search size={15} className="text-[color:var(--muted)]" />
+          <input
+            className="w-full bg-transparent text-sm outline-none placeholder:text-[color:var(--muted)]"
+            placeholder="Search by scholar, title or batch…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
+        {STATUS_FILTERS.map(({ key, label }) => (
           <button
-            key={n}
-            onClick={() => setPeriod(n)}
-            className={`rounded-2xl px-5 py-2.5 text-sm font-semibold transition ${period === n ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}
+            key={key}
+            onClick={() => setStatus(key)}
+            className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${status === key ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}
           >
-            Report {n}
+            {label}
           </button>
         ))}
       </div>
 
-      {periodReports.length === 0 ? (
+      {reports === null ? (
+        <SkeletonCard rows={8} />
+      ) : visible.length === 0 ? (
         <div className="card p-10 text-center">
-          <BookOpen className="mx-auto text-[color:var(--muted)]" size={32} />
-          <p className="mt-3 font-semibold text-[color:var(--text)]">No reports for this period yet</p>
-          <p className="mt-1 text-sm text-[color:var(--secondary)]">Reports are generated as students submit their work.</p>
+          <FileText className="mx-auto text-[color:var(--muted)]" size={32} />
+          <p className="mt-3 font-semibold text-[color:var(--text)]">
+            {reports.length === 0 ? 'No progress reports yet' : 'No reports match this filter'}
+          </p>
+          <p className="mt-1 text-sm text-[color:var(--secondary)]">
+            {reports.length === 0
+              ? (canUpload ? 'Upload one for a scholar to get started.' : 'Reports appear here once they are uploaded.')
+              : 'Try a different status or search term.'}
+          </p>
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          {periodReports.map((report) => {
-            const student = studentMap[report.student_id]
-            const name = nameOf(report.student_id)
-            const initials = name.split(' ').map((p) => p[0]).join('').slice(0, 2)
-            return (
-              <div key={report.id} className="card p-5">
-                <div className="flex items-start gap-4">
-                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[color:var(--accent-tint)] text-sm font-semibold text-[color:var(--accent)]">
-                    {initials}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="safe-row items-start">
-                      <div>
-                        <p className="font-semibold text-[color:var(--text)]">{name}</p>
-                        <p className="text-xs text-[color:var(--secondary)]">{student?.permanent_id} · {report.period_label}</p>
-                      </div>
-                      <StatusBadge status={report.status} />
-                    </div>
-
-                    <div className="mt-3">
-                      <div className="flex items-center justify-between text-xs font-semibold">
-                        <span className="text-[color:var(--secondary)]">Completion</span>
-                        <span className="text-[color:var(--text)]">{report.completion_percentage}%</span>
-                      </div>
-                      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[color:var(--surface-strong)]">
-                        <div
-                          className={`h-full rounded-full transition-all ${report.status === 'overdue' ? 'bg-orange-500' : report.status === 'completed' ? 'bg-emerald-500' : 'bg-[color:var(--accent)]'}`}
-                          style={{ width: `${report.completion_percentage}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {report.submissions.length > 0 && (
-                      <div className="mt-3 space-y-1.5">
-                        {report.submissions.map((s) => (
-                          <div key={s.submission_id} className="flex items-center justify-between rounded-2xl bg-[color:var(--surface)] px-3 py-2">
-                            <p className="line-clamp-1 text-xs text-[color:var(--text)]">{s.title}</p>
-                            <StatusBadge status={s.final_status} />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {report.coordinator_remarks && (
-                      <p className="mt-3 text-xs italic text-[color:var(--secondary)]">"{report.coordinator_remarks}"</p>
-                    )}
-
-                    <div className="mt-4 flex items-center justify-between gap-3">
-                      <p className="text-xs text-[color:var(--muted)]">
-                        {report.total_submissions} sub · {report.approved_count} approved · {report.pending_count} pending
-                      </p>
-                      <button
-                        title="Download PDF"
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[color:var(--accent-tint)] text-[color:var(--accent)]"
-                        onClick={() => handleDownload(report)}
-                      >
-                        <Download size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+          {visible.map((r) => (
+            <ReportCard key={r.id} report={r} onOpen={() => setDetail(r)} />
+          ))}
         </div>
+      )}
+
+      {uploadOpen && (
+        <UploadProgressReportDrawer
+          onClose={() => setUploadOpen(false)}
+          onUploaded={load}
+        />
+      )}
+
+      {detail && (
+        <ReportDetailDrawer
+          report={detail}
+          onClose={() => { setDetail(null); load() }}
+        />
       )}
     </div>
   )
 }
+
+// ─── Cards ────────────────────────────────────────────────────────────────────
+
+function ReportCard({ report, onOpen }) {
+  const name = nameOf(report)
+  const initials = name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
+  const files = Array.isArray(report.file_urls) ? report.file_urls : []
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="card w-full p-5 text-left transition hover:border-[color:var(--accent)] hover:shadow-sm"
+    >
+      <div className="flex items-start gap-4">
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[color:var(--accent-tint)] text-sm font-semibold text-[color:var(--accent)]">
+          {initials || '—'}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="safe-row items-start">
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-[color:var(--text)]">{name}</p>
+              <p className="truncate text-xs text-[color:var(--secondary)]">
+                {report.batch_name || '—'} · Report {report.semester || 1}
+              </p>
+            </div>
+            <StatusBadge status={report.status} />
+          </div>
+
+          <p className="mt-3 line-clamp-2 text-sm font-semibold text-[color:var(--text)]">{report.title}</p>
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[color:var(--muted)]">
+            <span className="inline-flex items-center gap-1.5">
+              <FileText size={11} /> {files.length} file{files.length === 1 ? '' : 's'}
+            </span>
+            {report.remarks_count > 0 && <span>{report.remarks_count} remark{report.remarks_count === 1 ? '' : 's'}</span>}
+            <span>{report.submitted_at ? formatDate(report.submitted_at) : formatDate(report.created_at)}</span>
+          </div>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+// ─── Detail drawer ────────────────────────────────────────────────────────────
+
+function ReportDetailDrawer({ report, onClose }) {
+  const [approvals, setApprovals] = useState(null)
+  const files = Array.isArray(report.file_urls) ? report.file_urls : []
+
+  useEffect(() => {
+    let alive = true
+    getApprovalsBySubmission(report.id)
+      .then((r) => { if (alive) setApprovals(r.data || []) })
+      .catch(() => { if (alive) setApprovals([]) })
+    return () => { alive = false }
+  }, [report.id])
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="drawer-panel lg:!w-[min(620px,calc(100vw-32px))] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="shrink-0 flex items-start justify-between gap-3 border-b border-[color:var(--border)] p-5 sm:p-7">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Progress Report</p>
+            <h2 className="mt-1 text-xl font-semibold text-[color:var(--text)]">{report.title}</h2>
+            <p className="mt-1 text-sm text-[color:var(--secondary)]">
+              <Link to={`/admin/students/${report.student_user_id}`} className="font-semibold text-[color:var(--accent)] hover:underline">
+                {nameOf(report)}
+              </Link>
+              {' · '}{report.batch_name || '—'} · Report {report.semester || 1}
+            </p>
+            <div className="mt-2"><StatusBadge status={report.status} /></div>
+          </div>
+          <button
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)] text-[color:var(--secondary)] hover:bg-[color:var(--border)]"
+            onClick={onClose}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-auto overscroll-contain p-5 sm:p-7 space-y-6">
+          {/* Files */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--muted)]">Documents</p>
+            {files.length === 0 ? (
+              <p className="mt-3 rounded-2xl bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
+                No file attached to this report.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {files.map((f, i) => (
+                  <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-[color:var(--text)]">{f.name}</p>
+                      {f.size ? <p className="text-xs text-[color:var(--muted)]">{(f.size / 1024 / 1024).toFixed(2)} MB</p> : null}
+                    </div>
+                    <SubmissionFileLink file={f} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Approval chain */}
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--muted)]">Approval Chain</p>
+            {approvals === null ? (
+              <p className="mt-3 text-sm text-[color:var(--secondary)]">Loading…</p>
+            ) : approvals.length === 0 ? (
+              <p className="mt-3 rounded-2xl bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
+                Not yet submitted for review.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {[...approvals].sort((a, b) => (a.order_index || 0) - (b.order_index || 0)).map((a) => (
+                  <div key={a.id} className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold capitalize text-[color:var(--text)]">
+                        {(a.stage || '').replaceAll('_', ' ')}
+                      </p>
+                      <StatusBadge status={a.status} />
+                    </div>
+                    {a.comments && <p className="mt-2 text-sm italic text-[color:var(--secondary)]">&ldquo;{a.comments}&rdquo;</p>}
+                    {a.action_at && <p className="mt-1 text-xs text-[color:var(--muted)]">{formatDate(a.action_at)}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Remarks */}
+          {/* Remark counts on the cards refresh when this drawer closes. */}
+          <SubmissionRemarks submissionId={report.id} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
 
 function StatCard({ icon: Icon, label, value, tone }) {
   const colors = {

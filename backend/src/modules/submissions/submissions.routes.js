@@ -4,7 +4,7 @@ import { requirePermission, requireRole } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import * as ctrl from './submissions.controller.js';
 import { uploadSubmissionAttachment } from '../videos/videos.controller.js';
-import { createSubmissionSchema, updateSubmissionSchema, createSubmissionOnBehalfSchema } from './submissions.schema.js';
+import { createSubmissionSchema, updateSubmissionSchema, createSubmissionOnBehalfSchema, createRemarkSchema } from './submissions.schema.js';
 
 const router = Router();
 router.use(authenticate);
@@ -62,12 +62,12 @@ router.post('/', requirePermission('submissions', 'create'), validate(createSubm
  * /submissions/on-behalf:
  *   post:
  *     tags: [Submissions]
- *     summary: Admin creates a progress-report draft on behalf of a scholar (owner = scholar)
+ *     summary: Admin/coordinator creates a progress-report draft on behalf of a scholar (owner = scholar)
  *     responses:
  *       201:
  *         description: Draft created, owned by the scholar
  */
-router.post('/on-behalf', requireRole('admin'), validate(createSubmissionOnBehalfSchema), ctrl.createOnBehalf);
+router.post('/on-behalf', requireRole('admin', 'coordinator'), validate(createSubmissionOnBehalfSchema), ctrl.createOnBehalf);
 
 /**
  * @swagger
@@ -117,11 +117,40 @@ router.post('/:submissionId/attachment', requirePermission('submissions', 'creat
  * /submissions/{id}/submit-on-behalf:
  *   post:
  *     tags: [Submissions]
- *     summary: Admin submits a scholar's draft for review (owner stays the scholar)
+ *     summary: Admin/coordinator submits a scholar's draft for review (owner stays the scholar)
  *     responses:
  *       200:
  *         description: Submission sent for review on behalf of the scholar
  */
-router.post('/:id/submit-on-behalf', requireRole('admin'), ctrl.submitOnBehalf);
+router.post('/:id/submit-on-behalf', requireRole('admin', 'coordinator'), ctrl.submitOnBehalf);
+
+/**
+ * @swagger
+ * /submissions/{id}/remarks:
+ *   get:
+ *     tags: [Submissions]
+ *     summary: List the feedback/remarks thread on a submission
+ *     description: |
+ *       Visible to the owning scholar, an admin, a coordinator, or a reviewer
+ *       resolved onto one of the submission's approval stages.
+ *   post:
+ *     tags: [Submissions]
+ *     summary: Add a remark / feedback note to a submission
+ *     description: |
+ *       Staff only (admin, coordinator, academic guide, industry mentor). Runs
+ *       independently of the approval chain, so a reviewer can comment without
+ *       approving or rejecting.
+ */
+router.get('/:id/remarks', requirePermission('submissions', 'read'), ctrl.listRemarks);
+router.post('/:id/remarks', requirePermission('submissions', 'read'), validate(createRemarkSchema), ctrl.addRemark);
+
+/**
+ * @swagger
+ * /submissions/{id}/remarks/{remarkId}:
+ *   delete:
+ *     tags: [Submissions]
+ *     summary: Delete a remark (author or admin only)
+ */
+router.delete('/:id/remarks/:remarkId', requirePermission('submissions', 'read'), ctrl.removeRemark);
 
 export default router;

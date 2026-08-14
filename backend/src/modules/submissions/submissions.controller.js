@@ -1,5 +1,5 @@
 import * as svc from './submissions.service.js';
-import { ok, created, notFound, forbidden, badRequest } from '../../utils/response.js';
+import { ok, created, notFound, forbidden, badRequest, noContent } from '../../utils/response.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { isOwnScope, allowedBatchIds } from '../../middleware/rbac.js';
@@ -40,8 +40,9 @@ export const create = asyncHandler(async (req, res) => {
   created(res, submission, 'Submission created');
 });
 
-// Admin uploads a progress report on behalf of a scholar. Owner = scholar;
-// created_by = admin. Route is gated by requireRole('admin').
+// An admin or coordinator uploads a progress report on behalf of a scholar.
+// Owner = scholar; created_by = the acting staff member. Route is gated by
+// requireRole('admin', 'coordinator').
 export const createOnBehalf = asyncHandler(async (req, res) => {
   const submission = await svc.createSubmissionOnBehalf(req.body, req.user.id);
   created(res, submission, 'Submission created on behalf of scholar');
@@ -63,11 +64,42 @@ export const submit = asyncHandler(async (req, res) => {
   ok(res, submission, 'Submitted for review');
 });
 
-// Admin submits on behalf of the scholar. Owner is taken from the submission;
-// the acting admin is recorded as submitted_by. Route gated by requireRole('admin').
+// An admin or coordinator submits on behalf of the scholar. Owner is taken from
+// the submission; the acting staff member is recorded as submitted_by. Route
+// gated by requireRole('admin', 'coordinator').
 export const submitOnBehalf = asyncHandler(async (req, res) => {
   const existing = await svc.getSubmissionById(req.params.id);
   if (!existing) return notFound(res, 'Submission not found');
   const submission = await svc.submitForReview(req.params.id, existing.student_user_id, req.user.id);
   ok(res, submission, 'Submitted for review on behalf of scholar');
+});
+
+// ─── Remarks / feedback thread ────────────────────────────────────────────────
+
+export const listRemarks = asyncHandler(async (req, res) => {
+  const access = await svc.canAccessSubmission(req.params.id, req.user);
+  if (!access.found) return notFound(res, 'Submission not found');
+  if (!access.allowed) return forbidden(res);
+  ok(res, await svc.listRemarks(req.params.id));
+});
+
+export const addRemark = asyncHandler(async (req, res) => {
+  const access = await svc.canAccessSubmission(req.params.id, req.user);
+  if (!access.found) return notFound(res, 'Submission not found');
+  // A scholar reads the feedback on their own report but never writes into the
+  // reviewers' thread — only staff who can act on the submission may post.
+  if (!access.allowed || access.isOwner) return forbidden(res);
+  const remark = (req.body.remark || '').trim();
+  if (!remark) return badRequest(res, 'Remark cannot be empty');
+  const authorRole = (req.user.roles || []).find((r) =>
+    ['admin', 'coordinator', 'academic_guide', 'industry_mentor'].includes(r)) || null;
+  created(res, await svc.addRemark(req.params.id, req.user.id, remark, authorRole), 'Remark added');
+});
+
+export const removeRemark = asyncHandler(async (req, res) => {
+  const isAdmin = (req.user.roles || []).includes('admin');
+  const result = await svc.deleteRemark(req.params.remarkId, req.user.id, isAdmin);
+  if (result.notFound) return notFound(res, 'Remark not found');
+  if (result.forbidden) return forbidden(res, 'You can only delete your own remarks.');
+  noContent(res);
 });
