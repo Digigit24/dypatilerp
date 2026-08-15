@@ -1,5 +1,8 @@
 import { query, getClient } from '../../config/database.js';
 import { notifyStageOpened } from '../notifications/notify.service.js';
+import { env } from '../../config/env.js';
+import { readWorkflow, stagesFor, kindOf } from './workflow.js';
+import { markTargetSubmitted } from '../targets/targets.service.js';
 
 export const listSubmissions = async ({ batch_id, assignment_id, student_user_id, status, submission_type, search, allowed_batch_ids, limit, offset }) => {
   const params = [];
@@ -106,12 +109,24 @@ export const createSubmission = async (payload, ownerId, createdByUserId = null)
       throw Object.assign(new Error('You have already created a submission for this assignment.'), { status: 400 });
     }
   }
+  // One submission per target per scholar (also enforced by uq_sub_target).
+  if (payload.target_id) {
+    const { rows: [dup] } = await query(
+      'SELECT id FROM submissions WHERE target_id=$1 AND student_user_id=$2 AND merged_into_id IS NULL',
+      [payload.target_id, ownerId]
+    );
+    if (dup) {
+      throw Object.assign(new Error('You have already submitted against this target.'), { status: 400 });
+    }
+  }
   const { rows } = await query(
     `INSERT INTO submissions
-       (batch_id,student_user_id,title,submission_type,semester,content,file_urls,assignment_id,created_by_user_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+       (batch_id,student_user_id,title,submission_type,semester,content,file_urls,
+        assignment_id,target_id,cycle_id,created_by_user_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
     [payload.batch_id, ownerId, payload.title, payload.submission_type, payload.semester,
      payload.content||null, JSON.stringify(payload.file_urls||[]), payload.assignment_id||null,
+     payload.target_id||null, payload.cycle_id||null,
      createdByUserId || ownerId]
   );
   return rows[0];
@@ -240,77 +255,100 @@ export const submitForReview = async (id, ownerId, submittedByUserId = null) => 
       if (!att) throw Object.assign(new Error('Attach a file before submitting this report.'), { status: 400 });
     }
 
-    // 2. Determine the approval depth from the linked assignment (if any):
-    //    optional assignment  → ONE layer (coordinator only)
-    //    mandatory / no link  → the batch's configured chain or classic 3 layers
-    let isOptionalAssignment = false;
-    if (sub.assignment_id) {
-      const { rows: [asg] } = await client.query(
-        'SELECT is_mandatory FROM assignments WHERE id=$1', [sub.assignment_id]
-      );
-      isOptionalAssignment = asg ? asg.is_mandatory === false : false;
-    }
-
-    // 3. Build stage list — batch approval_config is the sole source of truth.
+    // 2. Resolve the workflow for THIS submission's kind.
+    //      assignment       -> mode 'none'   (no approval rows at all)
+    //      progress_report  -> mode 'chain'  (the batch's ordered stages)
+    //      target           -> mode 'single' (one configurable approver)
+    //    The batch's approval_config is the only source of truth; readWorkflow
+    //    also understands the legacy v1 shape that production batches carry.
+    const kind = kindOf(sub);
     const { rows: [batch] } = await client.query(
       'SELECT approval_config FROM batches WHERE id=$1', [sub.batch_id]
     );
-    const configStages = batch?.approval_config?.stages || [];
+    let workflow = readWorkflow(batch?.approval_config, kind);
 
-    const stages = isOptionalAssignment
-      ? [{ name: 'coordinator', type: 'role', role: 'coordinator', order_index: 1 }]
-      : (configStages.length > 0 ? configStages : [
-          { name: 'coordinator',    type: 'role', role: 'coordinator',    order_index: 1 },
-          { name: 'academic_guide', type: 'student_guide', guide_type: 'academic', order_index: 2 },
-          { name: 'industry_mentor',type: 'student_guide', guide_type: 'industry', order_index: 3 },
-        ]);
+    // An OPTIONAL assignment has always collapsed to a single coordinator
+    // approval — preserved exactly.
+    if (kind === 'assignment' && sub.assignment_id) {
+      const { rows: [asg] } = await client.query(
+        'SELECT is_mandatory FROM assignments WHERE id=$1', [sub.assignment_id]
+      );
+      if (asg && asg.is_mandatory === false) {
+        workflow = { mode: 'single', approver: { name: 'coordinator', label: 'Coordinator', type: 'role', role: 'coordinator', order_index: 1 } };
+      }
+    }
 
-    // 4. Delete any previous pending approvals for this submission (e.g. resubmission)
+    // PHASE 3 GATE: dropping approval from assignments is a production
+    // behaviour change, so it only takes effect with V2_SUBMISSIONS=true.
+    // Until then assignments keep their historical chain.
+    if (kind === 'assignment' && workflow.mode === 'none' && !env.V2_SUBMISSIONS) {
+      workflow = readWorkflow(batch?.approval_config, 'progress_report');
+    }
+
+    const stages = stagesFor(workflow);
+
+    // Record which workflow actually applied, so changing the batch config
+    // later never rewrites the rules of a submission already in flight.
     await client.query(
-      `DELETE FROM approvals WHERE submission_id=$1 AND status='pending'`, [id]
+      'UPDATE submissions SET workflow_kind=$1 WHERE id=$2', [workflow.mode, id]
     );
 
-    // 5. Resolve reviewer IDs and insert approval rows. Guide resolution is keyed
-    //    to the OWNER (the scholar), never the acting submitter.
-    let firstReviewerId = null;
-    for (const s of stages) {
-      let resolvedReviewerId = null;
-      const roleName = s.role || null;
+    // 3. Clear any previous pending approvals (e.g. a resubmission).
+    await client.query(`DELETE FROM approvals WHERE submission_id=$1 AND status='pending'`, [id]);
 
-      if (s.type === 'student_guide') {
-        // Resolve to the specific guide assigned to this student
+    // 4. No approval required — submitting IS the terminal state.
+    if (!stages.length) {
+      if (sub.target_id) await markTargetSubmitted(sub.target_id).catch(() => {});
+      await client.query('COMMIT');
+      return sub;
+    }
+
+    // 5. Resolve reviewers and insert the approval rows. Guide resolution is
+    //    keyed to the OWNER (the scholar), never the acting submitter.
+    let firstReviewerId = null;
+    for (const st of stages) {
+      let resolvedReviewerId = null;
+      // G-03 FIX: always carry a role fallback. Previously a student_guide
+      // stage with no assigned guide was written with BOTH reviewer_user_id and
+      // reviewer_role null, so it appeared in nobody's queue and the submission
+      // stalled invisibly. Now an unresolved guide stage stays actionable by
+      // anyone holding that role.
+      const roleName = st.role || (st.guide_type === 'academic' ? 'academic_guide'
+                                 : st.guide_type === 'industry' ? 'industry_mentor'
+                                 : st.name) || null;
+
+      if (st.type === 'student_guide') {
         const { rows: [guide] } = await client.query(
           `SELECT guide_user_id FROM student_guides
            WHERE student_user_id=$1 AND guide_type=$2 AND is_active=true LIMIT 1`,
-          [ownerId, s.guide_type]
+          [ownerId, st.guide_type]
         );
         resolvedReviewerId = guide?.guide_user_id || null;
-      } else if (s.type === 'specific_user') {
-        resolvedReviewerId = s.user_id || null;
-      } else if (s.type === 'role') {
-        // For an 'admin' role stage (the single institute-review stage) leave the
-        // reviewer unassigned so ANY authorized admin can act. For other roles the
-        // existing auto-assign is preserved byte-for-byte.
-        if (s.role && s.role !== 'admin') {
-          const { rows: [coord] } = await client.query(
+      } else if (st.type === 'specific_user') {
+        resolvedReviewerId = st.user_id || null;
+      } else if (st.type === 'role') {
+        // An 'admin' stage stays unassigned so ANY authorized admin can act.
+        if (st.role && st.role !== 'admin') {
+          const { rows: [holder] } = await client.query(
             `SELECT ur.user_id FROM user_roles ur
              JOIN roles r ON r.id=ur.role_id
-             WHERE r.name=$1
-               AND (ur.batch_id=$2 OR ur.batch_id IS NULL)
+             WHERE r.name=$1 AND (ur.batch_id=$2 OR ur.batch_id IS NULL)
              LIMIT 1`,
-            [s.role, sub.batch_id]
+            [st.role, sub.batch_id]
           );
-          resolvedReviewerId = coord?.user_id || null;
+          resolvedReviewerId = holder?.user_id || null;
         }
       }
 
       await client.query(
         `INSERT INTO approvals (submission_id, stage, status, order_index, reviewer_user_id, reviewer_role)
          VALUES ($1, $2, 'pending', $3, $4, $5)`,
-        [id, s.name, s.order_index, resolvedReviewerId, roleName]
+        [id, st.name, st.order_index, resolvedReviewerId, roleName]
       );
-      if (firstReviewerId === null && s === stages[0]) firstReviewerId = resolvedReviewerId;
+      if (firstReviewerId === null && st === stages[0]) firstReviewerId = resolvedReviewerId;
     }
+
+    if (sub.target_id) await markTargetSubmitted(sub.target_id).catch(() => {});
 
     await client.query('COMMIT');
 

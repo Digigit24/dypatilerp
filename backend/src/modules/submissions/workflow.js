@@ -22,10 +22,10 @@ export const DEFAULT_CHAIN = [
 ];
 
 /**
- * Default single approver for targets.
- * OPEN QUESTION Q2 (SOP-V2 §11): coordinator vs the scholar's academic guide.
- * Coordinator is the safer default — it always resolves, whereas a guide stage
- * silently stalls for any scholar who has no guide assigned yet.
+ * Default single approver for targets: the COORDINATOR (decided 2026-08-15).
+ * A guide-typed stage would silently stall for any scholar without a guide
+ * assigned — the G-03 failure — whereas a role stage always resolves.
+ * Override per batch via approval_config.target.approver.
  */
 export const DEFAULT_TARGET_APPROVER = {
   name: 'target_review', label: 'Target Review', type: 'role', role: 'coordinator', order_index: 1,

@@ -34,6 +34,10 @@ export const env = {
   // Documents (formats, submission attachments) are unaffected.
   // Flip to 'true' only when the video feature is revived — see CLAUDE.md.
   VIDEO_UPLOADS_ENABLED: process.env.VIDEO_UPLOADS_ENABLED === 'true',
+  // V2 submission model. Targets always use their own single-approval flow.
+  // This flag ONLY controls the Phase 3 change that stops assignments creating
+  // an approval chain — off by default so production behaviour is unchanged.
+  V2_SUBMISSIONS: process.env.V2_SUBMISSIONS === 'true',
   // Local disk is a read CACHE only. Zata is the single source of truth.
   // Leave false on any host with an ephemeral filesystem.
   STORAGE_LOCAL_CACHE: process.env.STORAGE_LOCAL_CACHE === 'true',

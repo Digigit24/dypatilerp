@@ -18,7 +18,11 @@ export const createSubmissionSchema = z.object({
   batch_id: z.string().uuid().optional(),
   assignment_id: z.string().uuid().optional().nullable(),
   title: z.string().min(2).max(500),
-  submission_type: z.enum(['research_paper','progress_report','thesis_chapter','assignment','other']),
+  submission_type: z.enum(['research_paper','progress_report','thesis_chapter','assignment','target','other']),
+  // V2 links: a submission is made against an assignment, a progress-report
+  // cycle, or a target. At most one is ever set.
+  target_id: z.string().uuid().optional().nullable(),
+  cycle_id: z.string().uuid().optional().nullable(),
   semester: z.number().int().min(1).default(1),
   content: z.string().optional(),
   file_urls: z.array(fileDescriptorSchema).optional().default([]),
@@ -36,7 +40,8 @@ export const createSubmissionOnBehalfSchema = z.object({
   assignment_id: z.string().uuid().optional(),
   batch_id: z.string().uuid().optional(),
   title: z.string().min(2).max(500).optional(),
-  submission_type: z.enum(['progress_report', 'assignment']).default('progress_report'),
+  submission_type: z.enum(['progress_report', 'assignment', 'target']).default('progress_report'),
+  target_id: z.string().uuid().optional(),
   semester: z.number().int().min(1).default(1),
 }).refine((b) => !!(b.assignment_id || (b.batch_id && b.title)), {
   message: 'Either assignment_id, or batch_id and title, is required',

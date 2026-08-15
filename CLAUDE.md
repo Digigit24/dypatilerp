@@ -154,7 +154,16 @@ routes, emails, column headings, permission modules.
 
 **Workflow selection** comes from `batches.approval_config`, which is per-kind
 in v2. Production batches still carry the v1 shape (`{ stages: [...] }`) —
-always read it through the compatibility shim, never directly.
+always read it through `readWorkflow()` in
+`backend/src/modules/submissions/workflow.js`, never directly.
+
+**The default target approver is the COORDINATOR** (decided 2026-08-15). A
+guide-typed stage would silently stall for any scholar without a guide assigned.
+Override per batch via `approval_config.target.approver`.
+
+**`V2_SUBMISSIONS` (default false)** gates ONE thing: whether assignments stop
+creating an approval chain. Targets always use their own single-approval flow
+regardless. Turn the flag on in Phase 3, not before.
 
 **`workflow_kind` is snapshotted onto the submission at submit time.** Changing
 a batch's config must never rewrite the rules of a submission already in flight.
@@ -225,7 +234,11 @@ Phases are defined in `documentation/SOP-V2.html` §7.
       and taxonomy keys, approvals gained document-style feedback, `targets` and
       `storage` permission modules seeded with every `progress_reports` grant
       mirrored across. Behaviour-neutral — nothing reads the new columns yet.
-- [ ] **Phase 2 — Targets.** Rename, bulk create, single approval, derived %.
+- [~] **Phase 2 — Targets.** Backend complete: `/api/targets` (list, get, create,
+      bulk-create-across-batch, update, delete, progress-summary), single-approval
+      flow wired through `workflow.js`, target decision applied from the approvals
+      service, derived completion percentage. Frontend service layer shipped;
+      **admin + scholar UI still to build.**
 - [ ] **Phase 3 — Assignments.** Remove approval, multi-file, preview, full page.
 - [ ] **Phase 4 — Progress reports.** Cycles, two slots, document feedback, merge.
 - [ ] **Phase 5 — Storage platform.** Taxonomy, reconciliation, usage dashboard.
