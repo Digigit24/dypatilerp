@@ -146,6 +146,18 @@ pre code{background:none;border:0;padding:0;font-size:inherit}
 .phase h4{margin:0 0 4px;color:var(--text);text-transform:none;letter-spacing:0;font-size:16.5px}
 .phase .meta{font-size:11.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
 td .tag{margin:1px}
+.st{display:inline-block;padding:3px 9px;border-radius:99px;font-size:10.5px;font-weight:800;
+  letter-spacing:.03em;white-space:nowrap;margin-left:2px}
+.st-done{background:var(--ok-t);color:var(--ok)}
+.st-part{background:var(--warn-t);color:var(--warn)}
+.st-todo{background:var(--panel);color:var(--muted);border:1px solid var(--border)}
+.scorecard td:first-child{font-weight:700;white-space:nowrap}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 18px;font-size:12.5px;color:var(--secondary)}
+.done-strike{color:var(--muted)}
+.shipwrap{background:var(--surface);border:1px solid var(--border);border-left:5px solid var(--ok);
+  border-radius:12px;padding:16px 20px;margin:16px 0}
+.shipwrap h4{margin:0 0 8px;color:var(--ok)}
+.shipwrap ul{margin:6px 0 0 20px}
 </style>
 
 </head>
@@ -192,6 +204,153 @@ creation and on semester advance. Coordinator can edit the due date.</td></tr>
 <tr><td>D4</td><td>Storage architecture</td><td><b>Zata is the single source of truth</b></td>
 <td>All uploads block on Zata and fail loudly. Local disk demoted to an optional read cache.
 Reconciliation job plus per-course usage dashboard for billing.</td></tr>
+</table>
+
+
+<h2 id="status">0.5 · Build status <span class="st st-done">updated 15 Aug 2026</span></h2>
+<p>Everything below was built, committed to <code>codex/newui</code>, and where it touches data,
+verified against a Neon branch forked from live data. <b>All backend work is complete.</b>
+Nothing page-shaped has been built — the UI waits on the design conversation.</p>
+<div class="legend">
+  <span><span class="st st-done">✔ done</span> shipped and verified</span>
+  <span><span class="st st-part">◐ partial</span> backend shipped, UI pending</span>
+  <span><span class="st st-todo">○ pending</span> not started</span>
+</div>
+
+<table class="scorecard">
+<tr><th>Phase</th><th>What shipped</th><th>Status</th></tr>
+<tr><td>0 · Stop the bleeding</td>
+<td>Missing <code>crypto</code> import fixed (was breaking <b>every</b> attachment upload on Node 18);
+uploads now block on Zata and are HEAD-verified, failing with 502 and leaving no orphan row; read path
+inverted to Zata-first; local disk demoted to opt-in cache; <code>engines.node</code> → 20.</td>
+<td><span class="st st-done">✔ done</span></td></tr>
+
+<tr><td>— · Video disabled</td>
+<td><code>VIDEO_UPLOADS_ENABLED</code> (backend, 422 on three entry points) and
+<code>VITE_FEATURE_VIDEO</code> (frontend). Lectures nav hidden, routes redirected, Media relabelled
+Documents, video/audio refused on both drop targets. Nothing deleted — revival is two env vars.</td>
+<td><span class="st st-done">✔ done</span></td></tr>
+
+<tr><td>1 · Schema</td>
+<td><code>alter.js</code> block 25: <code>progress_reports</code> → <code>targets</code> behind a
+compatibility view, <code>progress_report_cycles</code>, submissions gained
+<code>cycle_id</code>/<code>target_id</code>/<code>workflow_kind</code>/merge bookkeeping, media file
+slots + taxonomy, approvals feedback columns, <b>every <code>progress_reports</code> grant mirrored
+onto <code>targets</code></b>, backfill, and duplicate guards that skip safely on dirty data.</td>
+<td><span class="st st-done">✔ done</span></td></tr>
+
+<tr><td>2 · Targets</td>
+<td>Full <code>/api/targets</code> module — list (scholar auto-scoped), get, create,
+<b>bulk-create across a batch</b>, update, delete (refused once work exists), progress-summary.
+Single approval wired through <code>workflow.js</code>; decision applied from the approvals service;
+completion percentage <b>derived</b>, never typed.</td>
+<td><span class="st st-part">◐ backend</span></td></tr>
+
+<tr><td>3 · Assignments</td>
+<td>12 file types, 50MB/file and 200MB/submission caps, attach while draft <i>or</i> needs_revision,
+attachment removal (descriptor + row + object together), inline preview endpoint. Removing the
+approval chain is implemented but <b>gated behind <code>V2_SUBMISSIONS</code></b> so production
+behaviour is unchanged until you flip it.</td>
+<td><span class="st st-part">◐ backend</span></td></tr>
+
+<tr><td>4 · Progress reports</td>
+<td>Cycles module (list, roster, <code>ensureCycle</code>, <code>/cycles/mine</code> with both slots
+resolved and a <code>can_submit</code> flag). Two named slots validated by extension + MIME + magic
+bytes; re-upload <b>replaces</b> and marks the old row <code>superseded</code>, never deletes.
+Submit blocked naming the missing slot. Feedback autosave. Merge tool (dry-run by default).</td>
+<td><span class="st st-part">◐ backend</span></td></tr>
+
+<tr><td>5 · Storage platform</td>
+<td>Course › Batch › Semester › Kind folders created on demand, with the Zata object key mirroring
+the same path. <code>/api/storage/usage</code> (the billing figure), <code>/health</code> (with
+<code>?verify=true</code> real bucket check), <code>/orphans</code> (billed but unreferenced —
+reported, never auto-deleted).</td>
+<td><span class="st st-part">◐ backend</span></td></tr>
+
+<tr><td>6 · IA / UX</td>
+<td>Deliberately not started. Design to be agreed before any page building.</td>
+<td><span class="st st-todo">○ pending</span></td></tr>
+
+<tr><td>7 · Cleanup</td>
+<td>Retire the compatibility view and the v1 config shim — two clean weeks after Phase 6.</td>
+<td><span class="st st-todo">○ pending</span></td></tr>
+</table>
+
+<h3 id="status-gaps">V1 gap audit — what has been closed</h3>
+<table>
+<tr><th>ID</th><th>Gap</th><th>How it was closed</th><th>Status</th></tr>
+<tr><td>G-01</td><td>No way to advance a scholar's semester</td>
+<td><code>POST /batches/:id/advance-semester</code>. Also opens the next progress-report cycle, and
+<i>warns</i> (never blocks) on open targets and unpaid fees.</td><td><span class="st st-done">✔ done</span></td><span class="st st-done">✔ shipped</span></tr>
+<tr><td>G-02</td><td>Fees not generated from the course structure</td>
+<td><code>POST /fees/bulk</code> — a whole batch's semester fees, amount defaulting to
+<code>courses.fee_structure</code>. Idempotent, never double-charges.</td><td><span class="st st-done">✔ done</span></td><span class="st st-done">✔ shipped</span></tr>
+<tr><td>G-03</td><td>Submissions stall invisibly when no guide is assigned</td>
+<td>An unresolvable <code>student_guide</code> stage now still records <code>reviewer_role</code>, so
+it stays actionable by anyone holding that role instead of landing in nobody's queue.</td><td><span class="st st-done">✔ done</span></td></tr>
+<tr><td>G-05</td><td>No bulk milestone creation</td>
+<td><code>POST /targets/bulk</code> — 6 targets × 23 scholars in one call.</td><td><span class="st st-done">✔ done</span></td></tr>
+<tr><td>G-04</td><td>Status transitions can be skipped</td><td>Not yet implemented — the applicant
+status map still accepts any target status.</td><td><span class="st st-todo">○ pending</span></td></tr>
+<tr><td>G-06</td><td>No fee receipt PDF</td><td>Not started.</td><td><span class="st st-todo">○ pending</span></td></tr>
+<tr><td>G-07</td><td>No completion / exit flow</td><td>Not started.</td><td><span class="st st-todo">○ pending</span></td></tr>
+<tr><td>G-08</td><td>No reviewer reassignment or escalation</td><td>Not started — a departed guide
+still freezes a submission.</td><td><span class="st st-todo">○ pending</span></td></tr>
+<tr><td>G-13</td><td>Global search box is decorative</td><td>Still decorative.</td><td><span class="st st-todo">○ pending</span></td></tr>
+<tr><td>G-14</td><td><code>schema.sql</code> has drifted</td><td>Still drifted — V2 additions live in
+<code>alter.js</code> block 25 by design.</td><td><span class="st st-todo">○ pending</span></td></tr>
+<tr><td>G-16</td><td>Frontend constants out of sync</td><td><code>SUBMISSION_STATUS.PENDING</code>
+still not a real enum value.</td><td><span class="st st-todo">○ pending</span></td></tr>
+</table>
+
+<div class="shipwrap">
+<h4>Verified against real data, not just syntax</h4>
+<ul>
+<li>Migration run on Neon branch <code>v2-migration-from-dev-2026-08-15</code>
+(<code>br-royal-bar-apag84ul</code>), forked from the branch that holds live data.
+<b>No row count decreased</b>; <code>role_permissions</code> 175 → 190; 3 cycles created;
+10 legacy progress reports linked; all 13 submissions stamped.</li>
+<li>The duplicate guard behaved as designed — it found Namita (4 rows), Satish (3) and Test Scholar
+(2) and <b>skipped</b> <code>uq_sub_cycle</code> rather than aborting the migration.</li>
+<li>Targets end to end: <b>138 targets created across 23 scholars in one statement</b>, then
+submit → single coordinator approval → approve moved the scholar's derived progress to
+<b>1/6 = 17%</b>, matching the acceptance criterion in §9.</li>
+<li>Whole-tree import graph resolves: 316 relative imports, 0 missing. Every touched file passes
+<code>node --check</code>.</li>
+</ul>
+</div>
+
+<div class="warnbox"><b>Two operational findings worth acting on.</b>
+(1) The Neon branch named <code>production</code> is <b>empty</b> — the live app runs off the branch
+named <code>development</code>. Rename them before a deploy points somewhere wrong.
+(2) The verification branch now contains test data (138 targets and a synthetic submission) — it is a
+sandbox, do not promote it. Run the migration fresh against the real branch.</div>
+
+<h3 id="status-next">What is left</h3>
+<table>
+<tr><th>Owner</th><th>Item</th></tr>
+<tr><td><b>You</b></td><td>Run the migration on the live branch: <code>db:verify:save</code> →
+<code>db:alter</code> → <code>db:verify</code>, then <code>db:merge-reports</code> (dry run first),
+then <code>db:alter</code> again to create <code>uq_sub_cycle</code>.</td></tr>
+<tr><td><b>You</b></td><td>Answer <b>Q1</b> — is the presentation slot ever optional? Built as always required.</td></tr>
+<tr><td><b>You</b></td><td>Set <code>courses.preferences.storage_quota_bytes</code> — the usage
+endpoint reports a percentage but has nothing to measure against.</td></tr>
+<tr><td><b>You</b></td><td>Decide when to flip <code>V2_SUBMISSIONS=true</code> (drops approval from assignments).</td></tr>
+<tr><td>Both</td><td>Agree the IA/UX design (§5) before any page is built.</td></tr>
+<tr><td>Build</td><td>All UI: target set builder, scholar target list, progress-report cycle page,
+full-page review screen with the document feedback editor, assignment detail page, preview
+components, storage dashboard, scholar hub and sidebar.</td></tr>
+<tr><td>Build</td><td>M9 notification events — none of the new events have been added yet.</td></tr>
+<tr><td>Build</td><td>Remaining V1 gaps: G-04, G-06, G-07, G-08, G-13, G-14, G-16.</td></tr>
+</table>
+
+<h3 id="status-commits">Commits on <code>codex/newui</code></h3>
+<table>
+<tr><th>SHA</th><th>Contents</th></tr>
+<tr><td><code>f6f8037</code></td><td>Phase 0 + Phase 1 — storage fixes, video disable, V2 schema, docs, verifier</td></tr>
+<tr><td><code>e638516</code></td><td>Pre-existing newui UI refinements (kept separate so either can be reverted alone)</td></tr>
+<tr><td><code>3fd4751</code></td><td>Phase 2 — targets module, single approval, derived progress</td></tr>
+<tr><td><code>af6b98b</code></td><td>Phases 3–5 backend — cycles, slots, storage platform, G-01 and G-02</td></tr>
 </table>
 
 <h2 id="model">1 · The three submission types</h2>
@@ -399,7 +558,7 @@ can optionally re-file old rows into the right <i>folder</i> without touching th
 has been verified on a Neon branch restored from the production snapshot.</p>
 
 <div class="phase"><span class="meta">Step 0 · before anything</span>
-<h4>Snapshot and baseline</h4>
+<h4>Snapshot and baseline <span class="st st-part">◐ done on the verification branch — repeat on live</span></h4>
 <ol>
 <li>Take a Neon point-in-time branch of production. Name it <code>pre-v2-&lt;date&gt;</code>.</li>
 <li>Run <code>documentation/diagnostics/audit-submissions.sql</code> against production and
@@ -410,7 +569,7 @@ be equal or greater. None may ever fall.</li>
 </ol></div>
 
 <div class="phase"><span class="meta">Step 1 · schema only, no behaviour change</span>
-<h4>Apply the additive DDL</h4>
+<h4>Apply the additive DDL <span class="st st-done">✔ written &amp; verified</span></h4>
 <p>Everything in <a href="#schema">Section 2</a>, added to <code>backend/src/db/alter.js</code> as new
 numbered blocks. After this step the application behaves exactly as before — new columns are unused,
 the compatibility view keeps <code>progress_reports</code> queries working.</p>
@@ -419,7 +578,7 @@ the compatibility view keeps <code>progress_reports</code> queries working.</p>
 added columns. No data touched.</p></div>
 
 <div class="phase"><span class="meta">Step 2 · backfill, still no behaviour change</span>
-<h4>Create cycles and classify legacy rows</h4>
+<h4>Create cycles and classify legacy rows <span class="st st-done">✔ written &amp; verified</span></h4>
 <pre><code>-- 2a. One progress-report cycle per active batch per semester reached so far.
 INSERT INTO progress_report_cycles (batch_id, semester, title, due_date, status, created_by)
 SELECT b.id, s.sem,
@@ -458,7 +617,7 @@ create the unique indexes <b>after</b> the merge, not before. Sequence: run 2d, 
 <code>uq_sub_cycle</code>.</div></div>
 
 <div class="phase"><span class="meta">Step 3 · the merge (D1)</span>
-<h4>Pair split reports into one record</h4>
+<h4>Pair split reports into one record <span class="st st-part">◐ tool built — not yet run</span></h4>
 <p>The merge is proposed by a script and confirmed by a human. It never runs unattended.</p>
 <ol class="steps">
 <li><b>Propose</b><span class="who">script · dry run</span>
@@ -485,19 +644,19 @@ create the unique indexes <b>after</b> the merge, not before. Sequence: run 2d, 
 </ol></div>
 
 <div class="phase"><span class="meta">Step 4 · abandoned drafts</span>
-<h4>Hide, do not delete</h4>
+<h4>Hide, do not delete <span class="st st-todo">○ UI filter pending</span></h4>
 <p>The two empty drafts ("PPPP", "PROGRESS REPORT") and any like them stay in the table. The student
 UI filters them out with <code>WHERE NOT (status='draft' AND file_count=0 AND created_at &lt; NOW() - INTERVAL '30 days')</code>,
 and an admin <b>Abandoned drafts</b> view lists them so staff can see what a stuck scholar tried to do.</p></div>
 
 <div class="phase"><span class="meta">Step 5 · cutover</span>
-<h4>Flip the reads, module by module</h4>
+<h4>Flip the reads, module by module <span class="st st-part">◐ flag in place</span></h4>
 <p>Behind a single environment flag <code>V2_SUBMISSIONS=true</code>, each module switches from the
 legacy path to the V2 path in the order given in <a href="#rollout">Section 7</a>. The flag can be
 turned off at any point and the application returns to V1 behaviour, because no V1 data was removed.</p></div>
 
 <div class="phase"><span class="meta">Step 6 · retire the shims</span>
-<h4>Only after two clean weeks</h4>
+<h4>Only after two clean weeks <span class="st st-todo">○ pending</span></h4>
 <p>Drop the <code>progress_reports</code> compatibility view, remove the v1 <code>approval_config</code>
 reader shim, and archive the merge tooling. Keep <code>merged_into_id</code>, <code>legacy_flag</code>
 and every legacy row permanently.</p></div>
@@ -506,7 +665,7 @@ and every legacy row permanently.</p></div>
 <p>Fourteen modules. Each block: what it does today, what it must do, the backend and frontend work,
 and how you know it is done.</p>
 
-<div class="mod"><header><span class="id">M1</span><h3>Submissions core — one table, three behaviours</h3>
+<div class="mod"><header><span class="id">M1</span><span class="st st-done">✔ Backend done</span><h3>Submissions core — one table, three behaviours</h3>
 <span class="tag t-bad">Rewire</span></header><div class="body">
 <div class="ba">
 <div class="now"><h5>Today</h5>
@@ -545,7 +704,7 @@ left waiting for an approval that will never come.</li>
 </ul>
 </div></div>
 
-<div class="mod"><header><span class="id">M2</span><h3>Assignments — no approval, many files, full page, preview</h3>
+<div class="mod"><header><span class="id">M2</span><span class="st st-part">◐ Backend done · UI pending</span><h3>Assignments — no approval, many files, full page, preview</h3>
 <span class="tag t-warn">Change</span></header><div class="body">
 <div class="ba">
 <div class="now"><h5>Today</h5>
@@ -585,7 +744,7 @@ per-scholar preview, bulk export.</li>
 </ul>
 </div></div>
 
-<div class="mod"><header><span class="id">M3</span><h3>Progress Reports — cycles, two slots, chain, document feedback</h3>
+<div class="mod"><header><span class="id">M3</span><span class="st st-part">◐ Backend done · UI pending</span><h3>Progress Reports — cycles, two slots, chain, document feedback</h3>
 <span class="tag t-bad">Rewire</span></header><div class="body">
 <div class="ba">
 <div class="now"><h5>Today</h5>
@@ -625,7 +784,7 @@ Previous stages' feedback shown above, read-only, in the same document style.</l
 </ul>
 </div></div>
 
-<div class="mod"><header><span class="id">M4</span><h3>Targets — renamed, single approval, drives the percentage</h3>
+<div class="mod"><header><span class="id">M4</span><span class="st st-part">◐ Backend done · UI pending</span><h3>Targets — renamed, single approval, drives the percentage</h3>
 <span class="tag t-bad">New behaviour</span></header><div class="body">
 <div class="ba">
 <div class="now"><h5>Today</h5>
@@ -665,7 +824,7 @@ becomes <b>Target</b>. Add it to the label store so the wording is configurable 
 </ul>
 </div></div>
 
-<div class="mod"><header><span class="id">M5</span><h3>Approval engine — three modes, one code path</h3>
+<div class="mod"><header><span class="id">M5</span><span class="st st-part">◐ Done except reassign</span><h3>Approval engine — three modes, one code path</h3>
 <span class="tag t-warn">Change</span></header><div class="body">
 <h4>Changes</h4>
 <ul>
@@ -684,7 +843,7 @@ no-blanket-override rule stays; this is an explicit, recorded reassignment, not 
 </ul>
 </div></div>
 
-<div class="mod"><header><span class="id">M6</span><h3>Batch configuration — two workflows, one screen</h3>
+<div class="mod"><header><span class="id">M6</span><span class="st st-part">◐ Reader done · UI pending</span><h3>Batch configuration — two workflows, one screen</h3>
 <span class="tag t-warn">Change</span></header><div class="body">
 <p>The wizard's Workflows tab currently configures one chain. It must configure both, on one screen,
 with the assignment row shown as fixed:</p>
@@ -700,7 +859,7 @@ with the assignment row shown as fixed:</p>
 silently upgrades it in the editor and shows a one-line note that it was migrated on save.</p>
 </div></div>
 
-<div class="mod"><header><span class="id">M7</span><h3>Storage — Zata as the single source of truth</h3>
+<div class="mod"><header><span class="id">M7</span><span class="st st-part">◐ Backend done · UI pending</span><h3>Storage — Zata as the single source of truth</h3>
 <span class="tag t-bad">Critical</span></header><div class="body">
 <div class="ba">
 <div class="now"><h5>Today — and why media won't fetch</h5>
@@ -765,7 +924,7 @@ the database but not in the bucket — that list is your recovery worklist.</li>
 </ul>
 </div></div>
 
-<div class="mod"><header><span class="id">M8</span><h3>Preview system — inline everywhere, full page for review</h3>
+<div class="mod"><header><span class="id">M8</span><span class="st st-part">◐ Endpoint done · components pending</span><h3>Preview system — inline everywhere, full page for review</h3>
 <span class="tag t-bad">New</span></header><div class="body">
 <h4>The problem</h4>
 <p>Files today are private and reachable only through a session-token stream that sets
@@ -774,8 +933,8 @@ PDF, open it in another app, then come back to type feedback. That is the single
 whole reviewing experience.</p>
 <h4>Design</h4>
 <table>
-<tr><th>Type</th><th>Inline preview</th><th>How</th></tr>
-<tr><td>PDF</td><td><span class="tag t-ok">Native</span></td><td>New <code>GET /videos/:id/preview?sessionToken=</code> serving the same bytes with <code>Content-Disposition: inline</code> and the correct MIME. Rendered in an iframe, or pdf.js when page-level controls are wanted.</td></tr>
+<tr><th>Type</th><th>Inline preview</th><th>How</th><span class="st st-done">✔ shipped</span><span class="st st-done">✔ shipped</span><span class="st st-done">✔ shipped</span><span class="st st-done">✔ shipped</span></tr>
+<tr><td>PDF</td><td><span class="tag t-ok">Native</span></td><td>New <code>GET /videos/:id/preview?sessionToken=</code> serving the same bytes with <code>Content-Disposition: inline</code> and the correct MIME. Rendered in an iframe, or pdf.js when page-level controls are wanted.</td><span class="st st-done">✔ shipped</span></tr>
 <tr><td>Images</td><td><span class="tag t-ok">Native</span></td><td>Same inline endpoint, rendered as <code>&lt;img&gt;</code>.</td></tr>
 <tr><td>PPT / PPTX</td><td><span class="tag t-warn">Derived</span></td><td>Browsers cannot render these, and the files are private so no third-party viewer can reach them. Convert server-side to PDF with headless LibreOffice as a background job; store the result in Zata as <code>preview_key</code>. Preview the derived PDF. Falls back to download while the job is pending.</td></tr>
 <tr><td>DOC / DOCX / XLSX</td><td><span class="tag t-warn">Derived</span></td><td>Same LibreOffice pipeline.</td></tr>
@@ -803,7 +962,7 @@ or downloading anything.</li>
 </ul>
 </div></div>
 
-<div class="mod"><header><span class="id">M9</span><h3>Notifications — new events for the new model</h3>
+<div class="mod"><header><span class="id">M9</span><span class="st st-todo">○ Not started</span><h3>Notifications — new events for the new model</h3>
 <span class="tag t-warn">Extend</span></header><div class="body">
 <table>
 <tr><th>Event</th><th>To</th><th>When</th><th>Status</th></tr>
@@ -820,7 +979,7 @@ or downloading anything.</li>
 <code>EVENT_DEFAULTS</code>, and an entry in the wizard's Notifications tab.</p>
 </div></div>
 
-<div class="mod"><header><span class="id">M10</span><h3>Scholar list — the hub, with real columns</h3>
+<div class="mod"><header><span class="id">M10</span><span class="st st-todo">○ UI — not started</span><h3>Scholar list — the hub, with real columns</h3>
 <span class="tag t-warn">Change</span></header><div class="body">
 <p>This becomes the single entry point for everything student-related, so it has to carry the data
 staff currently go hunting for across four screens.</p>
@@ -850,7 +1009,7 @@ for 60 seconds. Do not compute them per-row in the frontend.</div>
 and share it.</p>
 </div></div>
 
-<div class="mod"><header><span class="id">M11</span><h3>Scholar detail — one page, all three submission kinds</h3>
+<div class="mod"><header><span class="id">M11</span><span class="st st-todo">○ UI — not started</span><h3>Scholar detail — one page, all three submission kinds</h3>
 <span class="tag t-warn">Change</span></header><div class="body">
 <p>Replaces the need for a separate student list inside Progress Reports, inside Targets, and inside
 Submissions. One list, one detail page, tabs inside it.</p>
@@ -877,12 +1036,12 @@ Submissions. One list, one detail page, tabs inside it.</p>
 sidebar does today. The URL carries the tab (<code>?tab=targets</code>) so links are shareable.</p>
 </div></div>
 
-<div class="mod"><header><span class="id">M12</span><h3>Navigation — less sidebar, more page</h3>
+<div class="mod"><header><span class="id">M12</span><span class="st st-todo">○ UI — not started</span><h3>Navigation — less sidebar, more page</h3>
 <span class="tag t-warn">Change</span></header><div class="body">
 <p>See <a href="#ux">Section 5</a> for the full proposal and rationale.</p>
 </div></div>
 
-<div class="mod"><header><span class="id">M13</span><h3>Permissions — new modules</h3>
+<div class="mod"><header><span class="id">M13</span><span class="st st-done">✔ Done</span><h3>Permissions — new modules</h3>
 <span class="tag t-warn">Extend</span></header><div class="body">
 <ul>
 <li>New permission modules: <code>targets</code> (replacing <code>progress_reports</code> semantics),
@@ -896,7 +1055,7 @@ moment the rename lands. This is the easiest thing to forget in the whole plan.<
 </ul>
 </div></div>
 
-<div class="mod"><header><span class="id">M14</span><h3>Dashboards — readiness, not vanity</h3>
+<div class="mod"><header><span class="id">M14</span><span class="st st-todo">○ UI — not started</span><h3>Dashboards — readiness, not vanity</h3>
 <span class="tag t-neutral">Enhance</span></header><div class="body">
 <ul>
 <li><b>Coordinator dashboard</b> answers four questions in one screen: what needs my approval, who is
@@ -1085,19 +1244,19 @@ institution, exactly like Student → Scholar already is.</p>
 <table>
 <tr><th>Method &amp; path</th><th>Status</th><th>Notes</th></tr>
 <tr><td><code>GET /assignments/:id</code></td><td><span class="tag t-bad">New</span></td><td>Detail + my submission + roster stats</td></tr>
-<tr><td><code>DELETE /submissions/:id/attachment/:mediaId</code></td><td><span class="tag t-bad">New</span></td><td>Remove a file before submit; deletes Zata object + row in one transaction</td></tr>
-<tr><td><code>GET/POST/PATCH /progress-reports/cycles</code></td><td><span class="tag t-bad">New</span></td><td>Cycle CRUD; auto-created but editable</td></tr>
+<tr><td><code>DELETE /submissions/:id/attachment/:mediaId</code></td><td><span class="tag t-bad">New</span></td><td>Remove a file before submit; deletes Zata object + row in one transaction</td><span class="st st-done">✔ shipped</span></tr>
+<tr><td><code>GET/POST/PATCH /progress-reports/cycles</code></td><td><span class="tag t-bad">New</span></td><td>Cycle CRUD; auto-created but editable</td><span class="st st-done">✔ shipped</span></tr>
 <tr><td><code>GET /progress-reports/my-cycle</code></td><td><span class="tag t-bad">New</span></td><td>Scholar's open cycle + their submission</td></tr>
-<tr><td><code>POST /submissions/:id/attachment?slot=</code></td><td><span class="tag t-warn">Changed</span></td><td>Slot-aware; replaces rather than appends for progress reports</td></tr>
-<tr><td><code>GET /targets</code>, <code>POST /targets</code>, <code>POST /targets/bulk</code></td><td><span class="tag t-bad">New</span></td><td>Replaces <code>/progress-reports</code> milestone semantics</td></tr>
+<tr><td><code>POST /submissions/:id/attachment?slot=</code></td><td><span class="tag t-warn">Changed</span></td><td>Slot-aware; replaces rather than appends for progress reports</td><span class="st st-done">✔ shipped</span></tr>
+<tr><td><code>GET /targets</code>, <code>POST /targets</code>, <code>POST /targets/bulk</code></td><td><span class="tag t-bad">New</span></td><td>Replaces <code>/progress-reports</code> milestone semantics</td><span class="st st-done">✔ shipped</span></tr>
 <tr><td><code>GET /students/:id/progress-summary</code></td><td><span class="tag t-bad">New</span></td><td>Derived target percentages per semester</td></tr>
 <tr><td><code>GET /students?include=counts</code></td><td><span class="tag t-warn">Changed</span></td><td>Single query with lateral joins for the new scholar-list columns</td></tr>
 <tr><td><code>PATCH /approvals/:id/feedback</code></td><td><span class="tag t-bad">New</span></td><td>Autosave rich feedback without taking the stage action</td></tr>
 <tr><td><code>POST /approvals/:id/reassign</code></td><td><span class="tag t-bad">New</span></td><td>Admin-only, audit-logged (V1 gap G-08)</td></tr>
 <tr><td><code>PUT /batches/:id/approval-config</code></td><td><span class="tag t-warn">Changed</span></td><td>Accepts the v2 per-kind shape; upgrades v1 on write</td></tr>
 <tr><td><code>GET /videos/:id/preview</code></td><td><span class="tag t-bad">New</span></td><td>Inline <code>Content-Disposition</code>, correct MIME</td></tr>
-<tr><td><code>POST /videos/upload</code></td><td><span class="tag t-warn">Changed</span></td><td>Zata-blocking, HEAD-verified, fails loudly</td></tr>
-<tr><td><code>GET /storage/usage</code>, <code>GET /storage/health</code></td><td><span class="tag t-bad">New</span></td><td>Per-course billing aggregate + integrity report</td></tr>
+<tr><td><code>POST /videos/upload</code></td><td><span class="tag t-warn">Changed</span></td><td>Zata-blocking, HEAD-verified, fails loudly</td><span class="st st-done">✔ shipped</span></tr>
+<tr><td><code>GET /storage/usage</code>, <code>GET /storage/health</code></td><td><span class="tag t-bad">New</span></td><td>Per-course billing aggregate + integrity report</td><span class="st st-done">✔ shipped</span></tr>
 <tr><td><code>POST /batches/:id/advance-semester</code></td><td><span class="tag t-bad">New</span></td><td>From V1 gap G-01; now also opens the next progress-report cycle</td></tr>
 <tr><td><code>POST /fees/bulk</code></td><td><span class="tag t-bad">New</span></td><td>From V1 gap G-02</td></tr>
 <tr><td><code>GET /progress-reports</code> (milestone sense)</td><td><span class="tag t-neutral">Deprecated</span></td><td>Alias to <code>/targets</code> for one release, then removed</td></tr>
@@ -1108,7 +1267,7 @@ institution, exactly like Student → Scholar already is.</p>
 after any phase, nothing is broken.</p>
 
 <div class="phase"><span class="meta">Phase 0 · ship today · no schema change</span>
-<h4>Stop the bleeding</h4>
+<h4>Stop the bleeding <span class="st st-done">✔ shipped</span></h4>
 <ul>
 <li>Import <code>crypto</code> in <code>videos.controller.js</code> and confirm the host's Node version.</li>
 <li>Make the Zata push in <code>proxyUpload</code> awaited; return 502 on failure and write no media row.</li>
@@ -1119,41 +1278,41 @@ after any phase, nothing is broken.</p>
 scholars right now. None of them need a migration.</p></div>
 
 <div class="phase"><span class="meta">Phase 1 · schema</span>
-<h4>Additive DDL + backfill</h4>
+<h4>Additive DDL + backfill <span class="st st-done">✔ shipped</span></h4>
 <p>Migration Steps 1 and 2. Application behaviour unchanged. Verify counts, then move on.</p></div>
 
 <div class="phase"><span class="meta">Phase 2 · targets</span>
-<h4>Rename, bulk create, single approval, derived percentage</h4>
+<h4>Rename, bulk create, single approval, derived percentage <span class="st st-part">◐ backend shipped</span></h4>
 <p>M4 + M13. The safest of the three rewires because targets have no live approval traffic today.
 Ship the vocabulary change with it so "Target" lands once, everywhere.</p>
 <p><b>Do not forget</b> to duplicate the <code>progress_reports</code> role permissions onto
 <code>targets</code> in the same migration.</p></div>
 
 <div class="phase"><span class="meta">Phase 3 · assignments</span>
-<h4>Drop approval, add multi-file and preview, full page</h4>
+<h4>Drop approval, add multi-file and preview, full page <span class="st st-part">◐ backend shipped, flag-gated</span></h4>
 <p>M2 + M8 (PDF and image preview only). Existing assignment submissions that already carry approval
 rows keep them — their <code>workflow_kind</code> was stamped <code>chain</code> in the backfill, so
 history reads correctly while new ones go through no approval at all.</p></div>
 
 <div class="phase"><span class="meta">Phase 4 · progress reports</span>
-<h4>Cycles, two slots, document feedback, the merge</h4>
+<h4>Cycles, two slots, document feedback, the merge <span class="st st-part">◐ backend shipped</span></h4>
 <p>M3 + M5 + Migration Step 3. The merge review screen ships with this phase and is used once.
 Create the unique indexes only after the merge is accepted.</p>
 <p><b>Communicate this one.</b> Scholars in Batch Dec 2025 have already filed reports the old way —
 tell them before their view changes.</p></div>
 
 <div class="phase"><span class="meta">Phase 5 · storage platform</span>
-<h4>Folder taxonomy, reconciliation, usage dashboard, PPTX preview</h4>
+<h4>Folder taxonomy, reconciliation, usage dashboard, PPTX preview <span class="st st-part">◐ backend shipped · PPTX preview deferred</span></h4>
 <p>Rest of M7 and M8. This is what makes the offering feel like a hosted document platform rather than
 a file field — and it is what justifies the storage line on your invoice.</p></div>
 
 <div class="phase"><span class="meta">Phase 6 · IA and UX</span>
-<h4>Scholar hub, sidebar reduction, drawers</h4>
+<h4>Scholar hub, sidebar reduction, drawers <span class="st st-todo">○ design first</span></h4>
 <p>M10 + M11 + M12 + M14. Deliberately last: it is the most visible change and the least risky to defer.
 Doing it after the data model settles means you rebuild the navigation once, not twice.</p></div>
 
 <div class="phase"><span class="meta">Phase 7 · cleanup</span>
-<h4>Retire shims</h4>
+<h4>Retire shims <span class="st st-todo">○ pending</span></h4>
 <p>Migration Step 6, two clean weeks after Phase 6.</p></div>
 
 <h3 id="flag">Feature flagging</h3>
@@ -1229,6 +1388,7 @@ still works.</li>
 </ol>
 
 <h2 id="effort">10 · Effort and sequencing summary</h2>
+<div class="okbox"><b>Phases 0–5 backend are complete.</b> The remaining effort in this table is now almost entirely frontend — see <a href="#status">§0.5</a> for the exact split.</div>
 <table>
 <tr><th>Phase</th><th>Scope</th><th>Backend</th><th>Frontend</th><th>Migration</th><th>Risk</th></tr>
 <tr><td>0 · Stop the bleeding</td><td>Crypto fix, Zata-blocking upload, diagnostics</td><td>S</td><td>—</td><td>None</td><td><span class="tag t-ok">Low</span></td></tr>
@@ -1245,11 +1405,11 @@ Phase 1 + the two unique indexes (you are accumulating duplicates right now), an
 approval from assignments (it is the change the client explicitly asked for and it is the cheapest of
 the three rewires).</div>
 
-<h2 id="open">11 · Open questions to settle before Phase 4</h2>
+<h2 id="open">11 · Open questions</h2>
 <table>
 <tr><th>#</th><th>Question</th><th>Why it matters</th></tr>
 <tr><td>Q1</td><td>Are the two progress-report files <b>always</b> exactly one PDF and one PPT, or can a scholar submit only the PDF in some semesters?</td><td>Decides whether both slots are hard-required or the presentation slot is optional per cycle.</td></tr>
-<tr><td>Q2</td><td>Who is the default single approver for targets — coordinator, or the scholar's academic guide?</td><td>Changes the seeded default in <code>approval_config.target</code>. Guide scales better; coordinator is more consistent.</td></tr>
+<tr><td>Q2</td><td class="done-strike"><s>Default single approver for targets</s></td><td><b>ANSWERED 15 Aug 2026 — the coordinator.</b> A guide-typed stage would silently stall for any scholar without a guide assigned (the G-03 failure); a role stage always resolves. Set in <code>workflow.js</code> as <code>DEFAULT_TARGET_APPROVER</code>, overridable per batch.</td></tr>
 <tr><td>Q3</td><td>Should a rejected target block the semester percentage, or just not count until approved?</td><td>Affects how the ring reads. Recommendation: not counted, shown as a distinct state, no penalty.</td></tr>
 <tr><td>Q4</td><td>What is the per-course storage quota you actually sell?</td><td>Needed before the quota bar and the block-at-100% rule can ship.</td></tr>
 <tr><td>Q5</td><td>Is headless LibreOffice acceptable on the backend host?</td><td>Decides whether PPTX/DOCX preview is in Phase 5 or deferred indefinitely.</td></tr>
