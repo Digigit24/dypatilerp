@@ -135,6 +135,13 @@ router.get('/:id/stream', ctrl.streamVideo); // validated via sessionToken query
 router.get('/:id/download', ctrl.downloadMedia); // validated via sessionToken query param
 
 /**
+ * Inline preview — same bytes as /stream but Content-Disposition: inline, so a
+ * reviewer reads the document in the browser instead of downloading it.
+ * Validated via sessionToken exactly like streaming.
+ */
+router.get('/:id/preview', ctrl.previewMedia);
+
+/**
  * @swagger
  * /videos/{id}/progress:
  *   post:

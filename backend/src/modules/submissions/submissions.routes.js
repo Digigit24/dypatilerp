@@ -3,7 +3,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requirePermission, requireRole } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import * as ctrl from './submissions.controller.js';
-import { uploadSubmissionAttachment } from '../videos/videos.controller.js';
+import { uploadSubmissionAttachment, removeSubmissionAttachment } from '../videos/videos.controller.js';
 import { createSubmissionSchema, updateSubmissionSchema, createSubmissionOnBehalfSchema, createRemarkSchema } from './submissions.schema.js';
 
 const router = Router();
@@ -111,6 +111,13 @@ router.post('/:id/submit', requirePermission('submissions', 'update'), ctrl.subm
  *       file_urls. Authorized for the owning scholar or an admin (on-behalf).
  */
 router.post('/:submissionId/attachment', requirePermission('submissions', 'create'), uploadSubmissionAttachment);
+
+/**
+ * DELETE /submissions/:submissionId/attachment/:mediaId
+ * Remove a file before the submission goes for review. Descriptor, media row
+ * and stored object are removed together.
+ */
+router.delete('/:submissionId/attachment/:mediaId', requirePermission('submissions', 'update'), removeSubmissionAttachment);
 
 /**
  * @swagger

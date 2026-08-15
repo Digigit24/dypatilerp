@@ -7,9 +7,14 @@ import { query } from '../../config/database.js';
 import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate.js';
+import cycleRoutes from './cycles.routes.js';
 
 const router = Router();
 router.use(authenticate);
+
+// V2: progress-report CYCLES — the 6-monthly submission windows.
+// Mounted before the legacy milestone routes so /cycles is never swallowed.
+router.use('/cycles', cycleRoutes);
 
 const createSchema = z.object({
   batch_id: z.string().uuid(),

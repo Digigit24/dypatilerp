@@ -239,10 +239,30 @@ Phases are defined in `documentation/SOP-V2.html` §7.
       flow wired through `workflow.js`, target decision applied from the approvals
       service, derived completion percentage. Frontend service layer shipped;
       **admin + scholar UI still to build.**
-- [ ] **Phase 3 — Assignments.** Remove approval, multi-file, preview, full page.
-- [ ] **Phase 4 — Progress reports.** Cycles, two slots, document feedback, merge.
-- [ ] **Phase 5 — Storage platform.** Taxonomy, reconciliation, usage dashboard.
+- [~] **Phase 3 — Assignments.** Backend done: multi-file uploads (pdf/ppt/pptx/
+      doc/docx/xls/xlsx/png/jpg/webp/zip, 50MB per file, 200MB per submission),
+      attachment removal, inline preview endpoint. Dropping the approval chain is
+      implemented but gated behind `V2_SUBMISSIONS` — flip that flag to go live.
+      **UI (assignment detail page, preview strip) still to build.**
+- [~] **Phase 4 — Progress reports.** Backend done: cycles (auto-created, roster,
+      `/cycles/mine`), two named slots with per-slot type validation and
+      replace-not-append, both-slots-required submit guard, feedback autosave
+      (`PATCH /approvals/:id/feedback`), and the merge tool. **UI (cycle page,
+      full-page review screen, document feedback editor) still to build.**
+- [~] **Phase 5 — Storage platform.** Backend done: Course > Batch > Semester >
+      Kind folder taxonomy mirrored into the Zata key, `/api/storage/usage`
+      (billing), `/health` (with `?verify=true` bucket check) and `/orphans`.
+      **UI (storage dashboard) still to build.**
 - [ ] **Phase 6 — IA / UX.** Scholar hub, sidebar reduction, drawers.
+      *Deliberately not started — design to be agreed before any coding.*
+
+### Also landed (V1 gap closures)
+- **G-01** `POST /batches/:id/advance-semester` — nothing previously wrote
+  `current_semester` after enrolment. Also opens the next progress-report cycle.
+- **G-02** `POST /fees/bulk` — raises a semester's fees for a whole batch from
+  the course fee structure. Idempotent.
+- **G-03** unresolvable guide stages now keep a `reviewer_role` fallback.
+- **G-05** `POST /targets/bulk`.
 - [ ] **Phase 7 — Cleanup.** Retire compatibility shims.
 
 Open questions blocking Phase 4 are listed in `SOP-V2.html` §11.

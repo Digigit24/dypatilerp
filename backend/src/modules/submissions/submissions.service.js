@@ -3,6 +3,7 @@ import { notifyStageOpened } from '../notifications/notify.service.js';
 import { env } from '../../config/env.js';
 import { readWorkflow, stagesFor, kindOf } from './workflow.js';
 import { markTargetSubmitted } from '../targets/targets.service.js';
+import { checkSlots } from '../progress-reports/cycles.service.js';
 
 export const listSubmissions = async ({ batch_id, assignment_id, student_user_id, status, submission_type, search, allowed_batch_ids, limit, offset }) => {
   const params = [];
@@ -226,6 +227,49 @@ export const appendFileDescriptor = async (submissionId, descriptor) => {
 };
 
 /**
+ * Replace the file occupying a named slot (progress report / presentation).
+ * The superseded media row is MARKED, never deleted — the record of what a
+ * scholar submitted, and when, is part of the audit trail.
+ */
+export const replaceFileDescriptorForSlot = async (submissionId, slot, descriptor) => {
+  const { rows: [s] } = await query('SELECT file_urls FROM submissions WHERE id=$1', [submissionId]);
+  if (!s) return null;
+  const current = Array.isArray(s.file_urls)
+    ? s.file_urls
+    : (typeof s.file_urls === 'string' ? JSON.parse(s.file_urls || '[]') : []);
+
+  const superseded = current.filter((f) => f.slot === slot && f.media_id);
+  for (const old of superseded) {
+    await query(
+      `UPDATE videos SET upload_status='superseded', is_published=false, updated_at=NOW() WHERE id=$1`,
+      [old.media_id]
+    ).catch(() => {});
+  }
+  const next = current.filter((f) => f.slot !== slot);
+  next.push(descriptor);
+  const { rows: [u] } = await query(
+    'UPDATE submissions SET file_urls=$1, updated_at=NOW() WHERE id=$2 RETURNING *',
+    [JSON.stringify(next), submissionId]
+  );
+  return u;
+};
+
+/** Drop one file descriptor by media id (used before a submission is sent). */
+export const removeFileDescriptor = async (submissionId, mediaId) => {
+  const { rows: [s] } = await query('SELECT file_urls FROM submissions WHERE id=$1', [submissionId]);
+  if (!s) return null;
+  const current = Array.isArray(s.file_urls)
+    ? s.file_urls
+    : (typeof s.file_urls === 'string' ? JSON.parse(s.file_urls || '[]') : []);
+  const next = current.filter((f) => f.media_id !== mediaId);
+  const { rows: [u] } = await query(
+    'UPDATE submissions SET file_urls=$1, updated_at=NOW() WHERE id=$2 RETURNING *',
+    [JSON.stringify(next), submissionId]
+  );
+  return u;
+};
+
+/**
  * Submit a draft for review.
  * ownerId is the scholar who owns the submission (for a student self-submit this
  * equals the caller). submittedByUserId records who clicked Submit (scholar or
@@ -248,11 +292,17 @@ export const submitForReview = async (id, ownerId, submittedByUserId = null) => 
 
     // 1b. A progress report must carry a verified ('ready') attachment before it
     //     can go for review — never mark submitted without a stored file.
-    if (sub.submission_type === 'progress_report') {
-      const { rows: [att] } = await client.query(
-        `SELECT 1 FROM videos WHERE submission_id=$1 AND upload_status='ready' LIMIT 1`, [id]
-      );
-      if (!att) throw Object.assign(new Error('Attach a file before submitting this report.'), { status: 400 });
+    if (sub.submission_type === 'progress_report' && !sub.assignment_id && !sub.target_id) {
+      // V2: a progress report needs BOTH named slots filled — the report (PDF)
+      // and the presentation (PPT/PPTX). Partial reports can never be sent.
+      const { ok: slotsOk, missing } = checkSlots(sub.file_urls);
+      if (!slotsOk) {
+        const label = { report: 'Progress Report (PDF)', presentation: 'Presentation (PPT/PPTX)' };
+        throw Object.assign(
+          new Error(`Attach the ${missing.map((m) => label[m] || m).join(' and ')} before submitting.`),
+          { status: 400 }
+        );
+      }
     }
 
     // 2. Resolve the workflow for THIS submission's kind.

@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
 import { requirePermission, isOwnScope, allowedBatchIds } from '../../middleware/rbac.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { ok, created } from '../../utils/response.js';
+import { ok, created, notFound, badRequest } from '../../utils/response.js';
+import { query } from '../../config/database.js';
 import * as svc from './fees.service.js';
 import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { z } from 'zod';
@@ -118,6 +119,60 @@ router.post('/', requirePermission('fees', 'create'), validate(createFeeSchema),
 router.post('/:id/payments', requirePermission('fees', 'update'), validate(paymentSchema), asyncHandler(async (req, res) => {
   const payment = await svc.recordPayment(req.params.id, req.body, req.user.id);
   created(res, payment, 'Payment recorded');
+}));
+
+
+/**
+ * POST /fees/bulk
+ * Closes V1 gap G-02 — bulkCreateFees() existed in the service but no route
+ * exposed it, so 30 scholars x 4 semesters meant 120 fee rows created by hand.
+ *
+ * Body: { batch_id, semester, due_date, amount? }
+ * The amount defaults to the course's fee_structure for that semester.
+ * Idempotent: a scholar who already has a fee for this batch+semester is
+ * skipped, never double-charged.
+ */
+router.post('/bulk', requirePermission('fees', 'create'), asyncHandler(async (req, res) => {
+  const { batch_id, semester, due_date } = req.body;
+  if (!batch_id || !semester || !due_date) {
+    return badRequest(res, 'batch_id, semester and due_date are required');
+  }
+  const { rows: [batch] } = await query(
+    `SELECT b.id, b.name, c.fee_structure FROM batches b
+     JOIN courses c ON c.id = b.course_id WHERE b.id=$1`, [batch_id]
+  );
+  if (!batch) return notFound(res, 'Batch not found');
+
+  const fromCourse = batch.fee_structure?.[String(semester)];
+  const amount = req.body.amount != null ? Number(req.body.amount) : Number(fromCourse);
+  if (!amount || Number.isNaN(amount)) {
+    return badRequest(res,
+      `No amount given and the course has no fee configured for semester ${semester}.`);
+  }
+
+  const { rows: created_rows } = await query(
+    `INSERT INTO fees (batch_id, student_user_id, semester, amount, due_date, description)
+     SELECT $1, be.user_id, $2, $3, $4, $5
+       FROM batch_enrollments be
+      WHERE be.batch_id=$1 AND be.status='active'
+        AND NOT EXISTS (
+          SELECT 1 FROM fees f
+           WHERE f.batch_id=$1 AND f.student_user_id=be.user_id AND f.semester=$2)
+     RETURNING id`,
+    [batch_id, Number(semester), amount, due_date,
+     req.body.description || `Semester ${semester} fee`]
+  );
+
+  const { rows: [{ total }] } = await query(
+    `SELECT COUNT(*) AS total FROM batch_enrollments WHERE batch_id=$1 AND status='active'`,
+    [batch_id]
+  );
+  const skipped = parseInt(total) - created_rows.length;
+  created(res, {
+    created: created_rows.length, skipped, amount,
+    amount_source: req.body.amount != null ? 'request' : 'course fee structure',
+  }, `Raised ${created_rows.length} fee(s) of ${amount} for semester ${semester}` +
+     (skipped ? ` — ${skipped} scholar(s) already had one.` : '.'));
 }));
 
 export default router;

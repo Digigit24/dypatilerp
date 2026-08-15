@@ -121,6 +121,32 @@ export const getOrCreateDefaultFolder = async (courseId, folderName, createdBy) 
   return created.id;
 };
 
+/**
+ * Resolve (creating if needed) the nested folder a submission file belongs in:
+ *   Course > Batch > Semester N > Assignments|Progress Reports|Targets
+ * Mirrors the Zata object key exactly, so the Media UI and the bucket agree.
+ */
+export const getOrCreateSubmissionFolder = async (courseId, batchCode, semester, kind, createdBy) => {
+  const KIND_LABEL = { assignment: 'Assignments', progress_report: 'Progress Reports', target: 'Targets' };
+  const path = [batchCode || 'Unassigned batch', `Semester ${Number(semester) || 1}`, KIND_LABEL[kind] || 'Submissions'];
+  let parentId = null;
+  for (const name of path) {
+    const { rows: [found] } = await query(
+      `SELECT id FROM media_folders WHERE course_id=$1 AND name=$2
+         AND parent_id IS NOT DISTINCT FROM $3 LIMIT 1`,
+      [courseId, name, parentId]
+    );
+    if (found) { parentId = found.id; continue; }
+    const { rows: [made] } = await query(
+      `INSERT INTO media_folders (course_id, parent_id, name, created_by, is_system, semester, kind)
+       VALUES ($1,$2,$3,$4,TRUE,$5,$6) RETURNING id`,
+      [courseId, parentId, name, createdBy, Number(semester) || 1, kind]
+    );
+    parentId = made.id;
+  }
+  return parentId;
+};
+
 // ─── Media folders ────────────────────────────────────────────────────────────
 
 export const listFolders = async ({ course_id, parent_id }) => {

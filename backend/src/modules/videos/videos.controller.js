@@ -405,43 +405,87 @@ export const requestUploadUrl = asyncHandler(async (req, res) => {
   ok(res, { upload_url: uploadUrl, object_key: objectKey });
 });
 
-// Allowed submission formats — validated server-side (never trust the browser).
-const SUBMISSION_MIME = {
-  'application/pdf': 'pdf',
-  'application/vnd.ms-powerpoint': 'ppt',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
-};
-const SUBMISSION_EXTS = ['pdf', 'ppt', 'pptx'];
-const MAX_SUBMISSION_BYTES = 25 * 1024 * 1024; // 25 MB
+// ─── Submission attachments ───────────────────────────────────────────────────
+//
+// File rules differ by submission kind (SOP-V2 §M2/M3):
+//   progress_report -> exactly two NAMED slots: report (PDF) + presentation (PPT/PPTX)
+//   assignment      -> many files, mixed types
+//   target          -> one or more files, mixed types
+//
+// Every type is checked three ways: extension, declared MIME, and real content
+// signature (magic bytes), so a renamed file is always caught.
 
-// Content-signature families keyed to the allowed extensions. Real detection
-// (magic bytes) on top of extension + declared MIME so a renamed file is caught.
-const EXT_FAMILY = { pdf: 'pdf', pptx: 'zip', ppt: 'ole' };
+const MIME_BY_EXT = {
+  pdf:  ['application/pdf'],
+  ppt:  ['application/vnd.ms-powerpoint'],
+  pptx: ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+  doc:  ['application/msword'],
+  docx: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  xls:  ['application/vnd.ms-excel'],
+  xlsx: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+  png:  ['image/png'],
+  jpg:  ['image/jpeg'],
+  jpeg: ['image/jpeg'],
+  webp: ['image/webp'],
+  zip:  ['application/zip', 'application/x-zip-compressed'],
+};
+
+// Which extensions each kind accepts.
+const EXTS_BY_KIND = {
+  progress_report: ['pdf', 'ppt', 'pptx'],
+  assignment: ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx', 'png', 'jpg', 'jpeg', 'webp', 'zip'],
+  target:     ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx', 'png', 'jpg', 'jpeg', 'webp', 'zip'],
+};
+
+// Named slots for a progress report.
+const SLOT_EXTS = { report: ['pdf'], presentation: ['ppt', 'pptx'] };
+
+const MAX_FILE_BYTES = 50 * 1024 * 1024;    // per file
+const MAX_TOTAL_BYTES = 200 * 1024 * 1024;  // per submission
+
+// Content-signature families. zip covers every OOXML format (pptx/docx/xlsx).
+const EXT_FAMILY = {
+  pdf: 'pdf', pptx: 'zip', docx: 'zip', xlsx: 'zip', zip: 'zip',
+  ppt: 'ole', doc: 'ole', xls: 'ole',
+  png: 'png', jpg: 'jpg', jpeg: 'jpg', webp: 'webp',
+};
 const sniffFamily = (buf) => {
   if (buf.length >= 5 && buf.slice(0, 5).toString('latin1') === '%PDF-') return 'pdf';
-  if (buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 0x03 && buf[3] === 0x04) return 'zip'; // pptx (OOXML/zip)
-  if (buf.length >= 4 && buf[0] === 0xd0 && buf[1] === 0xcf && buf[2] === 0x11 && buf[3] === 0xe0) return 'ole'; // ppt (legacy OLE)
+  if (buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4b) return 'zip';                       // PK.. (OOXML/zip)
+  if (buf.length >= 4 && buf[0] === 0xd0 && buf[1] === 0xcf && buf[2] === 0x11 && buf[3] === 0xe0) return 'ole';
+  if (buf.length >= 8 && buf[0] === 0x89 && buf.slice(1, 4).toString('latin1') === 'PNG') return 'png';
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf.length >= 12 && buf.slice(0, 4).toString('latin1') === 'RIFF' && buf.slice(8, 12).toString('latin1') === 'WEBP') return 'webp';
   return null;
 };
 
+/** Canonical storage key mirroring the Media UI folder tree (SOP-V2 §2.7). */
+const buildSubmissionKey = ({ courseCode, batchCode, semester, kind, submissionId, filename, slot }) => {
+  const safe = (v) => String(v || '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+  const folder = kind === 'progress_report' ? 'progress-reports' : kind === 'target' ? 'targets' : 'assignments';
+  const name = slot ? `${slot}-${safe(filename)}` : safe(filename);
+  return [safe(courseCode), safe(batchCode) || 'no-batch', `sem-${Number(semester) || 1}`,
+          folder, submissionId, name].join('/');
+};
+
 /**
- * Server-proxied submission attachment upload (no browser→Zata hop, so no extra
- * CORS). The browser POSTs multipart/form-data (field "file") to OUR API; the
- * backend streams it to Zata server-side, then records a private, submission-bound,
- * 'ready' media row and appends a server-generated descriptor to file_urls.
+ * POST /submissions/:submissionId/attachment[?slot=report|presentation]
  *
- * Route: POST /submissions/:submissionId/attachment
- * Authorized for the owning scholar, or an admin/coordinator (on-behalf).
+ * Streams the file to Zata server-side (no browser->Zata hop, so no extra CORS),
+ * verifies it landed, records a private submission-bound media row, and appends
+ * a server-generated descriptor to file_urls. If anything fails the object is
+ * removed again — a media row never exists without its object.
  */
 export const uploadSubmissionAttachment = asyncHandler(async (req, res) => {
   if (!s3.isConfigured()) {
-    return res.status(503).json({ success: false, message: 'Storage not configured' });
+    return res.status(503).json({ success: false, message: 'File storage is not configured.' });
   }
 
-  // 1. Load + authorize BEFORE reading the body.
   const submissionId = req.params.submissionId;
   const { rows: [sub] } = await query(
-    `SELECT s.id, s.student_user_id, s.status, s.submission_type, b.course_id, c.code AS course_code
+    `SELECT s.id, s.student_user_id, s.status, s.submission_type, s.semester,
+            s.file_urls, s.target_id, s.cycle_id,
+            b.course_id, b.code AS batch_code, c.code AS course_code
      FROM submissions s
      JOIN batches b ON b.id = s.batch_id
      JOIN courses c ON c.id = b.course_id
@@ -449,30 +493,47 @@ export const uploadSubmissionAttachment = asyncHandler(async (req, res) => {
     [submissionId]
   );
   if (!sub) return notFound(res, 'Submission not found');
-  // The owning scholar uploads their own file; an admin or coordinator uploads
-  // on behalf of a scholar.
+
   const actorRoles = req.user.roles || [];
   const isStaff = actorRoles.includes('admin') || actorRoles.includes('coordinator');
   if (sub.student_user_id !== req.user.id && !isStaff) return forbidden(res);
-  if (!['progress_report', 'assignment'].includes(sub.submission_type)) return badRequest(res, 'Attachments are only supported for progress reports and assignments');
-  if (sub.status !== 'draft') return badRequest(res, 'Files can only be attached to a draft submission');
 
-  // 2. Stream-parse the multipart body to a temp file (never buffered in memory),
-  //    with a hard 25 MB cap enforced by formidable.
-  const form = new IncomingForm({ maxFileSize: MAX_SUBMISSION_BYTES, maxFiles: 1, keepExtensions: true });
+  const kind = sub.target_id ? 'target'
+             : sub.submission_type === 'assignment' ? 'assignment'
+             : 'progress_report';
+  const allowedExts = EXTS_BY_KIND[kind] || EXTS_BY_KIND.progress_report;
+
+  // Files may be attached while the submission is still open for editing.
+  if (!['draft', 'needs_revision'].includes(sub.status)) {
+    return badRequest(res, 'Files can only be attached before the submission is sent for review.');
+  }
+
+  // A progress report requires a named slot; other kinds never use one.
+  let slot = (req.query.slot || '').trim() || null;
+  if (kind === 'progress_report') {
+    if (!slot || !SLOT_EXTS[slot]) {
+      return badRequest(res, 'A progress report needs slot=report or slot=presentation.');
+    }
+  } else {
+    slot = null;
+  }
+
+  const existing = Array.isArray(sub.file_urls) ? sub.file_urls : [];
+  const usedBytes = existing.reduce((a, f) => a + (Number(f.size) || 0), 0);
+
+  const form = new IncomingForm({ maxFileSize: MAX_FILE_BYTES, maxFiles: 1, keepExtensions: true });
   let files;
   try {
     ({ files } = await new Promise((resolve, reject) =>
       form.parse(req, (err, f, fi) => (err ? reject(err) : resolve({ fields: f, files: fi })))
     ));
   } catch (err) {
-    const tooBig = /maxFileSize|maxTotalFileSize|biggerThan|options\.maxFileSize/i.test(err?.message || '') || err?.code === 1009;
-    return badRequest(res, tooBig ? 'File exceeds the 25MB limit' : 'Upload failed — please try again');
+    const tooBig = /maxFileSize|maxTotalFileSize|biggerThan/i.test(err?.message || '') || err?.code === 1009;
+    return badRequest(res, tooBig ? 'File exceeds the 50MB limit' : 'Upload failed — please try again');
   }
 
   const file = Array.isArray(files.file) ? files.file[0] : files.file;
   if (!file) return badRequest(res, 'No file uploaded (field name must be "file")');
-
   const cleanup = async () => { if (file?.filepath) await unlink(file.filepath).catch(() => {}); };
 
   try {
@@ -481,70 +542,136 @@ export const uploadSubmissionAttachment = asyncHandler(async (req, res) => {
     const declaredMime = file.mimetype || '';
     const size = file.size || 0;
 
-    // 3. Validate size + extension + declared MIME + real content signature.
-    if (size <= 0 || size > MAX_SUBMISSION_BYTES) {
+    if (size <= 0 || size > MAX_FILE_BYTES) { await cleanup(); return badRequest(res, 'File exceeds the 50MB limit'); }
+    if (usedBytes + size > MAX_TOTAL_BYTES) {
       await cleanup();
-      return badRequest(res, 'File exceeds the 25MB limit');
+      return badRequest(res, 'This submission has reached its 200MB total limit. Remove a file first.');
     }
-    if (!SUBMISSION_EXTS.includes(ext) || !SUBMISSION_MIME[declaredMime]) {
+    const slotExts = slot ? SLOT_EXTS[slot] : allowedExts;
+    if (!slotExts.includes(ext)) {
       await cleanup();
-      return badRequest(res, 'Only PDF, PPT and PPTX files are allowed');
+      return badRequest(res, slot
+        ? `The ${slot} slot accepts ${slotExts.join(' or ').toUpperCase()} only.`
+        : `Allowed file types: ${allowedExts.join(', ').toUpperCase()}.`);
+    }
+    if (!(MIME_BY_EXT[ext] || []).includes(declaredMime)) {
+      await cleanup(); return badRequest(res, 'File type does not match its contents.');
     }
     const fh = await open(file.filepath, 'r');
-    const head = Buffer.alloc(8);
-    try { await fh.read(head, 0, 8, 0); } finally { await fh.close(); }
+    const head = Buffer.alloc(12);
+    try { await fh.read(head, 0, 12, 0); } finally { await fh.close(); }
     if (sniffFamily(head) !== EXT_FAMILY[ext]) {
-      await cleanup();
-      return badRequest(res, 'File content does not match its type');
+      await cleanup(); return badRequest(res, 'File content does not match its type');
     }
 
-    // 4. Upload to Zata server-side. If this throws → nothing is written to the DB.
-    const objectKey = s3.buildVideoKey(sub.course_code, crypto.randomUUID(), origName);
-    await s3.uploadFile(objectKey, file.filepath, declaredMime, size);
+    const objectKey = buildSubmissionKey({
+      courseCode: sub.course_code, batchCode: sub.batch_code, semester: sub.semester,
+      kind, submissionId: sub.id, filename: origName, slot,
+    });
 
-    // 5. Create the media row. On failure, delete the just-uploaded object.
+    // Upload, then VERIFY before writing anything to the database.
+    await s3.uploadFile(objectKey, file.filepath, declaredMime, size);
+    try { await s3.headObject(objectKey); }
+    catch (e) {
+      return res.status(502).json({ success: false, message: 'Upload could not be verified in storage — please retry.', detail: e.message });
+    }
+
     let media;
     try {
-      const folderId = await svc.getOrCreateDefaultFolder(sub.course_id, 'Submissions', req.user.id);
+      const folderId = await svc.getOrCreateSubmissionFolder(
+        sub.course_id, sub.batch_code, sub.semester, kind, req.user.id
+      );
       media = await svc.createVideo({
-        course_id: sub.course_id,
-        folder_id: folderId,
-        submission_id: sub.id,
-        upload_status: 'ready',
+        course_id: sub.course_id, folder_id: folderId, submission_id: sub.id,
+        upload_status: 'ready', slot, semester: sub.semester,
         title: origName.replace(/\.[^.]+$/, ''),
-        description: `${sub.submission_type === 'assignment' ? 'Assignment' : 'Progress-report'} file for submission ${sub.id}`,
-        object_key: objectKey,
-        file_size: size,
-        media_type: 'document',
-        mime_type: declaredMime,
-        is_published: false,
-        visibility: 'private',
-        sort_order: 0,
+        description: `${kind.replace('_', ' ')} file for submission ${sub.id}`,
+        object_key: objectKey, file_size: size, media_type: 'document',
+        mime_type: declaredMime, is_published: false, visibility: 'private', sort_order: 0,
       }, req.user.id);
+      await query('UPDATE videos SET verified_at=NOW() WHERE id=$1', [media.id]);
     } catch (dbErr) {
       try { await s3.deleteObject(objectKey); } catch { /* ignore */ }
       throw dbErr;
     }
 
-    // 6. Append the server-generated descriptor. On failure, delete object + row.
+    // Re-uploading a slot REPLACES it. The superseded media row is retained and
+    // marked, never deleted — the audit trail of what was submitted matters.
     let submission;
     try {
-      submission = await subSvc.appendFileDescriptor(sub.id, {
-        name: media.title || 'attachment',
-        media_id: media.id,
-        type: SUBMISSION_MIME[declaredMime],
-        size,
-      });
+      const descriptor = { name: media.title || 'attachment', media_id: media.id, slot,
+                           type: ext, size, uploaded_at: new Date().toISOString() };
+      submission = slot
+        ? await subSvc.replaceFileDescriptorForSlot(sub.id, slot, descriptor)
+        : await subSvc.appendFileDescriptor(sub.id, descriptor);
     } catch (attErr) {
       try { await s3.deleteObject(objectKey); } catch { /* ignore */ }
       await svc.deleteVideo(media.id).catch(() => {});
       throw attErr;
     }
 
-    ok(res, { submission, media_id: media.id }, 'Attachment uploaded');
+    ok(res, { submission, media_id: media.id, slot }, slot ? `${slot} uploaded` : 'Attachment uploaded');
   } finally {
     await cleanup();
   }
+});
+
+/**
+ * DELETE /submissions/:submissionId/attachment/:mediaId
+ * Removes a file before the submission is sent for review: the descriptor, the
+ * media row and the stored object all go together.
+ */
+export const removeSubmissionAttachment = asyncHandler(async (req, res) => {
+  const { submissionId, mediaId } = req.params;
+  const { rows: [sub] } = await query(
+    'SELECT id, student_user_id, status FROM submissions WHERE id=$1', [submissionId]
+  );
+  if (!sub) return notFound(res, 'Submission not found');
+  const roles = req.user.roles || [];
+  const isStaff = roles.includes('admin') || roles.includes('coordinator');
+  if (sub.student_user_id !== req.user.id && !isStaff) return forbidden(res);
+  if (!['draft', 'needs_revision'].includes(sub.status)) {
+    return badRequest(res, 'Files can only be removed before the submission is sent for review.');
+  }
+
+  const { rows: [media] } = await query(
+    'SELECT id, object_key FROM videos WHERE id=$1 AND submission_id=$2', [mediaId, submissionId]
+  );
+  if (!media) return notFound(res, 'File not found on this submission');
+
+  const submission = await subSvc.removeFileDescriptor(submissionId, mediaId);
+  await svc.deleteVideo(mediaId).catch(() => {});
+  if (media.object_key) { try { await s3.deleteObject(media.object_key); } catch { /* ignore */ } }
+  ok(res, { submission }, 'File removed');
+});
+
+/**
+ * GET /videos/:id/preview?sessionToken=...
+ * The same bytes as /stream but served INLINE, so a reviewer reads the document
+ * in the browser instead of downloading it (SOP-V2 §M8).
+ */
+export const previewMedia = asyncHandler(async (req, res) => {
+  const session = await svc.validateSession(req.query.sessionToken);
+  if (!session) return res.status(401).json({ success: false, message: 'Invalid or expired session token' });
+  if (session.video_id !== req.params.id) {
+    return res.status(403).json({ success: false, message: 'Token does not match this file' });
+  }
+  const contentType = session.mime_type || 'application/octet-stream';
+  res.setHeader('Content-Disposition', 'inline');
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+  if (s3.isConfigured() && session.object_key) {
+    try { return await s3.streamVideoRange(session.object_key, req.headers.range, res); }
+    catch (err) {
+      if (env.STORAGE_LOCAL_CACHE && local.videoExists(session.object_key)) {
+        return local.streamRange(session.object_key, req.headers.range, res, contentType);
+      }
+      if (!res.headersSent) return res.status(502).json({ success: false, message: 'Storage temporarily unavailable', detail: err.message });
+    }
+  }
+  if (!res.headersSent) res.status(503).json({ success: false, message: 'File not found in storage' });
 });
 
 export const initCourseFolder = asyncHandler(async (req, res) => {
