@@ -78,10 +78,10 @@ export default function AdminWizardPage() {
       )}
 
       {/* ── Tabs ── */}
-      <div className="mb-5 flex gap-1 overflow-x-auto rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-1 w-fit max-w-full">
+      <div className="tab-group w-fit max-w-full mb-5">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-1.5 text-sm font-semibold transition ${tab === t.key ? 'bg-[color:var(--card)] text-[color:var(--text)] shadow-sm' : 'text-[color:var(--secondary)] hover:text-[color:var(--text)]'}`}>
+            className={`tab-segment ${tab === t.key ? 'tab-segment--active' : ''}`}>
             <t.icon size={14} /> {t.label}
           </button>
         ))}
@@ -133,10 +133,10 @@ function OrgChartTab({ course }) {
   const byBatch = (id) => assignments.filter((x) => x.batch_id === id)
 
   return (
-    <div className="card overflow-x-auto p-8">
+    <div className="table-wrap p-8">
       <div className="flex min-w-fit flex-col items-center">
         {/* Course node */}
-        <div className="rounded-2xl border-2 border-[color:var(--accent)] bg-[color:var(--accent-tint)] px-6 py-3 text-center shadow-sm">
+        <div className="rounded-lg border-2 border-[color:var(--accent)] bg-[color:var(--accent-tint)] px-6 py-3 text-center shadow-sm">
           <p className="text-sm font-bold text-[color:var(--accent)]">{course.name}</p>
           <p className="text-[10px] font-semibold text-[color:var(--secondary)]">{course.code} · {batches.length} batch{batches.length === 1 ? '' : 'es'}</p>
         </div>
@@ -165,7 +165,7 @@ function OrgChartTab({ course }) {
                   <div key={b.id} className="flex w-56 flex-col items-center pt-0">
                     <div className="h-5 w-px bg-[color:var(--border)]" />
                     {/* Batch node */}
-                    <div className="w-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-3 text-center shadow-sm">
+                    <div className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] p-3 text-center shadow-sm">
                       <p className="inline-flex items-center gap-1.5 text-xs font-bold text-[color:var(--text)]">
                         <Layers size={12} className="text-[color:var(--secondary)]" /> {b.name}
                       </p>
@@ -606,7 +606,7 @@ function NotificationsTab({ course }) {
             No automated emails yet. They will appear here as applications, tests, approvals and reminders fire.
           </p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
+          <div className="mt-3 table-wrap">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wide text-[color:var(--muted)]">
@@ -778,7 +778,7 @@ function CredentialsTab({ course }) {
       ) : recipients.length === 0 ? (
         <p className="py-8 text-center text-sm text-[color:var(--secondary)]">No recipients found for this audience.</p>
       ) : (
-        <div className="mt-3 max-h-80 divide-y divide-[color:var(--border)] overflow-y-auto rounded-2xl border border-[color:var(--border)]">
+        <div className="mt-3 max-h-80 divide-y divide-[color:var(--border)] overflow-y-auto rounded-lg border border-[color:var(--border)]">
           {recipients.map((p) => {
             const res = results?.results?.find((x) => x.user_id === p.user_id)
             return (

@@ -1,4 +1,4 @@
-import { BookOpen, Check, ChevronDown, Layers } from 'lucide-react'
+﻿import { BookOpen, Check, ChevronDown, Layers } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { getCourses } from '../../api/services/courseService.js'
 import { getBatches } from '../../api/services/batchService.js'
@@ -42,7 +42,7 @@ export default function CourseSwitcher() {
   return (
     <div className="relative" ref={ref}>
       <button
-        className="soft-panel mobile-hide flex h-14 shrink-0 items-center gap-3 rounded-2xl px-4 text-left text-sm"
+        className="soft-panel mobile-hide flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-left text-sm"
         onClick={() => setOpen((v) => !v)}
       >
         <BookOpen size={17} className="text-[color:var(--accent)] shrink-0" />
@@ -58,7 +58,7 @@ export default function CourseSwitcher() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-72 overflow-hidden rounded-3xl bg-[color:var(--card)] shadow-hover ring-1 ring-[color:var(--border)]">
+        <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-72 overflow-hidden rounded-xl bg-[color:var(--card)] shadow-hover ring-1 ring-[color:var(--border)]">
           {/* Course list */}
           <div className="border-b border-[color:var(--border)] p-2">
             <p className="px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--muted)]">
@@ -67,7 +67,7 @@ export default function CourseSwitcher() {
             {courses.map((c) => (
               <button
                 key={c.id}
-                className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm transition ${
+                className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
                   currentCourse.id === c.id
                     ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]'
                     : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'
@@ -89,7 +89,7 @@ export default function CourseSwitcher() {
                 Batch
               </p>
               <button
-                className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm transition ${
+                className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
                   !currentBatch ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'
                 }`}
                 onClick={() => { setCurrentBatch(null); setOpen(false) }}
@@ -101,7 +101,7 @@ export default function CourseSwitcher() {
               {batches.map((b) => (
                 <button
                   key={b.id}
-                  className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm transition ${
+                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
                     currentBatch?.id === b.id
                       ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]'
                       : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'
@@ -110,7 +110,7 @@ export default function CourseSwitcher() {
                 >
                   <Layers size={15} className="shrink-0" />
                   <span className="flex-1 text-left truncate">{b.name}</span>
-                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${b.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                  <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${b.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                     {b.status}
                   </span>
                   {currentBatch?.id === b.id && <Check size={13} className="shrink-0" />}

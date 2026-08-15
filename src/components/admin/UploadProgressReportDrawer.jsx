@@ -161,14 +161,14 @@ export default function UploadProgressReportDrawer({ studentUserId = null, onClo
             </span>
 
             {locked ? (
-              <div className="mt-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+              <div className="mt-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
                 <p className="truncate text-sm font-semibold text-[color:var(--text)]">{fullName(lockedStudent) || 'Loading…'}</p>
                 <p className="truncate text-xs text-[color:var(--secondary)]">
                   {lockedStudent?.email}{lockedStudent?.batch_name ? ` · ${lockedStudent.batch_name}` : ''}
                 </p>
               </div>
             ) : selected ? (
-              <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[color:var(--text)]">{fullName(selected)}</p>
                   <p className="truncate text-xs text-[color:var(--secondary)]">
@@ -195,7 +195,7 @@ export default function UploadProgressReportDrawer({ studentUserId = null, onClo
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </label>
-                <div className="mt-2 max-h-56 overflow-y-auto rounded-2xl border border-[color:var(--border)]">
+                <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-[color:var(--border)]">
                   {roster === null ? (
                     <p className="p-4 text-center text-sm text-[color:var(--secondary)]">Loading scholars…</p>
                   ) : filtered.length === 0 ? (
@@ -224,7 +224,7 @@ export default function UploadProgressReportDrawer({ studentUserId = null, onClo
             )}
 
             {noBatch && (
-              <p className="mt-2 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
+              <p className="mt-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
                 This scholar has no active batch enrollment — a report cannot be filed.
               </p>
             )}
@@ -299,7 +299,7 @@ export default function UploadProgressReportDrawer({ studentUserId = null, onClo
         <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
           <button
             type="button"
-            className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]"
+            className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]"
             onClick={onClose}
             disabled={busy}
           >

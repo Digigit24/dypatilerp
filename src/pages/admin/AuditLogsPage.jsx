@@ -102,7 +102,7 @@ export default function AuditLogsPage() {
         title="Audit Logs"
         subtitle="Read-only trail of all system actions, logins, and mutations."
         action={
-          <button className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:text-[color:var(--accent)]"
+          <button className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:text-[color:var(--accent)]"
             onClick={() => load(1)}>
             <RefreshCw size={15} /> Refresh
           </button>
@@ -113,7 +113,7 @@ export default function AuditLogsPage() {
       <div className="mb-5 card p-4 space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
           <button
-            className={`flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition ${filterOpen ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'bg-[color:var(--surface)] text-[color:var(--secondary)]'}`}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${filterOpen ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'bg-[color:var(--surface)] text-[color:var(--secondary)]'}`}
             onClick={() => setFilterOpen((v) => !v)}
           >
             <Filter size={14} /> Filters {filterOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
@@ -166,7 +166,7 @@ export default function AuditLogsPage() {
       {!logs ? <SkeletonCard rows={10} /> : (
         <>
           <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="table-wrap">
               <table className="min-w-[820px] w-full text-left text-sm">
                 <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
                   <tr>{['Timestamp', 'User', 'Action', 'Resource', 'IP Address', ''].map((h) => <th key={h} className="px-5 py-4">{h}</th>)}</tr>
@@ -215,7 +215,7 @@ export default function AuditLogsPage() {
                         <tr key={`${log.id}-detail`} className="bg-[color:var(--accent-tint)] border-b border-[color:var(--border)]">
                           <td colSpan={6} className="px-5 py-4">
                             <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[color:var(--accent)]">Change Payload</p>
-                            <pre className="overflow-auto rounded-2xl bg-[color:var(--card)] p-4 text-xs leading-5 text-[color:var(--text)] font-mono max-h-60">
+                            <pre className="overflow-auto rounded-lg bg-[color:var(--card)] p-4 text-xs leading-5 text-[color:var(--text)] font-mono max-h-60">
                               {JSON.stringify(log.changes, null, 2)}
                             </pre>
                           </td>
@@ -235,9 +235,9 @@ export default function AuditLogsPage() {
                 Page {page} of {totalPages} · {total.toLocaleString()} entries
               </span>
               <div className="flex gap-2">
-                <button className="rounded-2xl border border-[color:var(--border)] px-4 py-2 font-semibold text-[color:var(--secondary)] disabled:opacity-40"
+                <button className="rounded-lg border border-[color:var(--border)] px-4 py-2 font-semibold text-[color:var(--secondary)] disabled:opacity-40"
                   disabled={page <= 1} onClick={() => load(page - 1)}>← Prev</button>
-                <button className="rounded-2xl border border-[color:var(--border)] px-4 py-2 font-semibold text-[color:var(--secondary)] disabled:opacity-40"
+                <button className="rounded-lg border border-[color:var(--border)] px-4 py-2 font-semibold text-[color:var(--secondary)] disabled:opacity-40"
                   disabled={page >= totalPages} onClick={() => load(page + 1)}>Next →</button>
               </div>
             </div>

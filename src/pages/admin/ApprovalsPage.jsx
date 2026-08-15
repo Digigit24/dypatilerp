@@ -119,8 +119,8 @@ export default function ApprovalsPage() {
           ))}
         </div>
       )}
-      <div className="card overflow-x-auto">
-        <table className="min-w-[900px] w-full text-left text-sm">
+      <div className="table-wrap">
+        <table className="min-w-[1140px] w-full text-left text-sm">
           <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
             <tr>
               <th className="w-44 px-6 py-4">Scholar</th>
@@ -131,16 +131,15 @@ export default function ApprovalsPage() {
             {rows.map((r) => (
               <tr key={r.id} className="table-row cursor-pointer border-b border-[color:var(--border)]" onClick={() => setSelected(r)}>
                 <td className="w-44 px-6 py-5 font-semibold whitespace-nowrap text-[color:var(--text)]">{scholarName(r)}</td>
-                <td className="whitespace-nowrap">{r.batch_name || '—'}</td>
-                <td className="whitespace-nowrap">{r.course_name || '—'}</td>
-                <td className="max-w-md truncate">{r.title}</td>
-                <td className="capitalize">{r.stage?.replaceAll('_', ' ')}</td>
-                <td><StatusBadge status={r.status} /></td>
-                <td>
-                  <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-                    <button className="mobile-compact-button inline-flex items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 py-2 text-xs font-semibold text-[color:var(--accent)]" onClick={() => setSelected(r)}><Eye size={15} /> Detail</button>
-                    <button className="mobile-compact-button inline-flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700" onClick={() => openApprove(r)}><CheckCircle2 size={15} /> Approve</button>
-                    <button className="mobile-compact-button inline-flex items-center gap-2 rounded-2xl bg-orange-50 px-4 py-2 text-xs font-semibold text-orange-700" onClick={() => openRevision(r)}><RotateCcw size={15} /> Needs Revision</button>
+                <td className="whitespace-nowrap px-6 py-5 text-[color:var(--secondary)]">{r.batch_name || '—'}</td>
+                <td className="whitespace-nowrap px-6 py-5 text-[color:var(--secondary)]">{r.course_name || '—'}</td>
+                <td className="max-w-md truncate px-6 py-5 text-[color:var(--secondary)]">{r.title}</td>
+                <td className="capitalize px-6 py-5 text-[color:var(--secondary)]">{r.stage?.replaceAll('_', ' ')}</td>
+                <td className="px-6 py-5"><StatusBadge status={r.status} /></td>
+                <td className="px-6 py-5 text-right"><div className="table-actions justify-end" onClick={(e) => e.stopPropagation()}>
+                    <button className="btn-table-action btn-table-action--accent" onClick={() => setSelected(r)}><Eye size={14} /> Detail</button>
+                    <button className="btn-table-action btn-table-action--success" onClick={() => openApprove(r)}><CheckCircle2 size={14} /> Approve</button>
+                    <button className="btn-table-action btn-table-action--warn" onClick={() => openRevision(r)}><RotateCcw size={14} /> Needs Revision</button>
                   </div>
                 </td>
               </tr>
@@ -165,7 +164,7 @@ export default function ApprovalsPage() {
             <div className="grid flex-1 gap-5 overflow-auto overscroll-contain p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="space-y-5">
                 <MediaPreview submission={selected.submission} />
-                <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                   <p className="font-semibold text-[color:var(--text)]">Submission</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <Info label="Type" value={selected.submission?.submission_type?.replaceAll('_', ' ') || '-'} />
@@ -175,18 +174,18 @@ export default function ApprovalsPage() {
                   </div>
                 </div>
                 <div className="safe-actions">
-                  <button className="mobile-compact-button inline-flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700" onClick={() => openApprove(selected)}><CheckCircle2 size={16} /> Approve</button>
-                  <button className="mobile-compact-button inline-flex items-center gap-2 rounded-2xl bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700" onClick={() => openRevision(selected)}><RotateCcw size={16} /> Needs Revision</button>
+                  <button className="mobile-compact-button inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700" onClick={() => openApprove(selected)}><CheckCircle2 size={16} /> Approve</button>
+                  <button className="mobile-compact-button inline-flex items-center gap-2 rounded-lg bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700" onClick={() => openRevision(selected)}><RotateCcw size={16} /> Needs Revision</button>
                 </div>
               </div>
-              <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                 <div className="safe-row">
                   <p className="font-semibold text-[color:var(--text)]">Revision Thread</p>
                   <MessageSquare size={17} className="text-[color:var(--accent)]" />
                 </div>
                 <div className="mt-4 space-y-3">
                   {threadFor(selected.submission_id).map((approval) => (
-                    <div key={approval.id} className="rounded-3xl bg-[color:var(--card)] p-4">
+                    <div key={approval.id} className="rounded-xl bg-[color:var(--card)] p-4">
                       <div className="safe-row items-start">
                         <div>
                           <p className="text-sm font-semibold capitalize text-[color:var(--text)]">{approval.stage?.replaceAll('_', ' ')}</p>
@@ -195,7 +194,7 @@ export default function ApprovalsPage() {
                         <StatusBadge status={approval.status} />
                       </div>
                       <p className="mt-3 text-sm leading-6 text-[color:var(--secondary)]">{approval.comments || 'No comment added.'}</p>
-                      {approval.suggested_title && <p className="mt-3 rounded-2xl bg-[color:var(--surface)] p-3 text-xs leading-5 text-[color:var(--secondary)]"><b>Suggested title:</b> {approval.suggested_title}</p>}
+                      {approval.suggested_title && <p className="mt-3 rounded-lg bg-[color:var(--surface)] p-3 text-xs leading-5 text-[color:var(--secondary)]"><b>Suggested title:</b> {approval.suggested_title}</p>}
                     </div>
                   ))}
                 </div>
@@ -227,7 +226,7 @@ export default function ApprovalsPage() {
               </label>
             </div>
             <div className="safe-actions mt-5 justify-end">
-              <button className="h-11 rounded-[14px] bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setRevisionTarget(null)}>Cancel</button>
+              <button className="h-11 rounded-md bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setRevisionTarget(null)}>Cancel</button>
               <button className="btn-primary disabled:opacity-50" onClick={submitRevision} disabled={acting}>{acting ? 'Sending…' : 'Submit Revision'}</button>
             </div>
           </div>
@@ -255,7 +254,7 @@ export default function ApprovalsPage() {
               />
             </label>
             <div className="safe-actions mt-5 justify-end">
-              <button className="h-11 rounded-[14px] bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setApproveTarget(null)}>Cancel</button>
+              <button className="h-11 rounded-md bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setApproveTarget(null)}>Cancel</button>
               <button className="btn-primary inline-flex items-center gap-2 disabled:opacity-50" onClick={confirmApprove} disabled={acting}>
                 <CheckCircle2 size={16} /> {acting ? 'Approving…' : 'Approve'}
               </button>
@@ -276,16 +275,16 @@ function MediaPreview({ submission }) {
     return () => { alive = false }
   }, [file?.media_id])
   const url = file?.media_id ? fetchedUrl : (file?.url || null)
-  return <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+  return <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
     <div className="safe-row">
       <div>
         <p className="font-semibold text-[color:var(--text)]">Submission File</p>
         <p className="mt-1 text-xs text-[color:var(--secondary)]">{file?.name || 'No file attached'}</p>
       </div>
-      {url && <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 text-sm font-semibold text-[color:var(--accent)]"><Download size={15} /> Open</a>}
+      {url && <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-lg bg-[color:var(--accent-tint)] px-4 text-sm font-semibold text-[color:var(--accent)]"><Download size={15} /> Open</a>}
     </div>
     {!file && (
-      <div className="mt-4 grid h-40 place-items-center rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
+      <div className="mt-4 grid h-40 place-items-center rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
         <div>
           <FileText className="mx-auto text-[color:var(--accent)]" size={30} />
           <p className="mt-3 text-sm text-[color:var(--secondary)]">No file attached to this submission.</p>
@@ -296,7 +295,7 @@ function MediaPreview({ submission }) {
 }
 
 function Info({ label, value }) {
-  return <div className="rounded-2xl bg-[color:var(--card)] p-4">
+  return <div className="rounded-lg bg-[color:var(--card)] p-4">
     <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">{label}</p>
     <p className="mt-2 text-sm font-semibold text-[color:var(--text)]">{value}</p>
   </div>

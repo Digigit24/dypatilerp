@@ -126,7 +126,7 @@ export default function UploadAssignmentSubmissionModal({ assignment, onClose, o
             ) : eligible.length === 0 ? (
               <p className="mt-2 text-sm text-[color:var(--secondary)]">Every actively-enrolled student in this batch has already submitted.</p>
             ) : selectedStudent ? (
-              <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[color:var(--text)]">{selectedStudent.first_name} {selectedStudent.last_name}</p>
                   <p className="truncate text-xs text-[color:var(--secondary)]">{selectedStudent.email}</p>
@@ -147,7 +147,7 @@ export default function UploadAssignmentSubmissionModal({ assignment, onClose, o
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </label>
-                <div className="mt-2 max-h-56 overflow-y-auto rounded-2xl border border-[color:var(--border)]">
+                <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-[color:var(--border)]">
                   {filtered.length === 0 ? (
                     <p className="p-4 text-center text-sm text-[color:var(--secondary)]">No students match "{search}"</p>
                   ) : (
@@ -215,7 +215,7 @@ export default function UploadAssignmentSubmissionModal({ assignment, onClose, o
 
         {/* ── Footer ── */}
         <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-          <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={onClose} disabled={busy}>
+          <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={onClose} disabled={busy}>
             Cancel
           </button>
           <button type="button" className="btn-primary flex-1 flex items-center justify-center gap-2" onClick={submit} disabled={!canSubmit}>

@@ -95,18 +95,18 @@ export default function ApplyPage() {
   if (done) {
     return <section className="mx-auto grid min-h-[calc(100vh-88px)] max-w-4xl place-items-center px-4 py-12 sm:px-6 lg:px-8">
       <div className="card w-full p-7 text-center sm:p-10">
-        <span className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-[var(--accent-tint)] text-[var(--accent)]">
+        <span className="mx-auto grid h-16 w-16 place-items-center rounded-xl bg-[var(--accent-tint)] text-[var(--accent)]">
           <CheckCircle2 size={30} />
         </span>
         <h1 className="mt-6 text-3xl font-semibold">Application Submitted</h1>
         <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[var(--secondary)]">Your application has been received. In the actual workflow, the test link will be sent after application review. For this demo, you can start the test now.</p>
-        <div className="mx-auto mt-6 max-w-md rounded-[2rem] bg-[var(--accent-tint)] p-6">
+        <div className="mx-auto mt-6 max-w-md rounded-xl bg-[var(--accent-tint)] p-6">
           <p className="text-sm font-medium text-[var(--secondary)]">Temporary Application ID</p>
           <p className="mt-2 text-3xl font-semibold text-[var(--accent)]">{done}</p>
         </div>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <Link to="/test/test_001" className="btn-primary inline-flex h-12 items-center gap-2 rounded-2xl px-5"><PlayCircle size={18} />Start Test Now</Link>
-          <Link to="/admin" className="inline-flex h-12 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 font-semibold"><LayoutDashboard size={18} />Open Dashboard</Link>
+          <Link to="/test/test_001" className="btn-primary inline-flex h-12 items-center gap-2 rounded-lg px-5"><PlayCircle size={18} />Start Test Now</Link>
+          <Link to="/admin" className="inline-flex h-12 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-5 font-semibold"><LayoutDashboard size={18} />Open Dashboard</Link>
         </div>
       </div>
     </section>
@@ -129,7 +129,7 @@ export default function ApplyPage() {
             return <button
               key={item.title}
               type="button"
-              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${active ? 'bg-[var(--accent-tint)] text-[var(--accent)]' : 'text-[var(--secondary)] hover:bg-[var(--surface)]'}`}
+              className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-semibold transition ${active ? 'bg-[var(--accent-tint)] text-[var(--accent)]' : 'text-[var(--secondary)] hover:bg-[var(--surface)]'}`}
               onClick={async () => {
                 if (index <= step) setStep(index)
                 else if (await trigger(currentFields)) setStep(index)
@@ -190,7 +190,7 @@ export default function ApplyPage() {
               ['Title of PhD Research', values.phd_research_title],
               ['Total Number of Scopus Publications', values.scopus_publications],
               ['Your State and Country', values.state_country],
-            ].map(([label, value]) => <div key={label} className="rounded-2xl bg-[var(--surface)] p-4">
+            ].map(([label, value]) => <div key={label} className="rounded-lg bg-[var(--surface)] p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">{label}</p>
               <p className="mt-1 font-semibold">{value || '-'}</p>
             </div>)}
@@ -198,7 +198,7 @@ export default function ApplyPage() {
         </div>}
 
         <div className="mt-8 flex flex-wrap justify-between gap-3 border-t border-[var(--border)] pt-6">
-          <button type="button" className="rounded-2xl bg-[var(--surface)] px-5 py-3 font-semibold disabled:opacity-40" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>Back</button>
+          <button type="button" className="rounded-lg bg-[var(--surface)] px-5 py-3 font-semibold disabled:opacity-40" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>Back</button>
           {step < steps.length - 1
             ? <button type="button" className="btn-primary inline-flex items-center gap-2" onClick={goNext}>Continue <ArrowRight size={17} /></button>
             : <button className="btn-primary" disabled={isSubmitting}>{isSubmitting ? 'Submitting...' : 'Submit Application'}</button>}

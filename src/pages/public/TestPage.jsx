@@ -250,7 +250,7 @@ export default function TestPage() {
             Saved {lastSaved.toLocaleTimeString()}
           </span>
         )}
-        <div className={`flex items-center gap-1.5 rounded-2xl bg-[color:var(--surface)] px-3 py-2 font-mono text-sm font-bold ${timerColor}`}>
+        <div className={`flex items-center gap-1.5 rounded-lg bg-[color:var(--surface)] px-3 py-2 font-mono text-sm font-bold ${timerColor}`}>
           <Clock size={15} />
           {formatTime(secondsLeft)}
         </div>
@@ -261,7 +261,7 @@ export default function TestPage() {
 
       {/* Section tabs */}
       {allSections.length > 1 && (
-        <div className="flex gap-1 overflow-x-auto border-b border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2">
+        <div className="tab-strip px-4">
           {allSections.map((sec, idx) => {
             const secAnswered = (sec.questions || []).filter((q) => answers[q.id]).length
             return (
@@ -329,7 +329,7 @@ export default function TestPage() {
                   return (
                     <label
                       key={opt.key}
-                      className={`flex cursor-pointer items-center gap-4 rounded-2xl border p-4 transition ${
+                      className={`flex cursor-pointer items-center gap-4 rounded-lg border p-4 transition ${
                         selected
                           ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]'
                           : 'border-[color:var(--border)] bg-[color:var(--card)] hover:border-[color:var(--accent)]'
@@ -364,7 +364,7 @@ export default function TestPage() {
       <footer className="fixed bottom-0 left-0 right-0 z-20 flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] px-4 py-3">
         <div className="flex gap-2">
           <button
-            className="rounded-2xl bg-[color:var(--surface)] px-4 py-2.5 text-sm font-semibold text-[color:var(--text)] disabled:opacity-40"
+            className="rounded-lg bg-[color:var(--surface)] px-4 py-2.5 text-sm font-semibold text-[color:var(--text)] disabled:opacity-40"
             disabled={activeQIdx === 0 && activeSectionIdx === 0}
             onClick={() => {
               if (activeQIdx > 0) { setActiveQIdx((i) => i - 1) }
@@ -374,7 +374,7 @@ export default function TestPage() {
             ← Prev
           </button>
           <button
-            className="rounded-2xl bg-[color:var(--surface)] px-4 py-2.5 text-sm font-semibold text-[color:var(--text)] disabled:opacity-40"
+            className="rounded-lg bg-[color:var(--surface)] px-4 py-2.5 text-sm font-semibold text-[color:var(--text)] disabled:opacity-40"
             disabled={activeQIdx === sectionQs.length - 1 && activeSectionIdx === allSections.length - 1}
             onClick={() => {
               if (activeQIdx < sectionQs.length - 1) { setActiveQIdx((i) => i + 1) }
@@ -392,7 +392,7 @@ export default function TestPage() {
           <button
             onClick={() => setShowSubmitConfirm(true)}
             disabled={submitting}
-            className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
           >
             {submitting ? <Loader2 size={15} className="animate-spin" /> : null}
             Submit Test
@@ -411,13 +411,13 @@ export default function TestPage() {
               This action cannot be undone.
             </p>
             <div className="mt-5 flex justify-center gap-3">
-              <button onClick={() => setShowSubmitConfirm(false)} className="rounded-2xl bg-[color:var(--surface)] px-5 py-2.5 text-sm font-semibold">
+              <button onClick={() => setShowSubmitConfirm(false)} className="rounded-lg bg-[color:var(--surface)] px-5 py-2.5 text-sm font-semibold">
                 Cancel
               </button>
               <button
                 onClick={() => handleSubmit(false)}
                 disabled={submitting}
-                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white"
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white"
               >
                 {submitting ? <Loader2 size={15} className="animate-spin" /> : null}
                 Yes, Submit

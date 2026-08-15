@@ -33,7 +33,7 @@ export default function SubmitPage() {
     content: '<p></p>',
     editorProps: {
       attributes: {
-        class: 'min-h-[150px] rounded-[24px] bg-transparent text-2xl font-semibold leading-snug outline-none md:text-[32px]',
+        class: 'min-h-[150px] rounded-xl bg-transparent text-2xl font-semibold leading-snug outline-none md:text-[32px]',
       },
     },
   })
@@ -94,11 +94,11 @@ export default function SubmitPage() {
       <PageHeader
         title="Submit Progress Report"
         subtitle="Give your report a clear title and upload the file for institute review."
-        action={<button className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--secondary)]">Save Draft</button>}
+        action={<button className="rounded-lg bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--secondary)]">Save Draft</button>}
       />
 
       {assignment && (
-        <div className={`mb-5 flex flex-wrap items-center gap-3 rounded-3xl border p-4 ${alreadySubmitted ? 'border-emerald-200 bg-emerald-50/50' : 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]'}`}>
+        <div className={`mb-5 flex flex-wrap items-center gap-3 rounded-xl border p-4 ${alreadySubmitted ? 'border-emerald-200 bg-emerald-50/50' : 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]'}`}>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--muted)]">Submitting for assignment</p>
             <p className="mt-0.5 truncate text-base font-semibold text-[color:var(--text)]">{assignment.title}</p>
@@ -129,7 +129,7 @@ export default function SubmitPage() {
               </div>
             </div>
             <div className="p-5 md:p-7">
-              <div className="rounded-[28px] border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-soft">
+              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-soft">
                 <EditorContent editor={editor} />
               </div>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -155,7 +155,7 @@ export default function SubmitPage() {
 
             <div
               {...getRootProps()}
-              className={`mt-5 grid min-h-[220px] cursor-pointer place-items-center rounded-[28px] border border-dashed p-6 text-center transition ${isDragActive ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]' : 'border-[color:var(--border)] bg-[color:var(--surface)] hover:border-[color:var(--accent)]'}`}
+              className={`mt-5 grid min-h-[220px] cursor-pointer place-items-center rounded-xl border border-dashed p-6 text-center transition ${isDragActive ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]' : 'border-[color:var(--border)] bg-[color:var(--surface)] hover:border-[color:var(--accent)]'}`}
             >
               <input {...getInputProps()} />
               <div className="max-w-md">
@@ -168,9 +168,9 @@ export default function SubmitPage() {
             </div>
 
             {file && (
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-4">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-4">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[color:var(--accent-tint)] text-[color:var(--accent)]"><FileText size={19} /></div>
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[color:var(--accent-tint)] text-[color:var(--accent)]"><FileText size={19} /></div>
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-[color:var(--text)]">{file.name}</p>
                     <p className="text-xs text-[color:var(--secondary)]">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
@@ -188,7 +188,7 @@ export default function SubmitPage() {
             <p className="mt-3 text-sm leading-6 text-[color:var(--secondary)]">
               Your report will be reviewed per your batch's approval workflow.
             </p>
-            <div className="mt-5 rounded-3xl bg-[color:var(--accent-tint)] p-4 text-sm leading-6 text-[color:var(--secondary)]">
+            <div className="mt-5 rounded-xl bg-[color:var(--accent-tint)] p-4 text-sm leading-6 text-[color:var(--secondary)]">
               <Info size={16} className="mb-2 text-[color:var(--accent)]" />
               Submit only when your title and file are ready for review.
             </div>
@@ -197,14 +197,14 @@ export default function SubmitPage() {
         </aside>
       </div>
 
-      <div className="sticky bottom-4 z-20 mt-6 rounded-[24px] border border-[color:var(--border)] bg-[color:var(--card)] p-3 shadow-hover md:pr-72">
+      <div className="sticky bottom-4 z-20 mt-6 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-3 shadow-hover md:pr-72">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="px-2">
             <p className="text-sm font-semibold text-[color:var(--text)]">Ready to submit?</p>
             <p className="text-xs text-[color:var(--secondary)]">{validTitle ? 'Title looks good' : 'Title must be 3-200 characters'} · {file ? 'File attached' : 'Attach a report file'}</p>
           </div>
           <div className="safe-actions">
-            <button className="h-11 rounded-[14px] bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]">Save Draft</button>
+            <button className="h-11 rounded-md bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]">Save Draft</button>
             <button className="btn-primary inline-flex items-center gap-2 disabled:opacity-50" disabled={!canSubmit} onClick={() => setConfirm(true)}>
               Submit for Approval <ArrowRight size={17} />
             </button>
@@ -218,7 +218,7 @@ export default function SubmitPage() {
             <h2 className="text-2xl font-semibold text-[color:var(--text)]">Confirm submission</h2>
             <p className="mt-3 text-sm leading-6 text-[color:var(--secondary)]">Your report will be sent for review per your batch's approval workflow.</p>
             <div className="safe-actions mt-6 justify-end">
-              <button className="h-11 rounded-[14px] bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setConfirm(false)}>Cancel</button>
+              <button className="h-11 rounded-md bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setConfirm(false)}>Cancel</button>
               <button className="btn-primary" onClick={submit} disabled={submitting}>{submitting ? 'Submitting...' : 'Confirm Submission'}</button>
             </div>
           </div>

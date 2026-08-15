@@ -22,7 +22,7 @@ export default function SubmissionFileLink({ file, label = 'Open' }) {
       href={url || undefined}
       target="_blank"
       rel="noreferrer"
-      className={`inline-flex h-10 items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 text-sm font-semibold text-[color:var(--accent)] ${url ? '' : 'pointer-events-none opacity-50'}`}
+      className={`inline-flex h-10 items-center gap-2 rounded-lg bg-[color:var(--accent-tint)] px-4 text-sm font-semibold text-[color:var(--accent)] ${url ? '' : 'pointer-events-none opacity-50'}`}
     >
       <Download size={14} /> {label}
     </a>

@@ -30,7 +30,7 @@ export default function DevRoleSwitcher() {
   return (
     <div className="fixed bottom-5 right-5 z-50 max-w-[calc(100vw-2rem)]">
       {open && (
-        <div className="mb-3 w-72 overflow-hidden rounded-[28px] bg-[color:var(--card)] p-2 shadow-hover ring-1 ring-[color:var(--border)]">
+        <div className="mb-3 w-72 overflow-hidden rounded-xl bg-[color:var(--card)] p-2 shadow-hover ring-1 ring-[color:var(--border)]">
           <div className="px-3 py-2">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Demo Role</p>
             <p className="text-sm text-[color:var(--secondary)]">Jump between role dashboards instantly.</p>
@@ -39,7 +39,7 @@ export default function DevRoleSwitcher() {
             {roles.map((r) => (
               <button
                 key={r}
-                className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-semibold transition ${role === r ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-semibold transition ${role === r ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}
                 onClick={() => switchRole(r)}
               >
                 <UserRoundCog size={17} />

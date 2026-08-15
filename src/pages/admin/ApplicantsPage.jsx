@@ -63,7 +63,7 @@ function StatusBanner({ status }) {
   const c = cfg[status] || cfg.submitted
   const Icon = c.icon
   return (
-    <div className={`flex items-start gap-3 rounded-2xl border ${c.bg} px-4 py-3`}>
+    <div className={`flex items-start gap-3 rounded-lg border ${c.bg} px-4 py-3`}>
       <Icon size={15} className={`mt-0.5 shrink-0 ${c.color}`} />
       <span className={`text-sm font-medium leading-snug ${c.color}`}>{c.text}</span>
     </div>
@@ -117,7 +117,7 @@ function DrawerActions({ item, onAct, onConvert, onRemindPay, busy }) {
         <button
           disabled={busy}
           onClick={() => onAct(item, 'submitted')}
-          className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--text)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-50"
+          className="mobile-compact-button flex items-center justify-center gap-2 rounded-md border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--text)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-50"
         >
           <RotateCcw size={15} /> Reconsider Application
         </button>
@@ -138,7 +138,7 @@ function DrawerActions({ item, onAct, onConvert, onRemindPay, busy }) {
         <button
           disabled={busy}
           onClick={() => onRemindPay(item)}
-          className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-violet-400 hover:text-violet-700 transition disabled:opacity-50"
+          className="mobile-compact-button flex items-center justify-center gap-2 rounded-md border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-violet-400 hover:text-violet-700 transition disabled:opacity-50"
           title="Email a registration-fee payment reminder (deadline 10 July 2026)"
         >
           <BellRing size={14} /> Send Payment Reminder
@@ -151,7 +151,7 @@ function DrawerActions({ item, onAct, onConvert, onRemindPay, busy }) {
         <button
           disabled={busy}
           onClick={() => onAct(item, 'payment_received')}
-          className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-teal-400 hover:text-teal-700 transition disabled:opacity-50"
+          className="mobile-compact-button flex items-center justify-center gap-2 rounded-md border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-teal-400 hover:text-teal-700 transition disabled:opacity-50"
           title="Mark the registration fee as received — moves the candidate to Registration Fee Paid (no email sent)"
         >
           <BadgeCheck size={14} /> Mark Payment Received
@@ -159,7 +159,7 @@ function DrawerActions({ item, onAct, onConvert, onRemindPay, busy }) {
         <button
           disabled={busy}
           onClick={() => onAct(item, unshortlistTarget)}
-          className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-amber-400 hover:text-amber-700 transition disabled:opacity-50"
+          className="mobile-compact-button flex items-center justify-center gap-2 rounded-md border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-amber-400 hover:text-amber-700 transition disabled:opacity-50"
           title="Move back to Test Submitted — does NOT reject the candidate"
         >
           <UserMinus size={14} /> Remove Shortlist
@@ -167,7 +167,7 @@ function DrawerActions({ item, onAct, onConvert, onRemindPay, busy }) {
         <button
           disabled={busy}
           onClick={() => onAct(item, 'rejected')}
-          className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50"
+          className="mobile-compact-button flex items-center justify-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50"
           title="Reject this candidate (records the stage they were rejected from)"
         >
           <XCircle size={14} /> Reject
@@ -192,7 +192,7 @@ function DrawerActions({ item, onAct, onConvert, onRemindPay, busy }) {
         <button
           disabled={busy}
           onClick={() => onAct(item, 'shortlisted')}
-          className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-amber-400 hover:text-amber-700 transition disabled:opacity-50"
+          className="mobile-compact-button flex items-center justify-center gap-2 rounded-md border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-amber-400 hover:text-amber-700 transition disabled:opacity-50"
           title="Correction only — move back to Final Shortlist. Sends no email."
         >
           <RotateCcw size={14} /> Back to Final Shortlist
@@ -224,7 +224,7 @@ function DrawerActions({ item, onAct, onConvert, onRemindPay, busy }) {
         <button
           disabled={busy}
           onClick={() => onAct(item, 'test_pending')}
-          className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-50"
+          className="mobile-compact-button flex items-center justify-center gap-2 rounded-md border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-50"
           title="Marks as test sent — use the Kanban Send Test Link button to also email credentials"
         >
           <Send size={13} /> Mark Test Sent
@@ -234,7 +234,7 @@ function DrawerActions({ item, onAct, onConvert, onRemindPay, busy }) {
         <button
           disabled={busy}
           onClick={() => onAct(item, 'test_completed')}
-          className="mobile-compact-button flex items-center justify-center gap-2 rounded-[14px] border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-blue-400 hover:text-blue-700 transition disabled:opacity-50"
+          className="mobile-compact-button flex items-center justify-center gap-2 rounded-md border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-blue-400 hover:text-blue-700 transition disabled:opacity-50"
         >
           <CheckCircle2 size={13} /> Mark Done
         </button>
@@ -667,7 +667,7 @@ export default function ApplicantsPage() {
         action={
           <div className="flex flex-wrap gap-2">
             <button
-              className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
               onClick={handleExport}
               disabled={exporting}
               title={`Export ${currentCourse ? currentCourse.code + ' ' : ''}applicants to Excel`}
@@ -676,7 +676,7 @@ export default function ApplicantsPage() {
               Export
             </button>
             <button
-              className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
               onClick={() => {
                 if (!currentCourse?.id) {
                   addToast({ type: 'error', title: 'Select a course from the header first — imported applicants are added to that course.' })
@@ -712,16 +712,16 @@ export default function ApplicantsPage() {
 
       {/* ── View toggle ── */}
       <div className="mt-6 mb-4 flex items-center justify-between gap-3">
-        <div className="flex gap-1 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-1">
+        <div className="tab-group">
           <button
             onClick={() => setView('kanban')}
-            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-sm font-semibold transition ${view === 'kanban' ? 'bg-[color:var(--card)] text-[color:var(--text)] shadow-sm' : 'text-[color:var(--secondary)] hover:text-[color:var(--text)]'}`}
+            className={`tab-segment ${view === 'kanban' ? 'tab-segment--active' : ''}`}
           >
             <Kanban size={14} /> Pipeline
           </button>
           <button
             onClick={() => setView('list')}
-            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-sm font-semibold transition ${view === 'list' ? 'bg-[color:var(--card)] text-[color:var(--text)] shadow-sm' : 'text-[color:var(--secondary)] hover:text-[color:var(--text)]'}`}
+            className={`tab-segment ${view === 'list' ? 'tab-segment--active' : ''}`}
           >
             <List size={14} /> List
           </button>
@@ -804,7 +804,7 @@ export default function ApplicantsPage() {
           )}
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="table-wrap">
           <table className="min-w-[840px] w-full text-left text-sm">
             <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
               <tr>{['Applicant', 'Applied', 'Batch', 'Score', 'Status', 'Actions'].map((h) => <th className="px-6 py-4" key={h}>{h}</th>)}</tr>
@@ -864,7 +864,7 @@ export default function ApplicantsPage() {
           <button
             onClick={loadMore}
             disabled={loadingMore}
-            className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
           >
             {loadingMore ? <Loader2 size={15} className="animate-spin" /> : null}
             {loadingMore ? 'Loading…' : `Load more (${items.length} of ${statCounts?.total ?? total})`}
@@ -978,7 +978,7 @@ export default function ApplicantsPage() {
 
               {/* Rejection details — the stage rejected FROM + the recorded remark */}
               {selected.status === 'rejected' && (selected.rejected_from_status || selected.rejection_remark) && (
-                <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4">
                   {selected.rejected_from_status && (
                     <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-[11px] font-bold text-red-700">
                       {rejectedFromLabel(selected.rejected_from_status)}
@@ -1015,7 +1015,7 @@ export default function ApplicantsPage() {
                   <Info label="Scopus Publications" value={selected.academic.scopus_publications ?? '—'} />
                   <Info label="University"          value={selected.academic.university} />
                 </div>
-                <div className="mt-3 rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-4">
+                <div className="mt-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Research Statement</p>
                   <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]">{selected.research_statement}</p>
                 </div>
@@ -1047,7 +1047,7 @@ export default function ApplicantsPage() {
                   )}
                 </div>
                 {selected.test_score != null && selected.test_max_score != null && (
-                  <div className="mt-3 rounded-3xl bg-[color:var(--surface)] p-4">
+                  <div className="mt-3 rounded-xl bg-[color:var(--surface)] p-4">
                     <div className="flex items-center justify-between text-sm font-semibold">
                       <span className="text-[color:var(--secondary)]">Score</span>
                       <span className="text-[color:var(--text)]">
@@ -1072,7 +1072,7 @@ export default function ApplicantsPage() {
                   <button
                     disabled={acting || rejecting}
                     onClick={() => act(selected, 'rejected')}
-                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50"
+                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition disabled:opacity-50"
                   >
                     <XCircle size={16} /> Reject
                   </button>
@@ -1080,7 +1080,7 @@ export default function ApplicantsPage() {
                 {(selected.status === 'test_completed' || selected.test_score != null) && (
                   <button
                     onClick={() => navigate(`/admin/applicants/${selected.id}/test-results`)}
-                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-2.5 text-sm font-semibold text-[color:var(--text)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition"
+                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-2.5 text-sm font-semibold text-[color:var(--text)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition"
                   >
                     <ClipboardList size={16} /> View Test Responses
                   </button>
@@ -1106,7 +1106,7 @@ export default function ApplicantsPage() {
                   <button
                     type="button"
                     onClick={() => setEditing(false)}
-                    className="flex-1 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] py-3 text-sm font-semibold text-[color:var(--secondary)] hover:text-[color:var(--text)] transition"
+                    className="flex-1 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] py-3 text-sm font-semibold text-[color:var(--secondary)] hover:text-[color:var(--text)] transition"
                   >
                     Cancel
                   </button>
@@ -1207,7 +1207,7 @@ export default function ApplicantsPage() {
               </div>
 
               <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-                <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setAddOpen(false)}>Cancel</button>
+                <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setAddOpen(false)}>Cancel</button>
                 <button type="submit" className="btn-primary flex-1" disabled={saving}>{saving ? 'Saving…' : 'Add Applicant'}</button>
               </div>
             </form>
@@ -1258,7 +1258,7 @@ function FormField({ label, required, children }) {
 
 function Info({ label, value }) {
   return (
-    <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+    <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">{label}</p>
       <div className="mt-2 text-sm font-semibold text-[color:var(--text)]">{value}</div>
     </div>

@@ -15,7 +15,7 @@ export default function PublicLayout() {
         </Link>
         <span className="rounded-full border border-[var(--border)] bg-[var(--accent-tint)] px-3 py-2 text-xs font-semibold text-[var(--accent)]">Demo mode</span>
         <nav className="flex flex-wrap items-center gap-2 sm:justify-end">
-          <Link to="/admin" className="inline-flex h-10 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-semibold text-[var(--text)] sm:px-4"><LayoutDashboard size={16} />Dashboard</Link>
+          <Link to="/admin" className="inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-semibold text-[var(--text)] sm:px-4"><LayoutDashboard size={16} />Dashboard</Link>
           <button type="button" className="theme-icon-button !h-10 !w-10" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </button>

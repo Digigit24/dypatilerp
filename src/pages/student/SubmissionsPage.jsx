@@ -44,13 +44,13 @@ export default function SubmissionsPage() {
                 {s.approvals.map((a) => <div className="rounded-full bg-[color:var(--surface)] px-4 py-2 text-xs text-[color:var(--secondary)]" key={a.id}>{a.stage}: {a.status}</div>)}
               </div>
               {revision && (
-                <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">
+                <div className="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
                   <p className="font-semibold">Revision requested</p>
                   <p className="mt-1">{revision.comments}</p>
                   {revision.suggested_title && <p className="mt-2"><b>Suggested title:</b> {revision.suggested_title}</p>}
                 </div>
               )}
-              <button className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)]" onClick={(e) => { e.stopPropagation(); setDetail(s) }}>
+              <button className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)]" onClick={(e) => { e.stopPropagation(); setDetail(s) }}>
                 <MessageSquare size={16} /> View submission detail
               </button>
             </div>
@@ -72,7 +72,7 @@ export default function SubmissionsPage() {
             <div className="grid max-h-[calc(100%-96px)] gap-5 overflow-auto overscroll-contain p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="space-y-5">
                 <MediaPreview submission={detail} />
-                <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                   <p className="font-semibold text-[color:var(--text)]">Submission Summary</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <Info label="Status" value={<StatusBadge status={detail.status} />} />
@@ -82,20 +82,20 @@ export default function SubmissionsPage() {
                   </div>
                 </div>
               </div>
-              <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                 <div className="safe-row">
                   <p className="font-semibold text-[color:var(--text)]">Approval Thread</p>
                   <MessageSquare size={17} className="text-[color:var(--accent)]" />
                 </div>
                 <div className="mt-4 space-y-4">
                   {detail.approvals.map((approval) => (
-                    <div className="rounded-3xl bg-[color:var(--card)] p-4" key={approval.id}>
+                    <div className="rounded-xl bg-[color:var(--card)] p-4" key={approval.id}>
                       <div className="safe-row items-start">
                         <p className="font-semibold capitalize text-[color:var(--text)]">{approval.stage?.replaceAll('_', ' ')}</p>
                         <StatusBadge status={approval.status} />
                       </div>
                       <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]">{approval.comments || 'No comment added.'}</p>
-                      {approval.suggested_title && <p className="mt-3 rounded-2xl bg-[color:var(--surface)] p-3 text-sm text-[color:var(--secondary)]"><b>Suggested title:</b> {approval.suggested_title}</p>}
+                      {approval.suggested_title && <p className="mt-3 rounded-lg bg-[color:var(--surface)] p-3 text-sm text-[color:var(--secondary)]"><b>Suggested title:</b> {approval.suggested_title}</p>}
                       <p className="mt-2 text-xs text-[color:var(--muted)]">{formatDate(approval.reviewed_at)}</p>
                     </div>
                   ))}
@@ -118,16 +118,16 @@ function MediaPreview({ submission }) {
     return () => { alive = false }
   }, [file?.media_id])
   const url = file?.media_id ? fetchedUrl : (file?.url || null)
-  return <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+  return <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
     <div className="safe-row">
       <div>
         <p className="font-semibold text-[color:var(--text)]">Uploaded File</p>
         <p className="mt-1 text-xs text-[color:var(--secondary)]">{file?.name || 'No file attached'}</p>
       </div>
-      {url && <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 text-sm font-semibold text-[color:var(--accent)]"><Download size={15} /> Open</a>}
+      {url && <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center gap-2 rounded-lg bg-[color:var(--accent-tint)] px-4 text-sm font-semibold text-[color:var(--accent)]"><Download size={15} /> Open</a>}
     </div>
     {!file && (
-      <div className="mt-4 grid h-40 place-items-center rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
+      <div className="mt-4 grid h-40 place-items-center rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
         <div>
           <FileText className="mx-auto text-[color:var(--accent)]" size={30} />
           <p className="mt-3 text-sm text-[color:var(--secondary)]">No file attached to this submission.</p>
@@ -138,7 +138,7 @@ function MediaPreview({ submission }) {
 }
 
 function Info({ label, value }) {
-  return <div className="rounded-2xl bg-[color:var(--card)] p-4">
+  return <div className="rounded-lg bg-[color:var(--card)] p-4">
     <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">{label}</p>
     <div className="mt-2 text-sm font-semibold text-[color:var(--text)]">{value}</div>
   </div>

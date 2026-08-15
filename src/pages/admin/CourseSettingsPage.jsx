@@ -95,7 +95,7 @@ export default function CourseSettingsPage() {
         action={
           <div className="flex gap-2">
             <button
-              className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)]"
+              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)]"
               onClick={() => navigate('/admin/courses')}
             >
               <ArrowLeft size={15} /> Back
@@ -117,7 +117,7 @@ export default function CourseSettingsPage() {
             </p>
             <div className="mt-5 space-y-3">
               {ALL_MODULES.map(({ key, label, desc }) => (
-                <div key={key} className="flex items-center justify-between gap-4 rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+                <div key={key} className="flex items-center justify-between gap-4 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-[color:var(--text)]">{label}</p>
                     <p className="text-xs text-[color:var(--secondary)] truncate">{desc}</p>
@@ -151,19 +151,19 @@ export default function CourseSettingsPage() {
               </label>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-3xl bg-[color:var(--surface)] p-4">
+                <div className="rounded-xl bg-[color:var(--surface)] p-4">
                   <p className="text-xs text-[color:var(--muted)]">Duration</p>
                   <p className="mt-1 font-semibold text-[color:var(--text)]">{course.duration_months} months</p>
                 </div>
-                <div className="rounded-3xl bg-[color:var(--surface)] p-4">
+                <div className="rounded-xl bg-[color:var(--surface)] p-4">
                   <p className="text-xs text-[color:var(--muted)]">Max per Batch</p>
                   <p className="mt-1 font-semibold text-[color:var(--text)]">{course.max_students_per_batch} students</p>
                 </div>
-                <div className="rounded-3xl bg-[color:var(--surface)] p-4">
+                <div className="rounded-xl bg-[color:var(--surface)] p-4">
                   <p className="text-xs text-[color:var(--muted)]">Batches</p>
                   <p className="mt-1 font-semibold text-[color:var(--text)]">{course.batch_count || 0}</p>
                 </div>
-                <div className="rounded-3xl bg-[color:var(--surface)] p-4">
+                <div className="rounded-xl bg-[color:var(--surface)] p-4">
                   <p className="text-xs text-[color:var(--muted)]">Active Students</p>
                   <p className="mt-1 font-semibold text-[color:var(--text)]">{course.student_count || 0}</p>
                 </div>
@@ -173,7 +173,7 @@ export default function CourseSettingsPage() {
 
           {/* Email config moved to the Admin Wizard */}
           <div className="card flex items-center gap-3 p-5">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[color:var(--accent-tint)] text-[color:var(--accent)]"><Mail size={17} /></span>
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[color:var(--accent-tint)] text-[color:var(--accent)]"><Mail size={17} /></span>
             <p className="text-sm text-[color:var(--secondary)]">
               Email sender &amp; notification rules for this course are now managed in the{' '}
               <a href="/admin/wizard" className="font-semibold text-[color:var(--accent)] hover:underline">Admin Wizard → Notifications</a>.

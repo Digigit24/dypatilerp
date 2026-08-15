@@ -29,7 +29,7 @@ export default function RejectModal({ open, applicantName, busy, onClose, onConf
       onClick={busy ? undefined : onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-[color:var(--card)] p-5 shadow-xl"
+        className="w-full max-w-md rounded-lg bg-[color:var(--card)] p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">

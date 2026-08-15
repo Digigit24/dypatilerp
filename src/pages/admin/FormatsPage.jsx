@@ -226,7 +226,7 @@ function FormatDrawer({ mode, item, course, batches, onClose, addToast }) {
           <div className="flex-1 overflow-auto overscroll-contain p-5 sm:p-7 space-y-4">
             {mode === 'create' && (
               <div
-                className="flex cursor-pointer flex-col items-center justify-center gap-2.5 rounded-3xl border-2 border-dashed border-[color:var(--border)] p-7 transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
+                className="flex cursor-pointer flex-col items-center justify-center gap-2.5 rounded-xl border-2 border-dashed border-[color:var(--border)] p-7 transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
                 onClick={() => fileRef.current?.click()}
               >
                 <Upload size={24} className={file ? 'text-emerald-600' : 'text-[color:var(--muted)]'} />
@@ -257,7 +257,7 @@ function FormatDrawer({ mode, item, course, batches, onClose, addToast }) {
             </label>
           </div>
           <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-            <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" disabled={busy} onClick={() => onClose(false)}>Cancel</button>
+            <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" disabled={busy} onClick={() => onClose(false)}>Cancel</button>
             <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2" disabled={busy}>
               {busy && <Loader2 size={14} className="animate-spin" />}
               {busy ? (pct > 0 && pct < 100 ? `Uploading ${pct}%` : 'Saving…') : mode === 'create' ? 'Upload Format' : 'Save Changes'}

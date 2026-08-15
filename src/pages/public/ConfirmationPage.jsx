@@ -8,7 +8,7 @@ export default function ConfirmationPage() {
       <p className="mt-2 text-[var(--secondary)]">Your application is ready for the next step.</p>
       <div className="mt-8 flex flex-wrap justify-center gap-3">
         <Link to="/test/test_001" className="btn-primary inline-flex items-center gap-2"><PlayCircle size={18} />Start Test Now</Link>
-        <Link to="/admin" className="inline-flex h-11 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 font-semibold"><LayoutDashboard size={18} />Dashboard</Link>
+        <Link to="/admin" className="inline-flex h-11 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-5 font-semibold"><LayoutDashboard size={18} />Dashboard</Link>
       </div>
     </div>
   </div>

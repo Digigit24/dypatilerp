@@ -47,7 +47,7 @@ export default function StudentProfilePage() {
           <div className="flex gap-2">
             {canUpload && (
               <button
-                className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
+                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
                 onClick={() => setUploadOpen(true)}
                 title="Upload and submit a progress report on behalf of this scholar"
               >
@@ -55,7 +55,7 @@ export default function StudentProfilePage() {
               </button>
             )}
             <button
-              className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
               onClick={handleSendCredentials}
               disabled={sending}
               title="Generates a new password and emails the login credentials"
@@ -64,7 +64,7 @@ export default function StudentProfilePage() {
               Send Login Credentials
             </button>
             <button
-              className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)]"
+              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)]"
               onClick={() => navigate('/admin/students')}
             >
               <ArrowLeft size={15} /> All {labels.studentPlural}

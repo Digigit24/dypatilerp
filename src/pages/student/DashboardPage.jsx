@@ -100,8 +100,8 @@ export default function DashboardPage() {
               <h2 className="text-xl font-semibold text-[color:var(--text)]">Quick Actions</h2>
               <div className="safe-actions mt-4">
                 <Link className="btn-primary inline-flex items-center" to="/student/submit">Submit Progress Report</Link>
-                <Link className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 font-semibold text-[color:var(--secondary)]" to="/student/progress">Progress Reports</Link>
-                <Link className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 font-semibold text-[color:var(--secondary)]" to="/student/profile/research">Research Profile</Link>
+                <Link className="rounded-lg bg-[color:var(--surface)] px-4 py-3 font-semibold text-[color:var(--secondary)]" to="/student/progress">Progress Reports</Link>
+                <Link className="rounded-lg bg-[color:var(--surface)] px-4 py-3 font-semibold text-[color:var(--secondary)]" to="/student/profile/research">Research Profile</Link>
               </div>
             </div>
           </div>
@@ -170,8 +170,8 @@ export default function DashboardPage() {
             <h2 className="text-xl font-semibold text-[color:var(--text)]">Quick Actions</h2>
             <div className="safe-actions mt-4">
               <Link className="btn-primary inline-flex items-center" to="/student/submit">Submit Progress Report</Link>
-              <Link className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 font-semibold text-[color:var(--secondary)]" to="/student/progress">Progress Reports</Link>
-              <Link className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 font-semibold text-[color:var(--secondary)]" to="/student/profile/research">Research Profile</Link>
+              <Link className="rounded-lg bg-[color:var(--surface)] px-4 py-3 font-semibold text-[color:var(--secondary)]" to="/student/progress">Progress Reports</Link>
+              <Link className="rounded-lg bg-[color:var(--surface)] px-4 py-3 font-semibold text-[color:var(--secondary)]" to="/student/profile/research">Research Profile</Link>
             </div>
           </div>
         </div>

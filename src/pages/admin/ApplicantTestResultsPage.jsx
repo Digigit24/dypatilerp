@@ -70,7 +70,7 @@ export default function ApplicantTestResultsPage() {
         action={
           <button
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] hover:text-[color:var(--text)]"
+            className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] hover:text-[color:var(--text)]"
           >
             <ArrowLeft size={16} /> Back
           </button>
@@ -86,7 +86,7 @@ export default function ApplicantTestResultsPage() {
               <button
                 key={t.id}
                 onClick={() => setSelectedTestId(t.id)}
-                className={`rounded-2xl border px-4 py-2 text-sm font-semibold transition ${
+                className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
                   selectedTestId === t.id
                     ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)] text-[color:var(--accent)]'
                     : 'border-[color:var(--border)] text-[color:var(--secondary)]'
@@ -130,7 +130,7 @@ export default function ApplicantTestResultsPage() {
                 { label: 'Correct',          value: allResponses.filter((r) => r.is_correct).length },
                 { label: 'Incorrect',        value: allResponses.filter((r) => r.selected_option && !r.is_correct).length },
               ].map(({ label, value }) => (
-                <div key={label} className="rounded-2xl bg-[color:var(--surface)] p-4 text-center">
+                <div key={label} className="rounded-lg bg-[color:var(--surface)] p-4 text-center">
                   <p className="text-2xl font-bold text-[color:var(--text)]">{value}</p>
                   <p className="text-xs text-[color:var(--secondary)]">{label}</p>
                 </div>

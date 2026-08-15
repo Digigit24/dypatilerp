@@ -179,7 +179,7 @@ export default function UserManagementPage() {
             <input className="w-full bg-transparent text-sm outline-none" placeholder="Search by name or email" value={query} onChange={(e) => setQuery(e.target.value)} />
           </label>
         </div>
-        <div className="overflow-x-auto">
+        <div className="table-wrap">
           <table className="min-w-[860px] w-full text-left text-sm">
             <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
               <tr>{['User', 'Roles', 'Status', 'Joined', 'Last Login', 'Actions'].map((h) => <th key={h} className="px-5 py-4">{h}</th>)}</tr>
@@ -275,7 +275,7 @@ export default function UserManagementPage() {
                     {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
                   </select>
                 </UF>
-                <div className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+                <div className="flex items-center justify-between rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
                   <div>
                     <p className="text-sm font-semibold text-[color:var(--text)]">Active Account</p>
                     <p className="mt-0.5 text-xs text-[color:var(--secondary)]">User can log in immediately</p>
@@ -285,7 +285,7 @@ export default function UserManagementPage() {
                     <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${form.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
                   </button>
                 </div>
-                <div className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+                <div className="flex items-center justify-between rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
                   <div>
                     <p className="text-sm font-semibold text-[color:var(--text)]">Email login credentials</p>
                     <p className="mt-0.5 text-xs text-[color:var(--secondary)]">Send the user a secure password &amp; login link after creating</p>
@@ -297,7 +297,7 @@ export default function UserManagementPage() {
                 </div>
               </div>
               <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-                <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setAddOpen(false)}>Cancel</button>
+                <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setAddOpen(false)}>Cancel</button>
                 <button type="submit" className="btn-primary flex-1" disabled={saving}>{saving ? 'Creating…' : 'Create User'}</button>
               </div>
             </form>
@@ -319,7 +319,7 @@ export default function UserManagementPage() {
             </div>
             <form onSubmit={handleAssignRole} className="flex flex-1 flex-col overflow-hidden">
               <div className="flex-1 overflow-auto overscroll-contain p-5 sm:p-7 space-y-4">
-                <div className="rounded-3xl bg-[color:var(--surface)] p-4 text-sm text-[color:var(--secondary)]">
+                <div className="rounded-xl bg-[color:var(--surface)] p-4 text-sm text-[color:var(--secondary)]">
                   Roles can be scoped globally or to a specific course and batch. Leave course/batch empty for a global role.
                 </div>
                 <UF label="Role" required>
@@ -343,7 +343,7 @@ export default function UserManagementPage() {
                 )}
               </div>
               <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-                <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setRoleOpen(false)}>Cancel</button>
+                <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setRoleOpen(false)}>Cancel</button>
                 <button type="submit" className="btn-primary flex-1" disabled={saving}>{saving ? 'Assigning…' : 'Assign Role'}</button>
               </div>
             </form>
@@ -386,7 +386,7 @@ function ResetPasswordModal({ user, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-[24px] bg-[color:var(--card)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-xl bg-[color:var(--card)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-[color:var(--text)]">Reset Password</h2>
         <p className="mt-0.5 text-xs text-[color:var(--secondary)]">{user.first_name} {user.last_name} · {user.email}</p>
 
@@ -415,7 +415,7 @@ function ResetPasswordModal({ user, onClose }) {
           </>
         ) : (
           <>
-            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
               <p className="text-xs font-semibold text-emerald-800">New password (shown only once):</p>
               <div className="mt-2 flex items-center gap-2">
                 <code className="flex-1 rounded-lg bg-white px-3 py-2 font-mono text-sm text-emerald-900">{result.password}</code>

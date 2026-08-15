@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+﻿import { NavLink } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useBrandingStore, useBranding } from '../../store/brandingStore.js'
 import { useUiStore } from '../../store/uiStore.js'
@@ -16,17 +16,17 @@ export default function Sidebar({ sections, footer, notice, width = 260, role, c
 
   return (
     <aside
-      className={`sidebar-shell fixed bottom-5 left-5 top-5 z-40 flex flex-col rounded-[30px] p-4 transition-all duration-300 max-[900px]:bottom-3 max-[900px]:top-3 ${mobileOpen ? 'max-[900px]:translate-x-0' : 'max-[900px]:-translate-x-[115%]'}`}
+      className={`sidebar-shell fixed inset-y-0 left-0 z-40 flex flex-col p-4 transition-all duration-300 max-[900px]:bottom-3 max-[900px]:top-3 ${mobileOpen ? 'max-[900px]:translate-x-0' : 'max-[900px]:-translate-x-[115%]'}`}
       style={{ width: collapsed ? 88 : width }}
       aria-label="Sidebar navigation"
     >
       <div className={`mb-8 shrink-0 px-2 pt-1 ${collapsed ? 'px-0' : ''}`}>
         {collapsed ? (
-          <img src={logoSrc} alt="DYPERF" className="mx-auto h-12 w-12 rounded-2xl object-cover object-left" />
+          <img src={logoSrc} alt="DYPERF" className="mx-auto h-12 w-12 rounded-lg object-cover object-left" />
         ) : (
           <div>
-            <img src={logoSrc} alt="DYPERF - Dr. D. Y. Patil Education and Research Foundation" className="h-auto max-h-24 w-full rounded-2xl object-contain" />
-            {role && <div className="mt-3 inline-flex rounded-full bg-[color:var(--accent-tint)] px-3 py-1 text-[11px] font-semibold text-[color:var(--accent)]">{role}</div>}
+            <img src={logoSrc} alt="DYPERF - Dr. D. Y. Patil Education and Research Foundation" className="h-auto max-h-24 w-full rounded-lg object-contain" />
+            {role && <div className="mt-3 inline-flex rounded-md bg-[color:var(--accent-tint)] px-2.5 py-0.5 text-[11px] font-semibold text-[color:var(--accent)]">{role}</div>}
           </div>
         )}
       </div>
@@ -44,7 +44,7 @@ export default function Sidebar({ sections, footer, notice, width = 260, role, c
                   onClick={onClose}
                   title={collapsed ? label : undefined}
                   className={({ isActive }) =>
-                    `sidebar-link ${isActive ? 'sidebar-link-active' : ''} flex h-12 items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} rounded-2xl font-nav text-sm font-semibold`
+                    `sidebar-link ${isActive ? 'sidebar-link-active' : ''} flex h-12 items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} rounded-lg font-nav text-sm font-medium`
                   }
                 >
                   {Icon && <Icon size={17} strokeWidth={1.8} />}

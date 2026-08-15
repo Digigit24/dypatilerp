@@ -74,7 +74,7 @@ export default function ProgressPage() {
                   </div>
                 )}
                 {feedback.length > 0 && (
-                  <div className="mt-4 rounded-2xl bg-[color:var(--surface)] p-4">
+                  <div className="mt-4 rounded-lg bg-[color:var(--surface)] p-4">
                     <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">Institute Feedback</p>
                     {feedback.map((a) => (
                       <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]" key={a.id}>{a.comments}</p>

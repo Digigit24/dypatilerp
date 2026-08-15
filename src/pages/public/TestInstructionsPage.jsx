@@ -76,12 +76,12 @@ export default function TestInstructionsPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-[color:var(--bg)] p-4">
       {/* Header */}
       <div className="mb-6 flex items-center gap-3">
-        <img src="/logo-new.jpg" alt="DYPERF" className="h-12 w-auto rounded-2xl object-contain" />
+        <img src="/logo-new.jpg" alt="DYPERF" className="h-12 w-auto rounded-lg object-contain" />
       </div>
 
       <div className="w-full max-w-2xl">
         <div className="card p-8">
-          <div className="mb-6 flex items-center gap-3 rounded-2xl bg-[color:var(--accent-tint)] p-4">
+          <div className="mb-6 flex items-center gap-3 rounded-lg bg-[color:var(--accent-tint)] p-4">
             <BookOpen size={22} className="shrink-0 text-[color:var(--accent)]" />
             <div>
               <p className="text-xs text-[color:var(--secondary)]">Welcome, {testUser?.first_name}</p>
@@ -96,7 +96,7 @@ export default function TestInstructionsPage() {
               { icon: BookOpen, label: 'Questions', value: totalQ },
               { icon: CheckCircle, label: 'Sections', value: test?.sections?.length || 0 },
             ].map(({ icon: Icon, label, value }) => (
-              <div key={label} className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 text-center">
+              <div key={label} className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] p-4 text-center">
                 <Icon size={20} className="mx-auto mb-1 text-[color:var(--accent)]" />
                 <p className="text-lg font-bold text-[color:var(--text)]">{value}</p>
                 <p className="text-xs text-[color:var(--secondary)]">{label}</p>
@@ -110,7 +110,7 @@ export default function TestInstructionsPage() {
               <p className="mb-2 text-sm font-semibold text-[color:var(--text)]">Test Sections</p>
               <div className="space-y-2">
                 {test.sections.map((sec, idx) => (
-                  <div key={sec.id} className="flex items-center gap-3 rounded-2xl bg-[color:var(--surface)] p-3">
+                  <div key={sec.id} className="flex items-center gap-3 rounded-lg bg-[color:var(--surface)] p-3">
                     <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-[color:var(--accent-tint)] text-xs font-bold text-[color:var(--accent)]">
                       {idx + 1}
                     </span>
@@ -126,7 +126,7 @@ export default function TestInstructionsPage() {
 
           {/* Instructions */}
           {test?.instructions && (
-            <div className="mb-6 rounded-2xl bg-amber-50 p-4">
+            <div className="mb-6 rounded-lg bg-amber-50 p-4">
               <p className="mb-2 text-sm font-semibold text-amber-800">Instructions</p>
               <div className="space-y-1">
                 {test.instructions.split('\n').filter(Boolean).map((line, i) => (
@@ -137,7 +137,7 @@ export default function TestInstructionsPage() {
           )}
 
           {/* Warning */}
-          <div className="mb-6 flex gap-3 rounded-2xl bg-red-50 p-4 text-red-800">
+          <div className="mb-6 flex gap-3 rounded-lg bg-red-50 p-4 text-red-800">
             <AlertTriangle size={18} className="shrink-0 mt-0.5" />
             <p className="text-sm">
               Once you click <strong>Start Test</strong>, the timer begins and cannot be paused.

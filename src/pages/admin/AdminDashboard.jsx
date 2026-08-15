@@ -181,9 +181,9 @@ export default function AdminDashboard() {
             <button
               key={s.label}
               onClick={() => navigate(s.to)}
-              className="group flex flex-col items-center gap-2 rounded-2xl border border-transparent p-3 text-center transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
+              className="group flex flex-col items-center gap-2 rounded-lg border border-transparent p-3 text-center transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
             >
-              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-[color:var(--surface)] text-[color:var(--secondary)] transition group-hover:bg-[color:var(--accent)] group-hover:text-white">
+              <span className="grid h-11 w-11 place-items-center rounded-lg bg-[color:var(--surface)] text-[color:var(--secondary)] transition group-hover:bg-[color:var(--accent)] group-hover:text-white">
                 <s.icon size={18} />
               </span>
               <span className="text-[11px] font-semibold leading-tight text-[color:var(--secondary)] group-hover:text-[color:var(--accent)]">{s.label}</span>
@@ -259,7 +259,7 @@ export default function AdminDashboard() {
                 <button
                   key={i}
                   onClick={() => navigate(a.type === 'applicant' ? '/admin/applicants' : '/admin/approvals')}
-                  className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition hover:bg-[color:var(--surface)]"
+                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition hover:bg-[color:var(--surface)]"
                 >
                   <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${a.type === 'applicant' ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'bg-emerald-50 text-emerald-600'}`}>
                     {a.type === 'applicant' ? <UserPlus size={15} /> : <FileText size={15} />}
@@ -318,7 +318,7 @@ export default function AdminDashboard() {
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {footerStats.map(([label, val, hint, to, Icon]) => (
           <button key={label} onClick={() => navigate(to)} className="card card-hover flex items-center gap-3 p-4 text-left">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[color:var(--surface)] text-[color:var(--secondary)]"><Icon size={17} /></span>
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[color:var(--surface)] text-[color:var(--secondary)]"><Icon size={17} /></span>
             <span className="min-w-0">
               <span className="block text-xl font-semibold text-[color:var(--text)]">{val}</span>
               <span className="block truncate text-[11px] text-[color:var(--secondary)]">{label} · {hint}</span>

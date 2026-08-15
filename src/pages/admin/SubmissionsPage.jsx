@@ -103,8 +103,8 @@ export default function SubmissionsPage() {
       />
 
       {/* Filters */}
-      <div className="card mb-5 flex flex-wrap items-center gap-3 p-4">
-        <label className="admin-search soft-panel flex h-11 min-w-[220px] flex-1 items-center gap-2 rounded-full px-4">
+      <div className="toolbar">
+        <label className="admin-search soft-panel flex h-9 min-w-[220px] flex-1 items-center gap-2 rounded-lg px-3">
           <Search size={15} className="text-[color:var(--muted)]" />
           <input
             className="w-full bg-transparent text-sm outline-none placeholder:text-[color:var(--muted)]"

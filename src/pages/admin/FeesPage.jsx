@@ -127,7 +127,7 @@ export default function FeesPage() {
             <option value="overdue">Overdue</option>
           </select>
         </div>
-        <div className="overflow-x-auto">
+        <div className="table-wrap">
           <table className="min-w-[940px] w-full text-left text-sm">
             <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
               <tr>{['Student', 'Fee Type', 'Due Date', 'Amount', 'Status', 'Transaction', 'Mode'].map((h) => <th className="px-6 py-4" key={h}>{h}</th>)}</tr>
@@ -156,7 +156,7 @@ export default function FeesPage() {
         <h2 className="text-xl font-semibold text-[color:var(--text)]">Last Transactions</h2>
         <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
           {fees.filter((f) => f.transaction_id).slice(0, 6).map((fee) => (
-            <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4" key={fee.id}>
+            <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4" key={fee.id}>
               <div className="safe-row items-start">
                 <div>
                   <p className="font-semibold text-[color:var(--text)]">{studentName(fee.student_id)}</p>
@@ -230,7 +230,7 @@ export default function FeesPage() {
                   <textarea className="textarea h-24 w-full" placeholder="Any notes about this payment…" {...pf('remarks')} />
                 </PF>
 
-                <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
                   <p className="text-xs font-semibold text-[color:var(--muted)] uppercase tracking-wide">Mode note</p>
                   <p className="mt-1 text-sm text-[color:var(--secondary)]">
                     {payForm.payment_mode === 'cash'
@@ -241,7 +241,7 @@ export default function FeesPage() {
               </div>
 
               <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-                <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setPayOpen(false)}>Cancel</button>
+                <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setPayOpen(false)}>Cancel</button>
                 <button type="submit" className="btn-primary flex-1" disabled={saving}>{saving ? 'Saving…' : 'Record Payment'}</button>
               </div>
             </form>

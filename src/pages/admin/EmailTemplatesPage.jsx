@@ -239,7 +239,7 @@ export default function EmailTemplatesPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search templates…"
-                className="w-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2 pl-9 pr-3 text-sm text-[color:var(--text)] outline-none focus:border-[color:var(--accent)]"
+                className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] py-2 pl-9 pr-3 text-sm text-[color:var(--text)] outline-none focus:border-[color:var(--accent)]"
               />
             </div>
             <div className="flex flex-col gap-4 overflow-y-auto pr-1" style={{ maxHeight: '70vh' }}>
@@ -251,7 +251,7 @@ export default function EmailTemplatesPage() {
                       <button
                         key={t.key}
                         onClick={() => onPick(t)}
-                        className={`flex flex-col items-start gap-1 rounded-2xl px-3 py-2.5 text-left transition ${
+                        className={`flex flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-left transition ${
                           t.key === selectedKey
                             ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]'
                             : 'hover:bg-[color:var(--surface)] text-[color:var(--text)]'
@@ -282,7 +282,7 @@ export default function EmailTemplatesPage() {
               <div className="card p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[color:var(--accent-tint)] text-[color:var(--accent)]">
+                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[color:var(--accent-tint)] text-[color:var(--accent)]">
                       <Mail size={20} />
                     </div>
                     <div>
@@ -299,7 +299,7 @@ export default function EmailTemplatesPage() {
                     <button
                       onClick={onReset}
                       disabled={resetting || !selected.isCustomized}
-                      className="inline-flex items-center gap-1.5 rounded-2xl border border-[color:var(--border)] px-3 py-2 text-sm font-semibold text-[color:var(--text)] transition hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--border)] px-3 py-2 text-sm font-semibold text-[color:var(--text)] transition hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
                       title={selected.isCustomized ? 'Reset to built-in default' : 'No customizations to reset'}
                     >
                       {resetting ? <Loader2 size={15} className="animate-spin" /> : <RotateCcw size={15} />} Reset
@@ -307,7 +307,7 @@ export default function EmailTemplatesPage() {
                     <button
                       onClick={onSave}
                       disabled={saving || !dirty}
-                      className="inline-flex items-center gap-1.5 rounded-2xl bg-[color:var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Save
                     </button>
@@ -327,7 +327,7 @@ export default function EmailTemplatesPage() {
                         value={cc}
                         onChange={(e) => setCc(e.target.value)}
                         placeholder="admissions@example.com, office@example.com"
-                        className={`w-full rounded-2xl border bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--text)] outline-none focus:border-[color:var(--accent)] ${ccErrors.length ? 'border-red-400' : 'border-[color:var(--border)]'}`}
+                        className={`w-full rounded-lg border bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--text)] outline-none focus:border-[color:var(--accent)] ${ccErrors.length ? 'border-red-400' : 'border-[color:var(--border)]'}`}
                       />
                       {ccErrors.length > 0 ? (
                         <p className="mt-1.5 text-xs font-medium text-red-600">
@@ -342,7 +342,7 @@ export default function EmailTemplatesPage() {
                     <button
                       onClick={onSaveCc}
                       disabled={ccSaving || !ccDirty || ccErrors.length > 0}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-2xl bg-[color:var(--accent)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[color:var(--accent)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {ccSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Save CC
                     </button>
@@ -360,7 +360,7 @@ export default function EmailTemplatesPage() {
                       value={subject}
                       onFocus={() => { lastFocused.current = 'subject' }}
                       onChange={(e) => { setSubject(e.target.value); setDirty(true) }}
-                      className="w-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--text)] outline-none focus:border-[color:var(--accent)]"
+                      className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-sm text-[color:var(--text)] outline-none focus:border-[color:var(--accent)]"
                     />
                   </div>
 
@@ -391,7 +391,7 @@ export default function EmailTemplatesPage() {
                       onFocus={() => { lastFocused.current = 'body' }}
                       onChange={(e) => { setBody(e.target.value); setDirty(true) }}
                       spellCheck={false}
-                      className="min-h-[360px] flex-1 resize-y rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 font-mono text-[13px] leading-relaxed text-[color:var(--text)] outline-none focus:border-[color:var(--accent)]"
+                      className="min-h-[360px] flex-1 resize-y rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] p-3 font-mono text-[13px] leading-relaxed text-[color:var(--text)] outline-none focus:border-[color:var(--accent)]"
                     />
                     <p className="mt-1.5 text-xs text-[color:var(--muted)]">
                       The body is wrapped in the standard branded email layout (header, footer, styles) automatically.
@@ -402,7 +402,7 @@ export default function EmailTemplatesPage() {
                 {/* Preview */}
                 <div className="card flex flex-col p-5">
                   <div className="mb-3 flex items-center justify-between">
-                    <div className="inline-flex rounded-2xl border border-[color:var(--border)] p-0.5">
+                    <div className="inline-flex rounded-lg border border-[color:var(--border)] p-0.5">
                       <button
                         onClick={() => setTab('preview')}
                         className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-semibold transition ${tab === 'preview' ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)]'}`}
@@ -419,7 +419,7 @@ export default function EmailTemplatesPage() {
                     {previewing && <Loader2 size={15} className="animate-spin text-[color:var(--muted)]" />}
                   </div>
 
-                  <div className="mb-3 rounded-2xl bg-[color:var(--surface)] px-3 py-2">
+                  <div className="mb-3 rounded-lg bg-[color:var(--surface)] px-3 py-2">
                     <p className="text-xs text-[color:var(--muted)]">Subject</p>
                     <p className="text-sm font-semibold text-[color:var(--text)]">{preview.subject || '—'}</p>
                   </div>
@@ -428,10 +428,10 @@ export default function EmailTemplatesPage() {
                     <iframe
                       title="Email preview"
                       srcDoc={preview.html}
-                      className="min-h-[420px] flex-1 rounded-2xl border border-[color:var(--border)] bg-white"
+                      className="min-h-[420px] flex-1 rounded-lg border border-[color:var(--border)] bg-white"
                     />
                   ) : (
-                    <pre className="min-h-[420px] flex-1 overflow-auto rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 font-mono text-[12px] leading-relaxed text-[color:var(--text)] whitespace-pre-wrap">
+                    <pre className="min-h-[420px] flex-1 overflow-auto rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] p-3 font-mono text-[12px] leading-relaxed text-[color:var(--text)] whitespace-pre-wrap">
                       {preview.html}
                     </pre>
                   )}

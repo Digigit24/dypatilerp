@@ -283,7 +283,7 @@ export default function EmailSender() {
       {/* ── Preview + confirm modal ── */}
       {previewOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !sending && setPreviewOpen(false)}>
-          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[24px] bg-[color:var(--card)] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-[color:var(--card)] shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3 border-b border-[color:var(--border)] p-5">
               <div>
                 <h2 className="text-lg font-semibold text-[color:var(--text)]">Preview &amp; confirm</h2>

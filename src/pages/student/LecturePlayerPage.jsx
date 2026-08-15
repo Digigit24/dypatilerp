@@ -77,7 +77,7 @@ export default function LecturePlayerPage() {
       <div className="mb-5 flex items-center gap-3">
         <Link
           to="/student/lectures"
-          className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition"
+          className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition"
         >
           <ArrowLeft size={15} /> Back to Gallery
         </Link>
@@ -89,7 +89,7 @@ export default function LecturePlayerPage() {
         <div className="space-y-5">
           {/* Player */}
           {streamError ? (
-            <div className="card flex aspect-video items-center justify-center rounded-2xl bg-black text-center">
+            <div className="card flex aspect-video items-center justify-center rounded-lg bg-black text-center">
               <div>
                 <PlayCircle size={48} className="mx-auto text-white/20" />
                 <p className="mt-4 font-semibold text-white/60">Stream unavailable</p>
@@ -107,7 +107,7 @@ export default function LecturePlayerPage() {
               className="w-full"
             />
           ) : (
-            <div className="card flex aspect-video items-center justify-center bg-black rounded-2xl">
+            <div className="card flex aspect-video items-center justify-center bg-black rounded-lg">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white/80" />
             </div>
           )}

@@ -83,14 +83,14 @@ export default function ApprovalConfigurator({ stages = [], onChange, users = []
     <div>
       {/* Stage list */}
       {stages.length === 0 && (
-        <div className="rounded-3xl border-2 border-dashed border-[color:var(--border)] py-8 text-center text-sm text-[color:var(--muted)]">
+        <div className="rounded-xl border-2 border-dashed border-[color:var(--border)] py-8 text-center text-sm text-[color:var(--muted)]">
           No stages configured — uses default 3-stage chain (Coordinator → Academic Guide → Industry Mentor)
         </div>
       )}
 
       <div className="space-y-2">
         {stages.map((stage, i) => (
-          <div key={i} className="flex items-center gap-3 rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+          <div key={i} className="flex items-center gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
             {/* Order badge */}
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[color:var(--accent-tint)] text-sm font-bold text-[color:var(--accent)]">
               {i + 1}
@@ -122,7 +122,7 @@ export default function ApprovalConfigurator({ stages = [], onChange, users = []
       {!readOnly && !addOpen && (
         <button
           type="button"
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-[color:var(--border)] py-3 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition"
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[color:var(--border)] py-3 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition"
           onClick={() => { setForm(BLANK_STAGE); setEditIdx(null); setAddOpen(true) }}
         >
           <Plus size={15} /> Add Stage
@@ -131,7 +131,7 @@ export default function ApprovalConfigurator({ stages = [], onChange, users = []
 
       {/* Stage form (inline) */}
       {addOpen && (
-        <div className="mt-3 space-y-3 rounded-3xl border-2 border-[color:var(--accent-tint)] bg-[color:var(--surface)] p-5">
+        <div className="mt-3 space-y-3 rounded-xl border-2 border-[color:var(--accent-tint)] bg-[color:var(--surface)] p-5">
           <p className="text-sm font-bold text-[color:var(--accent)]">{editIdx !== null ? 'Edit Stage' : 'New Stage'}</p>
 
           <label className="block">
@@ -175,7 +175,7 @@ export default function ApprovalConfigurator({ stages = [], onChange, users = []
           )}
 
           <div className="flex gap-2 pt-1">
-            <button type="button" className="h-9 flex-1 rounded-[14px] bg-[color:var(--surface-strong)] text-sm font-semibold text-[color:var(--secondary)]"
+            <button type="button" className="h-9 flex-1 rounded-md bg-[color:var(--surface-strong)] text-sm font-semibold text-[color:var(--secondary)]"
               onClick={() => { setAddOpen(false); setEditIdx(null) }}>Cancel</button>
             <button type="button" className="btn-primary flex-1 h-9 text-sm" onClick={save}>
               {editIdx !== null ? 'Update Stage' : 'Add Stage'}

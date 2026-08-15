@@ -82,7 +82,7 @@ export default function BatchStudentsPage() {
       <PageHeader
         title={`${batch.name} Students`}
         subtitle="Batch-wise student list and editable batch configuration for admin and coordinator review."
-        action={<Link className="h-11 rounded-[14px] bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--secondary)]" to="/admin/batches"><ArrowLeft size={16} className="mr-2 inline" />Back to Batches</Link>}
+        action={<Link className="h-11 rounded-md bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--secondary)]" to="/admin/batches"><ArrowLeft size={16} className="mr-2 inline" />Back to Batches</Link>}
       />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
@@ -137,7 +137,7 @@ export default function BatchStudentsPage() {
               <p className="text-sm text-[color:var(--secondary)]">{students.length} enrolled students</p>
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="table-wrap">
             <table className="min-w-[820px] w-full text-left text-sm">
               <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
                 <tr>{['Name', 'Student ID', 'Enrolled', 'Progress', 'Submissions', 'Status'].map((h) => <th className="px-6 py-4" key={h}>{h}</th>)}</tr>
@@ -183,7 +183,7 @@ function Field({ label, value, onChange, type = 'text' }) {
 
 function Metric({ icon: Icon, label, value }) {
   return (
-    <div className="rounded-3xl bg-[color:var(--surface)] p-4">
+    <div className="rounded-xl bg-[color:var(--surface)] p-4">
       <Icon size={17} className="mb-2 text-[color:var(--accent)]" />
       <p className="font-semibold text-[color:var(--text)]">{value}</p>
       <p className="text-xs text-[color:var(--secondary)]">{label}</p>

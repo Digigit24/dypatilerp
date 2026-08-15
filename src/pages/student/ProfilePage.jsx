@@ -44,14 +44,14 @@ function ChangePasswordCard() {
     <div className="card mb-6 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[color:var(--accent-tint)] text-[color:var(--accent)]"><KeyRound size={17} /></span>
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[color:var(--accent-tint)] text-[color:var(--accent)]"><KeyRound size={17} /></span>
           <div>
             <p className="text-sm font-semibold text-[color:var(--text)]">Password</p>
             <p className="text-xs text-[color:var(--secondary)]">Change the password you use to log in</p>
           </div>
         </div>
         {!open && (
-          <button className="rounded-2xl border border-[color:var(--border)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]" onClick={() => setOpen(true)}>
+          <button className="rounded-lg border border-[color:var(--border)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]" onClick={() => setOpen(true)}>
             Change Password
           </button>
         )}

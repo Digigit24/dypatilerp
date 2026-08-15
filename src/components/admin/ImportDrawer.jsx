@@ -272,7 +272,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
             {/* Drop zone */}
             <div
               {...getRootProps()}
-              className={`cursor-pointer rounded-3xl border-2 border-dashed p-10 text-center transition ${
+              className={`cursor-pointer rounded-xl border-2 border-dashed p-10 text-center transition ${
                 isDragActive
                   ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]'
                   : 'border-[color:var(--border)] hover:border-[color:var(--accent)] hover:bg-[color:var(--surface)]'
@@ -288,7 +288,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
             </div>
 
             {/* Template download */}
-            <div className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+            <div className="flex items-center justify-between rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
               <div className="flex items-center gap-3">
                 <FileSpreadsheet size={20} className="text-emerald-500" />
                 <div>
@@ -298,14 +298,14 @@ export default function ImportDrawer({ onClose, onImported, config }) {
               </div>
               <button
                 onClick={() => downloadTemplate(cfg.templateRows, cfg.templateFilename)}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white transition"
+                className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white transition"
               >
                 <Download size={14} /> Template
               </button>
             </div>
 
             {/* Field reference */}
-            <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-5">
+            <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5">
               <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)] mb-3">Import Fields</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {FIELDS.map((f) => (
@@ -325,7 +325,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
           <div className="flex-1 overflow-auto overscroll-contain p-6 space-y-4">
             {/* Wizard-level fixed selectors (e.g. assign every row to a batch) */}
             {cfg.fixedFields?.map((ff) => (
-              <div key={ff.key} className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+              <div key={ff.key} className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-[color:var(--text)]">{ff.label}</p>
@@ -346,7 +346,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
             ))}
 
             {/* Status line */}
-            <div className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold ${
+            <div className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold ${
               requiredMapped
                 ? 'bg-emerald-50 text-emerald-700'
                 : 'bg-amber-50 text-amber-700'
@@ -357,7 +357,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
             </div>
 
             {/* Mapping table */}
-            <div className="rounded-3xl border border-[color:var(--border)] overflow-hidden">
+            <div className="rounded-xl border border-[color:var(--border)] overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[color:var(--border)] bg-[color:var(--surface)]">
@@ -419,7 +419,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
 
             {/* Validation errors */}
             {validationErrors.length > 0 && (
-              <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
                 <div className="flex items-center gap-2 text-amber-700">
                   <AlertCircle size={16} />
                   <span className="text-sm font-semibold">{validationErrors.length} rows will be skipped</span>
@@ -442,7 +442,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
               <p className="mb-2 text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">
                 Data preview (first {Math.min(previewRows.length, 10)} rows)
               </p>
-              <div className="overflow-auto rounded-3xl border border-[color:var(--border)]">
+              <div className="overflow-auto rounded-xl border border-[color:var(--border)]">
                 <table className="min-w-full text-xs">
                   <thead className="bg-[color:var(--surface)]">
                     <tr>
@@ -483,7 +483,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
         {step === 'done' && result && (
           <div className="flex-1 overflow-auto overscroll-contain p-6 space-y-5">
             {/* Hero */}
-            <div className={`rounded-3xl p-6 text-center ${result.imported > 0 ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+            <div className={`rounded-xl p-6 text-center ${result.imported > 0 ? 'bg-emerald-50' : 'bg-amber-50'}`}>
               {result.imported > 0
                 ? <CheckCircle2 className="mx-auto text-emerald-500" size={40} />
                 : <AlertCircle className="mx-auto text-amber-500" size={40} />}
@@ -502,7 +502,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
 
             {/* Backend errors */}
             {result.errors?.length > 0 && (
-              <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 space-y-1">
+              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 space-y-1">
                 <p className="text-sm font-semibold text-[color:var(--text)]">Skipped rows</p>
                 <div className="space-y-1 max-h-48 overflow-auto">
                   {result.errors.map((e, i) => (
@@ -519,7 +519,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
         {/* ── Footer ── */}
         <div className="shrink-0 flex items-center justify-between gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-5">
           {step === 1 && (
-            <button className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)] transition" onClick={onClose}>
+            <button className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)] transition" onClick={onClose}>
               Cancel
             </button>
           )}
@@ -527,7 +527,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
           {step === 2 && (
             <>
               <button
-                className="h-11 rounded-[14px] bg-[color:var(--surface)] px-5 font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)] transition inline-flex items-center gap-2"
+                className="h-11 rounded-md bg-[color:var(--surface)] px-5 font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)] transition inline-flex items-center gap-2"
                 onClick={() => setStep(1)}
               >
                 <ChevronLeft size={16} /> Back
@@ -545,7 +545,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
           {step === 3 && (
             <>
               <button
-                className="h-11 rounded-[14px] bg-[color:var(--surface)] px-5 font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)] transition inline-flex items-center gap-2"
+                className="h-11 rounded-md bg-[color:var(--surface)] px-5 font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)] transition inline-flex items-center gap-2"
                 onClick={() => setStep(2)}
                 disabled={importing}
               >
@@ -578,7 +578,7 @@ export default function ImportDrawer({ onClose, onImported, config }) {
 
 function SumCard({ label, value, color }) {
   return (
-    <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 text-center">
+    <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 text-center">
       <p className={`text-2xl font-bold ${color}`}>{value}</p>
       <p className="mt-0.5 text-xs text-[color:var(--secondary)]">{label}</p>
     </div>

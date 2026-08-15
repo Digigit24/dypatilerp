@@ -326,14 +326,14 @@ export default function StudentsPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowImport(true)}
-              className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--accent)] bg-[color:var(--accent-tint)] px-4 py-2.5 text-sm font-semibold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white transition"
+              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--accent)] bg-[color:var(--accent-tint)] px-4 py-2.5 text-sm font-semibold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white transition"
             >
               <Upload size={15} /> Import
             </button>
             <button
               onClick={handleExport}
               disabled={exportLoading}
-              className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--surface)] transition disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--surface)] transition disabled:opacity-60"
             >
               {exportLoading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Export
             </button>
@@ -360,13 +360,13 @@ export default function StudentsPage() {
               </button>
             ))}
           </div>
-          <button className="flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-2 text-xs font-semibold text-[color:var(--secondary)]">
+          <button className="flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-2 text-xs font-semibold text-[color:var(--secondary)]">
             <Filter size={14} /> Filter
           </button>
         </div>
 
         {/* ── Table ── */}
-        <div className="overflow-x-auto">
+        <div className="table-wrap">
           <table className="min-w-[1180px] w-full text-left text-sm">
             <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
               <tr>
@@ -465,13 +465,13 @@ export default function StudentsPage() {
                     </td>
                     <td className="px-6"><StatusBadge status={s.status} /></td>
                     <td className="px-6 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="inline-flex items-center justify-end gap-2">
+                      <div className="table-actions">
                         {canSendCreds && (
                           s.user_id ? (
                             <button
                               onClick={(e) => sendCredsOne(s, e)}
                               disabled={sendingCredId === s.user_id}
-                              className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-60"
+                              className="btn-table-action disabled:opacity-60"
                               title="Generate a new password and email the login details to this scholar"
                             >
                               {sendingCredId === s.user_id ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />} Send Login Details
@@ -489,7 +489,7 @@ export default function StudentsPage() {
                         {s.status === 'withdrawn' ? (
                           <button
                             onClick={(e) => restoreOne(s, e)}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-emerald-600 hover:bg-emerald-50 transition"
+                            className="btn-table-action btn-table-action--success"
                             title="Restore scholar"
                           >
                             <RotateCcw size={13} /> Restore
@@ -497,7 +497,7 @@ export default function StudentsPage() {
                         ) : (
                           <button
                             onClick={(e) => archiveOne(s, e)}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition"
+                            className="btn-table-action btn-table-action--danger"
                             title="Archive (soft-delete) scholar"
                           >
                             <Trash2 size={13} /> Archive
@@ -519,7 +519,7 @@ export default function StudentsPage() {
           <button
             onClick={loadMore}
             disabled={loadingMore}
-            className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
           >
             {loadingMore ? <Loader2 size={15} className="animate-spin" /> : null}
             {loadingMore ? 'Loading…' : `Load more (${items.length} of ${total})`}
@@ -530,7 +530,7 @@ export default function StudentsPage() {
       {/* ── Floating bulk action bar ── */}
       {selectedIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 z-30 -translate-x-1/2 animate-[fadeSlideUp_0.2s_ease]">
-          <div className="flex items-center gap-2 rounded-[20px] border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-3 shadow-2xl shadow-black/20">
+          <div className="flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-3 shadow-2xl shadow-black/20">
             <div className="flex items-center gap-2 pr-3 border-r border-[color:var(--border)]">
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[color:var(--accent)] text-xs font-bold text-white">
                 {selectedIds.size}
@@ -608,7 +608,7 @@ export default function StudentsPage() {
                     <Info label="Progress" value={`${selected.progress_summary?.completion_percentage ?? 0}%`} />
                   </div>
 
-                  <div className="rounded-3xl bg-[color:var(--surface)] p-5">
+                  <div className="rounded-xl bg-[color:var(--surface)] p-5">
                     <p className="font-semibold text-[color:var(--text)]">Profile</p>
                     <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]">
                       {selected.profile?.bio || 'No bio available.'}
@@ -628,7 +628,7 @@ export default function StudentsPage() {
                         return (
                           <button
                             key={sub.id}
-                            className="w-full rounded-3xl border border-[color:var(--border)] p-4 text-left transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
+                            className="w-full rounded-xl border border-[color:var(--border)] p-4 text-left transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
                             onClick={() => openSubmission(sub)}
                           >
                             <div className="safe-row items-start">
@@ -661,7 +661,7 @@ export default function StudentsPage() {
                         return (
                           <button
                             key={r.id}
-                            className="w-full rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 text-left transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
+                            className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 text-left transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
                             onClick={() => openSubmission(r)}
                           >
                             <div className="safe-row items-start">
@@ -684,7 +684,7 @@ export default function StudentsPage() {
 
               <Link
                 to={`/admin/students/${selected.user_id}`}
-                className="flex w-full items-center justify-center gap-2 rounded-3xl border border-[color:var(--accent)] bg-[color:var(--accent-tint)] py-3 text-sm font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--accent)] bg-[color:var(--accent-tint)] py-3 text-sm font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white"
               >
                 <ExternalLink size={15} /> View Full Profile
               </Link>
@@ -711,10 +711,10 @@ export default function StudentsPage() {
             <div className="flex-1 overflow-auto overscroll-contain p-6 space-y-5 xl:grid xl:grid-cols-[1fr_320px] xl:gap-5 xl:space-y-0">
               <div className="space-y-5">
                 {/* Uploaded documents — the file(s) actually attached to this submission */}
-                <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                   <p className="font-semibold text-[color:var(--text)]">Documents</p>
                   {!Array.isArray(selectedSub.file_urls) || selectedSub.file_urls.length === 0 ? (
-                    <div className="mt-4 grid h-32 place-items-center rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
+                    <div className="mt-4 grid h-32 place-items-center rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
                       <div>
                         <FileText className="mx-auto text-[color:var(--accent)]" size={28} />
                         <p className="mt-3 text-sm text-[color:var(--secondary)]">No file attached to this submission.</p>
@@ -723,7 +723,7 @@ export default function StudentsPage() {
                   ) : (
                     <div className="mt-4 space-y-2">
                       {selectedSub.file_urls.map((f, i) => (
-                        <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-3">
+                        <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-3 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-3">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-[color:var(--text)]">{f.name}</p>
                             {f.size ? <p className="text-xs text-[color:var(--muted)]">{(f.size / 1024 / 1024).toFixed(2)} MB</p> : null}
@@ -735,7 +735,7 @@ export default function StudentsPage() {
                   )}
                 </div>
 
-                <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                   <p className="font-semibold text-[color:var(--text)]">Submission Info</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <Info label="Type"      value={(selectedSub.submission_type || '—').replaceAll('_', ' ')} />
@@ -747,25 +747,25 @@ export default function StudentsPage() {
                 </div>
 
                 {/* Feedback thread — admin can post as any staff role on their behalf */}
-                <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                   <SubmissionRemarks submissionId={selectedSub.id} />
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                 <p className="font-semibold text-[color:var(--text)]">Approval Thread</p>
                 {subApprovals.length === 0
                   ? <p className="mt-3 text-sm text-[color:var(--secondary)]">No approval records yet.</p>
                   : <div className="mt-4 space-y-3">
                     {[...subApprovals].sort((a, b) => (a.order_index || 0) - (b.order_index || 0)).map((a) => (
-                      <div key={a.id} className="rounded-3xl bg-[color:var(--card)] p-4">
+                      <div key={a.id} className="rounded-xl bg-[color:var(--card)] p-4">
                         <div className="safe-row items-start">
                           <p className="text-sm font-semibold capitalize text-[color:var(--text)]">{a.stage?.replaceAll('_', ' ')}</p>
                           <StatusBadge status={a.status} />
                         </div>
                         <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]">{a.comments || 'No comment.'}</p>
                         {a.suggested_title && (
-                          <p className="mt-2 rounded-2xl bg-[color:var(--surface)] p-3 text-xs leading-5 text-[color:var(--secondary)]">
+                          <p className="mt-2 rounded-lg bg-[color:var(--surface)] p-3 text-xs leading-5 text-[color:var(--secondary)]">
                             <b>Suggested title:</b> {a.suggested_title}
                           </p>
                         )}
@@ -794,7 +794,7 @@ export default function StudentsPage() {
 
 function Info({ label, value }) {
   return (
-    <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-4">
+    <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">{label}</p>
       <div className="mt-2 text-sm font-semibold text-[color:var(--text)]">{value}</div>
     </div>

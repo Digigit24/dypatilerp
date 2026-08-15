@@ -124,7 +124,7 @@ export default function CoursesPage({ embedded = false }) {
         {courses.map((course) => (
           <div key={course.id} className="card card-hover flex flex-col p-6">
             <div className="flex items-start justify-between">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[color:var(--accent-tint)]">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-[color:var(--accent-tint)]">
                 <GraduationCap size={22} className="text-[color:var(--accent)]" />
               </div>
               <div className="flex items-center gap-1">
@@ -164,13 +164,13 @@ export default function CoursesPage({ embedded = false }) {
 
             <div className="mt-4 flex gap-2">
               <button
-                className="flex-1 rounded-2xl bg-[color:var(--surface)] py-2 text-xs font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--accent-tint)] hover:text-[color:var(--accent)] transition"
+                className="flex-1 rounded-lg bg-[color:var(--surface)] py-2 text-xs font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--accent-tint)] hover:text-[color:var(--accent)] transition"
                 onClick={() => { setCurrentCourse(course); navigate('/admin') }}
               >
                 Switch to Course
               </button>
               <button
-                className="flex-1 rounded-2xl bg-[color:var(--accent-tint)] py-2 text-xs font-semibold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white transition"
+                className="flex-1 rounded-lg bg-[color:var(--accent-tint)] py-2 text-xs font-semibold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white transition"
                 onClick={() => navigate(`/admin/courses/${course.id}/settings`)}
               >
                 Settings
@@ -225,7 +225,7 @@ export default function CoursesPage({ embedded = false }) {
                     onChange={(fee_structure) => setForm((p) => ({ ...p, fee_structure }))}
                   />
                 </Field>
-                <div className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+                <div className="flex items-center justify-between rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
                   <div>
                     <p className="text-sm font-semibold text-[color:var(--text)]">Active</p>
                     <p className="mt-0.5 text-xs text-[color:var(--secondary)]">Course is open for new batches and applications</p>
@@ -240,7 +240,7 @@ export default function CoursesPage({ embedded = false }) {
                 </div>
               </div>
               <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-                <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setDrawerOpen(false)}>
+                <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setDrawerOpen(false)}>
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary flex-1" disabled={saving}>
@@ -255,9 +255,9 @@ export default function CoursesPage({ embedded = false }) {
       {/* ── Danger: cascade delete confirmation (admin only) ── */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={() => !deleting && setDeleteTarget(null)}>
-          <div className="w-full max-w-lg rounded-[24px] bg-[color:var(--card)] p-7 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg rounded-xl bg-[color:var(--card)] p-7 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start gap-4">
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-red-50 text-red-500">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-red-50 text-red-500">
                 <AlertTriangle size={22} />
               </span>
               <div className="min-w-0">
@@ -268,7 +268,7 @@ export default function CoursesPage({ embedded = false }) {
               </div>
             </div>
 
-            <ul className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-2xl bg-red-50/60 p-4 text-xs font-semibold text-red-700">
+            <ul className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-lg bg-red-50/60 p-4 text-xs font-semibold text-red-700">
               <li>• {deleteTarget.batch_count ?? 0} batch(es) &amp; enrollments</li>
               <li>• {deleteTarget.student_count ?? 0} enrolled student(s)</li>
               <li>• All applicants &amp; test links</li>

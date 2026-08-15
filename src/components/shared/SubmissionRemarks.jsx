@@ -133,7 +133,7 @@ export default function SubmissionRemarks({ submissionId, onCountChange }) {
         {remarks === null ? (
           <p className="text-sm text-[color:var(--secondary)]">Loading remarks…</p>
         ) : remarks.length === 0 ? (
-          <p className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
+          <p className="rounded-lg bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
             No remarks yet.{canPost ? ' Be the first to leave feedback.' : ''}
           </p>
         ) : (
@@ -141,7 +141,7 @@ export default function SubmissionRemarks({ submissionId, onCountChange }) {
             const author = `${r.first_name || ''} ${r.last_name || ''}`.trim() || r.email || 'Reviewer'
             const mine = currentUser?.id && r.author_user_id === currentUser.id
             return (
-              <div key={r.id} className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+              <div key={r.id} className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-[color:var(--text)]">

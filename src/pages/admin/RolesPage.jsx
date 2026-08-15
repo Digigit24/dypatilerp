@@ -104,7 +104,7 @@ export default function RolesPage() {
               return (
                 <button
                   key={role.id}
-                  className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm transition ${selected?.id === role.id ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm transition ${selected?.id === role.id ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}
                   onClick={() => selectRole(role)}
                 >
                   <Shield size={15} className="shrink-0" />

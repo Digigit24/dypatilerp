@@ -25,7 +25,7 @@ function Section({ title, subtitle, icon: Icon, children }) {
   return (
     <div className="card p-6">
       <div className="flex items-start gap-4 mb-6">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[color:var(--accent-tint)] text-[color:var(--accent)]">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[color:var(--accent-tint)] text-[color:var(--accent)]">
           <Icon size={20} />
         </div>
         <div>
@@ -82,7 +82,7 @@ function LogoSlot({ label, hint, value, onChange, previewBg }) {
   }
 
   return (
-    <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+    <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-[color:var(--text)]">{label}</p>
@@ -100,13 +100,13 @@ function LogoSlot({ label, hint, value, onChange, previewBg }) {
       </div>
 
       {/* Preview on the matching background */}
-      <div className={`mt-3 grid h-24 place-items-center rounded-2xl border border-dashed border-[color:var(--border)] ${previewBg}`}>
+      <div className={`mt-3 grid h-24 place-items-center rounded-lg border border-dashed border-[color:var(--border)] ${previewBg}`}>
         {value
           ? <img src={value} alt={label} className="max-h-20 max-w-[85%] object-contain" />
           : <span className={`text-xs ${previewBg.includes('zinc-9') ? 'text-zinc-400' : 'text-[color:var(--muted)]'}`}>No logo uploaded</span>}
       </div>
 
-      <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white">
+      <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white">
         <Upload size={14} /> {value ? 'Replace' : 'Upload'} image
         <input type="file" accept="image/*" className="hidden" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }} />
       </label>
@@ -250,7 +250,7 @@ export default function SettingsPage() {
           <Section title="Appearance" subtitle="Accent colour and dark/light mode — saved per user account." icon={Palette}>
 
             {/* Dark / Light toggle */}
-            <div className="mb-7 flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+            <div className="mb-7 flex items-center justify-between rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
               <div className="flex items-center gap-3">
                 {theme === 'dark' ? <Moon size={20} className="text-[color:var(--accent)]" /> : <Sun size={20} className="text-amber-500" />}
                 <div>
@@ -278,7 +278,7 @@ export default function SettingsPage() {
                 return (
                   <button
                     key={preset.value}
-                    className={`safe-row rounded-3xl border p-3 text-left transition ${active ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]' : 'border-[color:var(--border)] bg-[color:var(--surface)] hover:border-[color:var(--accent)]'}`}
+                    className={`safe-row rounded-xl border p-3 text-left transition ${active ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]' : 'border-[color:var(--border)] bg-[color:var(--surface)] hover:border-[color:var(--accent)]'}`}
                     onClick={() => setPrimaryColor(preset.value)}
                   >
                     <span className="flex min-w-0 items-center gap-3">
@@ -293,11 +293,11 @@ export default function SettingsPage() {
 
             {/* Custom hex */}
             <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-[180px_1fr]">
-              <label className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+              <label className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
                 <span className="block text-sm font-semibold text-[color:var(--text)]">Custom colour</span>
-                <input className="mt-3 h-14 w-full cursor-pointer rounded-2xl bg-transparent" type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} />
+                <input className="mt-3 h-14 w-full cursor-pointer rounded-lg bg-transparent" type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} />
               </label>
-              <label className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+              <label className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
                 <span className="block text-sm font-semibold text-[color:var(--text)]">Hex value</span>
                 <input className="input mt-3 w-full font-mono uppercase" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} maxLength={7} />
               </label>
@@ -305,7 +305,7 @@ export default function SettingsPage() {
 
             <div className="safe-actions mt-6">
               <button className="btn-primary inline-flex items-center gap-2" onClick={saveTheme}><Save size={16} /> Save Theme</button>
-              <button className="h-11 rounded-[14px] bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={reset}><RotateCcw size={15} className="mr-2 inline" />Reset</button>
+              <button className="h-11 rounded-md bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={reset}><RotateCcw size={15} className="mr-2 inline" />Reset</button>
             </div>
           </Section>
 
@@ -313,7 +313,7 @@ export default function SettingsPage() {
           <aside className="card p-6">
             <h2 className="text-xl font-semibold text-[color:var(--text)]">Live Preview</h2>
             <p className="mt-1 text-sm text-[color:var(--secondary)]">Tokens derived from your colour selection.</p>
-            <div className="mt-6 rounded-[28px] border border-[color:var(--border)] p-5" style={{ background: tokens.accentTint }}>
+            <div className="mt-6 rounded-xl border border-[color:var(--border)] p-5" style={{ background: tokens.accentTint }}>
               <div className="safe-row">
                 <div>
                   <p className="text-sm font-semibold text-[color:var(--text)]">Active Module</p>
@@ -321,7 +321,7 @@ export default function SettingsPage() {
                 </div>
                 <span className="rounded-full px-3 py-1 text-xs font-semibold text-white" style={{ background: primaryColor }}>Active</span>
               </div>
-              <button className="mt-5 h-11 rounded-[14px] px-5 font-semibold text-white shadow-soft" style={{ background: primaryColor }}>Primary Action</button>
+              <button className="mt-5 h-11 rounded-md px-5 font-semibold text-white shadow-soft" style={{ background: primaryColor }}>Primary Action</button>
             </div>
             <div className="mt-5 space-y-3 text-sm">
               {[
@@ -330,7 +330,7 @@ export default function SettingsPage() {
                 { label: 'Tint',      value: tokens.accentTint },
                 { label: 'Scrollbar', value: tokens.scrollbarThumb },
               ].map(({ label, value }) => (
-                <div key={label} className="safe-row rounded-2xl bg-[color:var(--surface)] px-4 py-3">
+                <div key={label} className="safe-row rounded-lg bg-[color:var(--surface)] px-4 py-3">
                   <span className="font-semibold text-[color:var(--text)]">{label}</span>
                   <code className="truncate text-xs text-[color:var(--secondary)]">{value}</code>
                 </div>
@@ -387,7 +387,7 @@ export default function SettingsPage() {
             <div className="space-y-5">
               {/* Server email status — what the backend actually loaded */}
               {effective && (
-                <div className={`rounded-3xl border p-5 ${effective.mode === 'live' ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-amber-50/40'}`}>
+                <div className={`rounded-xl border p-5 ${effective.mode === 'live' ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-amber-50/40'}`}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-[color:var(--text)]">Server Email Status</p>
                     <span className={`rounded-full px-3 py-1 text-xs font-bold ${effective.mode === 'live' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -409,7 +409,7 @@ export default function SettingsPage() {
               )}
 
               {/* Enable toggle */}
-              <div className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+              <div className="flex items-center justify-between rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
                 <div>
                   <p className="text-sm font-semibold text-[color:var(--text)]">Enable email notifications</p>
                   <p className="text-xs text-[color:var(--secondary)]">When off, emails are logged to console only</p>
@@ -475,7 +475,7 @@ export default function SettingsPage() {
               </div>
 
               {/* Test email */}
-              <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                 <p className="text-sm font-semibold text-[color:var(--text)] mb-3">Send Test Email</p>
                 <div className="flex gap-3">
                   <input
@@ -486,7 +486,7 @@ export default function SettingsPage() {
                     placeholder="your@email.com"
                   />
                   <button
-                    className="inline-flex items-center gap-2 rounded-[14px] bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white transition disabled:opacity-60"
+                    className="inline-flex items-center gap-2 rounded-md bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white transition disabled:opacity-60"
                     onClick={runTestEmail}
                     disabled={testLoading || !testEmail}
                   >

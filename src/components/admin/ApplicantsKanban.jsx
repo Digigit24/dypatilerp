@@ -299,7 +299,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
         {COLUMNS.map((col) => {
           const cards = byStatus[col.key] || []
           return (
-            <div key={col.key} className="w-[265px] shrink-0 rounded-2xl bg-[color:var(--surface)] p-2.5">
+            <div key={col.key} className="w-[265px] shrink-0 rounded-lg bg-[color:var(--surface)] p-2.5">
               {/* Column header */}
               <div className="mb-2 flex items-center gap-2 px-1.5">
                 <span className={`h-2 w-2 rounded-full ${col.dot}`} />
@@ -651,7 +651,7 @@ function TestPickerModal({ title, cta, icon: Icon, note, applicant, courseId, on
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-[24px] bg-[color:var(--card)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-xl bg-[color:var(--card)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-[color:var(--text)]">{title}</h2>
@@ -707,7 +707,7 @@ function ConvertModal({ applicant, batches, labels, onClose, onConfirm }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-[24px] bg-[color:var(--card)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-xl bg-[color:var(--card)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-[color:var(--text)]">Convert to {labels.student}</h2>
         <p className="mt-0.5 text-xs text-[color:var(--secondary)]">
           {applicant.personal?.full_name} will be enrolled and get a {labels.student.toLowerCase()} account.

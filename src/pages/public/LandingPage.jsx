@@ -48,7 +48,7 @@ const fees = [
 function Section({ title, icon: Icon, children }) {
   return <section className="card p-6 sm:p-8">
     <div className="mb-5 flex items-center gap-3">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--accent-tint)] text-[var(--accent)]"><Icon size={21} /></span>
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[var(--accent-tint)] text-[var(--accent)]"><Icon size={21} /></span>
       <h2 className="text-xl font-semibold sm:text-2xl">{title}</h2>
     </div>
     {children}
@@ -61,7 +61,7 @@ export default function LandingPage() {
   return <div className="public-page overflow-hidden">
     <section className="relative px-4 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
       <div className="absolute inset-x-0 top-0 -z-10 h-[720px] bg-[linear-gradient(180deg,var(--card),transparent_78%),radial-gradient(circle_at_16%_8%,var(--accent-tint),transparent_30rem)]" />
-      <div className="mx-auto grid max-w-7xl overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--card)] shadow-[0_30px_90px_rgba(15,23,42,.10)] lg:grid-cols-[.95fr_1.05fr]">
+      <div className="mx-auto grid max-w-7xl overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-none lg:grid-cols-[.95fr_1.05fr]">
         <div className="flex flex-col justify-start p-6 pb-14 sm:p-10 sm:pb-14 lg:min-h-[560px] lg:justify-center lg:p-12 lg:pb-12">
           <div className="mb-5 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-[var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[var(--accent)]">July 2026 Batch</span>
@@ -74,16 +74,16 @@ export default function LandingPage() {
             Dr. D. Y. Patil Education and Research Foundation and Dr. D. Y. Patil Institute of Management Studies, India, in collaboration with McCoy College of Business, Texas State University, USA, invite applications for this exclusive post-doctoral program.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link to="/apply" className="btn-primary inline-flex h-12 items-center gap-2 rounded-2xl px-5">Apply Now <ArrowRight size={18} /></Link>
-            <Link to="/test/test_001" className="inline-flex h-12 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 font-semibold">Start Test Now</Link>
-            <Link to="/admin" className="inline-flex h-12 items-center rounded-2xl px-5 font-semibold text-[var(--accent)]">Open Demo Dashboard</Link>
+            <Link to="/apply" className="btn-primary inline-flex h-12 items-center gap-2 rounded-lg px-5">Apply Now <ArrowRight size={18} /></Link>
+            <Link to="/test/test_001" className="inline-flex h-12 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-5 font-semibold">Start Test Now</Link>
+            <Link to="/admin" className="inline-flex h-12 items-center rounded-lg px-5 font-semibold text-[var(--accent)]">Open Demo Dashboard</Link>
           </div>
         </div>
 
         <div className="relative min-h-[260px] lg:min-h-[560px]">
           <img src="/landing-research.jpg" alt="Researchers collaborating in a modern academic workspace" className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,.12),rgba(15,23,42,.28)),linear-gradient(180deg,transparent_45%,rgba(15,23,42,.72))]" />
-          <div className="absolute bottom-5 left-5 right-5 hidden rounded-[1.75rem] border border-white/20 bg-white/88 p-5 text-slate-950 shadow-2xl backdrop-blur-xl lg:block lg:bottom-7 lg:left-7 lg:right-7 lg:p-6">
+          <div className="absolute bottom-5 left-5 right-5 hidden rounded-xl border border-white/20 bg-white/88 p-5 text-slate-950 shadow-lg backdrop-blur-xl lg:block lg:bottom-7 lg:left-7 lg:right-7 lg:p-6">
             <div className="flex flex-wrap items-center gap-3">
               <img src="/logo-new.jpg" alt="DYPERF" className="h-12 w-auto rounded-xl object-contain" />
               <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">International collaboration</span>
@@ -100,7 +100,7 @@ export default function LandingPage() {
     </section>
 
     <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
-      <div className="grid overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--card)] shadow-[0_18px_60px_rgba(15,23,42,.07)] md:grid-cols-4">
+      <div className="grid overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-none md:grid-cols-4">
         <AtGlance icon={CalendarDays} label="Application Deadline" value="30 June 2026" helper="July 2026 intake" />
         <AtGlance icon={IndianRupee} label="Program Fee" value={`Rs. ${totalInr.toLocaleString('en-IN')}`} helper="Total fellowship fee" />
         <AtGlance icon={UsersRound} label="Mentorship Model" value="Academic + Industry" helper="Supervisor and mentor" />
@@ -139,7 +139,7 @@ export default function LandingPage() {
       <div className="space-y-6">
         <Section title="Application Process" icon={Layers3}>
           <div className="grid gap-3 sm:grid-cols-2">
-            {process.map((item, index) => <div key={item} className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5">
+            {process.map((item, index) => <div key={item} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
               <span className="text-sm font-semibold text-[var(--accent)]">Step {index + 1}</span>
               <p className="mt-3 text-sm leading-6 text-[var(--secondary)]">{item}</p>
             </div>)}
@@ -147,7 +147,7 @@ export default function LandingPage() {
         </Section>
 
         <Section title="Course Structure" icon={BookOpen}>
-          <div className="overflow-x-auto">
+          <div className="table-wrap">
             <table className="w-full min-w-[680px] text-left text-sm">
               <thead className="border-b border-[var(--border)] text-[var(--secondary)]">
                 <tr>
@@ -168,7 +168,7 @@ export default function LandingPage() {
         </Section>
 
         <Section title="Course Fees" icon={IndianRupee}>
-          <div className="overflow-x-auto">
+          <div className="table-wrap">
             <table className="w-full min-w-[560px] text-left text-sm">
               <thead className="border-b border-[var(--border)] text-[var(--secondary)]">
                 <tr>
@@ -203,8 +203,8 @@ export default function LandingPage() {
           <p className="mt-2 text-sm text-[var(--secondary)]">Contact: programs@dyperf.com - +91 8983942995</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Link to="/apply" className="btn-primary inline-flex h-12 items-center gap-2 rounded-2xl px-5">Apply Now <ArrowRight size={18} /></Link>
-          <Link to="/test/test_001" className="inline-flex h-12 items-center rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 font-semibold">Start Test Now</Link>
+          <Link to="/apply" className="btn-primary inline-flex h-12 items-center gap-2 rounded-lg px-5">Apply Now <ArrowRight size={18} /></Link>
+          <Link to="/test/test_001" className="inline-flex h-12 items-center rounded-lg border border-[var(--border)] bg-[var(--card)] px-5 font-semibold">Start Test Now</Link>
         </div>
       </div>
     </section>
@@ -212,7 +212,7 @@ export default function LandingPage() {
 }
 
 function HeroStat({ label, value }) {
-  return <div className="rounded-2xl bg-white/70 p-3">
+  return <div className="rounded-lg bg-white/70 p-3">
     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
     <p className="mt-1 text-lg font-semibold text-slate-950">{value}</p>
   </div>
@@ -220,7 +220,7 @@ function HeroStat({ label, value }) {
 
 function AtGlance({ icon: Icon, label, value, helper }) {
   return <div className="border-b border-[var(--border)] p-5 last:border-b-0 sm:p-6 md:border-b-0 md:border-r md:last:border-r-0">
-    <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--accent-tint)] text-[var(--accent)]">
+    <div className="grid h-11 w-11 place-items-center rounded-lg bg-[var(--accent-tint)] text-[var(--accent)]">
       <Icon size={21} />
     </div>
     <p className="mt-5 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{label}</p>

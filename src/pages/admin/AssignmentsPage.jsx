@@ -265,7 +265,7 @@ function AssignmentDrawer({ item, course, batches, defaultBatch, onClose, addToa
               </label>
             </div>
 
-            <div className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+            <div className="flex items-center justify-between rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
               <div>
                 <p className="text-sm font-semibold text-[color:var(--text)]">Mandatory assignment</p>
                 <p className="text-xs text-[color:var(--secondary)]">
@@ -278,7 +278,7 @@ function AssignmentDrawer({ item, course, batches, defaultBatch, onClose, addToa
               </button>
             </div>
 
-            <div className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+            <div className="flex items-center justify-between rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
               <div>
                 <p className="text-sm font-semibold text-[color:var(--text)]">Published</p>
                 <p className="text-xs text-[color:var(--secondary)]">Visible to students in their Assignments page</p>
@@ -290,7 +290,7 @@ function AssignmentDrawer({ item, course, batches, defaultBatch, onClose, addToa
             </div>
           </div>
           <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-            <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => onClose(false)}>Cancel</button>
+            <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => onClose(false)}>Cancel</button>
             <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2" disabled={saving}>
               {saving && <Loader2 size={14} className="animate-spin" />}
               {item ? 'Save Changes' : 'Create Assignment'}

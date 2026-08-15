@@ -30,7 +30,7 @@ export default function FeeStructureEditor({ value = {}, onChange }) {
   const total = entries.reduce((s, [, amt]) => s + (Number(amt) || 0), 0)
 
   return (
-    <div className="rounded-2xl border border-[color:var(--border)] p-3">
+    <div className="rounded-lg border border-[color:var(--border)] p-3">
       {entries.length === 0 && (
         <p className="px-1 py-2 text-xs text-[color:var(--muted)]">No semesters yet — add the first one.</p>
       )}

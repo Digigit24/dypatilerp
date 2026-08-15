@@ -72,7 +72,7 @@ function AssignedRow({
     row.attempt_status === 'in_progress' ? 'bg-amber-100 text-amber-700' :
                                            'bg-[color:var(--surface)] text-[color:var(--secondary)]'
   return (
-    <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3">
+    <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] p-3">
       <div className="flex flex-wrap items-start gap-2">
         <div className="flex-1 min-w-0">
           <p className="truncate text-sm font-semibold text-[color:var(--text)]">
@@ -255,7 +255,7 @@ function AssignModal({ test, courseId: testCourseId, onClose, addToast }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="relative w-full max-w-xl rounded-[28px] bg-[color:var(--card)] p-6 shadow-2xl">
+      <div className="relative w-full max-w-xl rounded-xl bg-[color:var(--card)] p-6 shadow-2xl">
         <button onClick={onClose} className="absolute right-5 top-5 text-[color:var(--secondary)]"><X size={20} /></button>
         <h2 className="text-lg font-semibold text-[color:var(--text)]">Assign Test</h2>
         <p className="mt-0.5 text-xs text-[color:var(--secondary)]">{test.title} · links are valid for 5 days</p>
@@ -850,12 +850,12 @@ export default function TestBuilderPage() {
                     {savingMeta ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
                   </button>
                   {activeTest.status === 'draft' && (
-                    <button onClick={publish} className="inline-flex items-center gap-1.5 rounded-[14px] bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">
+                    <button onClick={publish} className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">
                       <Send size={13} /> Publish
                     </button>
                   )}
                   {activeTest.status === 'published' && (
-                    <button onClick={() => setShowAssign(true)} className="inline-flex items-center gap-1.5 rounded-[14px] bg-[color:var(--accent-tint)] px-3 py-2 text-sm font-semibold text-[color:var(--accent)] hover:opacity-80">
+                    <button onClick={() => setShowAssign(true)} className="inline-flex items-center gap-1.5 rounded-md bg-[color:var(--accent-tint)] px-3 py-2 text-sm font-semibold text-[color:var(--accent)] hover:opacity-80">
                       <Users size={13} /> Assign
                     </button>
                   )}
@@ -898,7 +898,7 @@ export default function TestBuilderPage() {
             </div>
 
             {/* ── Tab bar ── */}
-            <div className="flex gap-1 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-1 w-fit">
+            <div className="flex gap-1 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] p-1 w-fit">
               <button
                 onClick={() => setActiveTab('builder')}
                 className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-sm font-semibold transition ${activeTab === 'builder' ? 'bg-[color:var(--card)] text-[color:var(--text)] shadow-sm' : 'text-[color:var(--secondary)] hover:text-[color:var(--text)]'}`}
@@ -922,7 +922,7 @@ export default function TestBuilderPage() {
             {activeTab === 'builder' && (
               <div className="card overflow-hidden p-0">
                 {/* Section chips */}
-                <div className="flex items-center gap-1.5 overflow-x-auto border-b border-[color:var(--border)] px-3 py-2.5">
+                <div className="flex items-center gap-1.5 border-b border-[color:var(--border)] px-3 py-2.5">
                   {sections.map((sec) => {
                     const count = allQuestions.filter((q) => q.section_id === sec.id).length
                     const active = activeSectionId === sec.id

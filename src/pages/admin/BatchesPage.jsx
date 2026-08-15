@@ -168,12 +168,12 @@ export default function BatchesPage() {
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-3xl bg-[color:var(--surface)] p-4">
+                <div className="rounded-xl bg-[color:var(--surface)] p-4">
                   <Users size={16} className="mb-2 text-[color:var(--accent)]" />
                   <p className="font-semibold text-[color:var(--text)]">{b.enrolled_count || 0}/{b.max_students}</p>
                   <p className="text-xs text-[color:var(--secondary)]">enrolled</p>
                 </div>
-                <div className="rounded-3xl bg-[color:var(--surface)] p-4">
+                <div className="rounded-xl bg-[color:var(--surface)] p-4">
                   <CalendarDays size={16} className="mb-2 text-[color:var(--accent)]" />
                   <p className="font-semibold text-[color:var(--text)]">{b.start_date?.split('T')[0]} →</p>
                   <p className="text-xs text-[color:var(--secondary)]">{b.end_date?.split('T')[0]}</p>
@@ -181,7 +181,7 @@ export default function BatchesPage() {
               </div>
 
               {/* Workflow indicator */}
-              <div className="mt-3 flex items-center gap-2 rounded-3xl border border-[color:var(--border)] px-4 py-2.5">
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-[color:var(--border)] px-4 py-2.5">
                 <GitBranch size={14} className={hasWorkflow ? 'text-[color:var(--accent)]' : 'text-[color:var(--muted)]'} />
                 <span className="text-xs text-[color:var(--secondary)] flex-1">
                   {hasWorkflow
@@ -200,7 +200,7 @@ export default function BatchesPage() {
                 <Link className="btn-primary inline-flex items-center gap-1.5 text-sm" to={`/admin/batches/${b.id}/students`}>
                   <Users size={13} /> Students
                 </Link>
-                <button className="flex items-center gap-1.5 rounded-2xl bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--surface-strong)] transition"
+                <button className="flex items-center gap-1.5 rounded-lg bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--surface-strong)] transition"
                   onClick={() => openEdit(b)}>
                   Edit Batch
                 </button>
@@ -258,7 +258,7 @@ export default function BatchesPage() {
                 <F label="Description"><textarea className="input w-full resize-none" rows={3} {...ff('description')} /></F>
               </div>
               <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-                <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setDrawer(false)}>Cancel</button>
+                <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setDrawer(false)}>Cancel</button>
                 <button type="submit" className="btn-primary flex-1" disabled={saving}>{saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Batch'}</button>
               </div>
             </form>
@@ -279,7 +279,7 @@ export default function BatchesPage() {
               <button className="grid h-10 w-10 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setWorkflow(null)}><XCircle size={18} /></button>
             </div>
             <div className="flex-1 overflow-auto overscroll-contain p-5 sm:p-7">
-              <div className="mb-4 rounded-3xl bg-[color:var(--surface)] p-4 text-sm text-[color:var(--secondary)]">
+              <div className="mb-4 rounded-xl bg-[color:var(--surface)] p-4 text-sm text-[color:var(--secondary)]">
                 Stages run <strong>sequentially</strong>. Leave empty to use the default 3-stage chain. Changes take effect on the next submission.
               </div>
               <ApprovalConfigurator
@@ -289,7 +289,7 @@ export default function BatchesPage() {
               />
             </div>
             <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-              <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setWorkflow(null)}>Cancel</button>
+              <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => setWorkflow(null)}>Cancel</button>
               <button className="btn-primary flex-1" onClick={handleSaveWorkflow} disabled={saving}>{saving ? 'Saving…' : 'Save Workflow'}</button>
             </div>
           </div>

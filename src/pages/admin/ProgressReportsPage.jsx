@@ -96,7 +96,7 @@ export default function AdminProgressReportsPage() {
               </button>
             )}
             <button
-              className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
+              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
               onClick={load}
               title="Refresh"
             >
@@ -127,7 +127,7 @@ export default function AdminProgressReportsPage() {
           <button
             key={key}
             onClick={() => setStatus(key)}
-            className={`rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${status === key ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}
+            className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${status === key ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}
           >
             {label}
           </button>
@@ -260,13 +260,13 @@ function ReportDetailDrawer({ report, onClose }) {
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--muted)]">Documents</p>
             {files.length === 0 ? (
-              <p className="mt-3 rounded-2xl bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
+              <p className="mt-3 rounded-lg bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
                 No file attached to this report.
               </p>
             ) : (
               <div className="mt-3 space-y-2">
                 {files.map((f, i) => (
-                  <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                  <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-3 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-[color:var(--text)]">{f.name}</p>
                       {f.size ? <p className="text-xs text-[color:var(--muted)]">{(f.size / 1024 / 1024).toFixed(2)} MB</p> : null}
@@ -284,13 +284,13 @@ function ReportDetailDrawer({ report, onClose }) {
             {approvals === null ? (
               <p className="mt-3 text-sm text-[color:var(--secondary)]">Loading…</p>
             ) : approvals.length === 0 ? (
-              <p className="mt-3 rounded-2xl bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
+              <p className="mt-3 rounded-lg bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
                 Not yet submitted for review.
               </p>
             ) : (
               <div className="mt-3 space-y-2">
                 {[...approvals].sort((a, b) => (a.order_index || 0) - (b.order_index || 0)).map((a) => (
-                  <div key={a.id} className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                  <div key={a.id} className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-semibold capitalize text-[color:var(--text)]">
                         {(a.stage || '').replaceAll('_', ' ')}
@@ -326,7 +326,7 @@ function StatCard({ icon: Icon, label, value, tone }) {
   return (
     <div className="card p-5">
       <div className="flex items-center gap-3">
-        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${colors[tone]}`}>
+        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${colors[tone]}`}>
           <Icon size={20} />
         </span>
         <div>

@@ -47,12 +47,12 @@ export default function TestLoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="mb-8 flex justify-center">
-          <img src="/logo-new.jpg" alt="DYPERF" className="h-14 w-auto rounded-2xl object-contain" />
+          <img src="/logo-new.jpg" alt="DYPERF" className="h-14 w-auto rounded-lg object-contain" />
         </div>
 
         <div className="card p-8">
           <div className="mb-6 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[color:var(--accent-tint)]">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-[color:var(--accent-tint)]">
               <Lock size={22} className="text-[color:var(--accent)]" />
             </div>
             <h1 className="text-xl font-semibold text-[color:var(--text)]">Test Portal Login</h1>
@@ -60,7 +60,7 @@ export default function TestLoginPage() {
           </div>
 
           {error && (
-            <div className="mb-4 rounded-2xl bg-red-50 p-3 text-sm text-red-700">
+            <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
               {error}
             </div>
           )}

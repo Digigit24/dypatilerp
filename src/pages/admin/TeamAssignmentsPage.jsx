@@ -103,7 +103,7 @@ export default function TeamAssignmentsPage({ courseOverride = null, embedded = 
           Scoped permissions follow these assignments — a batch coordinator manages that batch only.
         </p>
         <button
-          className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
           onClick={() => setCreateUserOpen(true)}
         >
           <UserPlus size={15} /> Create User
@@ -252,7 +252,7 @@ function AssignModal({ batch, course, roles, users, onClose, addToast }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => onClose(false)}>
-      <div className="w-full max-w-md rounded-[24px] bg-[color:var(--card)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-xl bg-[color:var(--card)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-semibold text-[color:var(--text)]">Assign Staff</h2>
@@ -330,7 +330,7 @@ function CreateUserModal({ roles, course, batches, onClose, addToast }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => onClose(false)}>
-      <form className="w-full max-w-md rounded-[24px] bg-[color:var(--card)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+      <form className="w-full max-w-md rounded-xl bg-[color:var(--card)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
         <h2 className="text-lg font-semibold text-[color:var(--text)]">Create User</h2>
         <p className="mt-0.5 text-xs text-[color:var(--secondary)]">Creates the account and (optionally) assigns it straight into {course.code}.</p>
         <div className="mt-4 grid grid-cols-2 gap-3">

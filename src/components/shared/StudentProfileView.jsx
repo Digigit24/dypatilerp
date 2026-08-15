@@ -287,11 +287,11 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                 <img
                   src={user.avatar_url}
                   alt={name}
-                  className="h-24 w-24 rounded-3xl border-4 border-[color:var(--card)] object-cover shadow-lg"
+                  className="h-24 w-24 rounded-xl border-4 border-[color:var(--card)] object-cover shadow-lg"
                   onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling.style.display = 'grid' }}
                 />
               ) : null}
-              <div className={`${user.avatar_url ? 'hidden' : 'grid'} h-24 w-24 place-items-center rounded-3xl border-4 border-[color:var(--card)] bg-[color:var(--accent-tint)] text-2xl font-bold text-[color:var(--accent)] shadow-lg`}>
+              <div className={`${user.avatar_url ? 'hidden' : 'grid'} h-24 w-24 place-items-center rounded-xl border-4 border-[color:var(--card)] bg-[color:var(--accent-tint)] text-2xl font-bold text-[color:var(--accent)] shadow-lg`}>
                 {initials}
               </div>
               {!isAdminView && (
@@ -305,14 +305,14 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
               {research && (
                 <button
                   onClick={handleTogglePublic}
-                  className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition ${research.is_public ? 'bg-emerald-50 text-emerald-700' : 'bg-[color:var(--surface)] text-[color:var(--secondary)]'}`}
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${research.is_public ? 'bg-emerald-50 text-emerald-700' : 'bg-[color:var(--surface)] text-[color:var(--secondary)]'}`}
                 >
                   <Globe size={14} />
                   {research.is_public ? 'Public' : 'Make Public'}
                 </button>
               )}
               {research?.is_public && (
-                <Link to={`/p/${research.public_slug}`} className="inline-flex items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)]">
+                <Link to={`/p/${research.public_slug}`} className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)]">
                   <ExternalLink size={14} /> View Public
                 </Link>
               )}
@@ -351,7 +351,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
       <div className="mb-5 flex flex-wrap gap-2">
         {TABS.map(({ key, label }) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`rounded-2xl px-5 py-2.5 text-sm font-semibold transition ${tab === key ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}>
+            className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition ${tab === key ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}>
             {label}
           </button>
         ))}
@@ -413,7 +413,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             <div className="card p-6">
               <div className="safe-row">
                 <div className="flex items-center gap-3">
-                  <span className="grid h-10 w-10 place-items-center rounded-2xl bg-emerald-50 text-emerald-600"><DollarSign size={18} /></span>
+                  <span className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-50 text-emerald-600"><DollarSign size={18} /></span>
                   <h2 className="text-lg font-semibold text-[color:var(--text)]">Fees Summary</h2>
                 </div>
               </div>
@@ -487,8 +487,8 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             <p className="mt-1 text-sm text-[color:var(--secondary)]">Upload supporting documents for verification. Accepted: PDF, JPG, PNG (max 10 MB).</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {CERT_TYPES.map(({ key, label, desc }) => (
-                <div key={key} className={`flex items-start gap-3 rounded-3xl border p-4 transition ${certs[key] ? 'border-emerald-200 bg-emerald-50' : 'border-[color:var(--border)] bg-[color:var(--surface)]'}`}>
-                  <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-2xl ${certs[key] ? 'bg-emerald-100 text-emerald-600' : 'bg-[color:var(--card)] text-[color:var(--muted)]'}`}>
+                <div key={key} className={`flex items-start gap-3 rounded-xl border p-4 transition ${certs[key] ? 'border-emerald-200 bg-emerald-50' : 'border-[color:var(--border)] bg-[color:var(--surface)]'}`}>
+                  <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg ${certs[key] ? 'bg-emerald-100 text-emerald-600' : 'bg-[color:var(--card)] text-[color:var(--muted)]'}`}>
                     {certs[key] ? <FileText size={16} /> : <Upload size={16} />}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -567,13 +567,13 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                     {expanded && (
                       <div className="space-y-5 border-t border-[color:var(--border)] p-5">
                         {files.length === 0 ? (
-                          <p className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
+                          <p className="rounded-lg bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
                             No file attached to this report.
                           </p>
                         ) : (
                           <div className="space-y-2">
                             {files.map((f, i) => (
-                              <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                              <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-3 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
                                 <div className="min-w-0">
                                   <p className="truncate text-sm font-semibold text-[color:var(--text)]">{f.name}</p>
                                   {f.size ? <p className="text-xs text-[color:var(--muted)]">{(f.size / 1024 / 1024).toFixed(2)} MB</p> : null}
@@ -616,7 +616,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
               {submissions.map((sub) => (
                 <button
                   key={sub.id}
-                  className="w-full rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 text-left transition hover:border-[color:var(--accent)] hover:shadow-sm"
+                  className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 text-left transition hover:border-[color:var(--accent)] hover:shadow-sm"
                   onClick={() => openSub(sub)}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -699,7 +699,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
           {research ? (
             <>
               {/* Public banner */}
-              <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-4">
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-4">
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-[color:var(--text)]">
                     Research profile is {research.is_public ? <span className="text-emerald-600">public</span> : <span className="text-[color:var(--muted)]">private</span>}
@@ -707,7 +707,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                   {research.is_public && <p className="mt-0.5 text-xs text-[color:var(--secondary)]">Public URL: /p/{research.public_slug}</p>}
                 </div>
                 {research.is_public && (
-                  <Link to={`/p/${research.public_slug}`} className="inline-flex items-center gap-2 rounded-2xl bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)]">
+                  <Link to={`/p/${research.public_slug}`} className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--accent-tint)] px-4 py-2 text-sm font-semibold text-[color:var(--accent)]">
                     <ExternalLink size={14} /> View
                   </Link>
                 )}
@@ -718,7 +718,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                 <div key={key} className="card p-6">
                   <div className="safe-row">
                     <div className="flex items-center gap-3">
-                      <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[color:var(--accent-tint)] text-[color:var(--accent)]">
+                      <span className="grid h-10 w-10 place-items-center rounded-lg bg-[color:var(--accent-tint)] text-[color:var(--accent)]">
                         <Icon size={18} />
                       </span>
                       <h2 className="text-lg font-semibold text-[color:var(--text)]">
@@ -727,7 +727,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                     </div>
                     {!isAdminView && (
                       <button onClick={() => openAdd(key)}
-                        className="grid h-8 w-8 place-items-center rounded-2xl bg-[color:var(--accent-tint)] text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white">
+                        className="grid h-8 w-8 place-items-center rounded-lg bg-[color:var(--accent-tint)] text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white">
                         <Plus size={16} />
                       </button>
                     )}
@@ -738,7 +738,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                   ) : (
                     <div className="mt-4 space-y-3">
                       {(research[key] || []).map((item) => (
-                        <div key={item.id} className="flex items-start gap-3 rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+                        <div key={item.id} className="flex items-start gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
                           <div className="min-w-0 flex-1">
                             <p className="font-semibold text-[color:var(--text)]">{item.title || item.name}</p>
                             <p className="mt-1 text-xs text-[color:var(--secondary)]">
@@ -811,7 +811,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             <div className="flex-1 overflow-auto overscroll-contain p-6 space-y-5 xl:grid xl:grid-cols-[1fr_300px] xl:gap-5 xl:space-y-0">
               <div className="space-y-5">
                 {/* Submission file */}
-                <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                   <div className="safe-row">
                     <div>
                       <p className="font-semibold text-[color:var(--text)]">Submission File</p>
@@ -820,7 +820,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                     {selectedSub.file_urls?.[0] && <SubmissionFileLink file={selectedSub.file_urls[0]} />}
                   </div>
                   {!selectedSub.file_urls?.[0] && (
-                    <div className="mt-4 grid h-40 place-items-center rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
+                    <div className="mt-4 grid h-40 place-items-center rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
                       <div>
                         <FileText className="mx-auto text-[color:var(--accent)]" size={30} />
                         <p className="mt-3 text-sm text-[color:var(--secondary)]">No file attached to this submission.</p>
@@ -830,7 +830,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                 </div>
 
                 {/* Submission metadata */}
-                <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                   <p className="font-semibold text-[color:var(--text)]">Submission Info</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <IR label="Type"          value={(selectedSub.submission_type || '—').replaceAll('_', ' ')} />
@@ -842,21 +842,21 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
               </div>
 
               {/* Approval thread */}
-              <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
+              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
                 <p className="font-semibold text-[color:var(--text)]">Approval Thread</p>
                 {subApprovals.length === 0 ? (
                   <p className="mt-3 text-sm text-[color:var(--secondary)]">No approval records yet.</p>
                 ) : (
                   <div className="mt-4 space-y-3">
                     {subApprovals.map((a) => (
-                      <div key={a.id} className="rounded-3xl bg-[color:var(--card)] p-4">
+                      <div key={a.id} className="rounded-xl bg-[color:var(--card)] p-4">
                         <div className="safe-row items-start">
                           <p className="text-sm font-semibold capitalize text-[color:var(--text)]">{a.stage?.replaceAll('_', ' ')}</p>
                           <StatusBadge status={a.status} />
                         </div>
                         <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]">{a.comments || 'No comment.'}</p>
                         {a.suggested_title && (
-                          <p className="mt-2 rounded-2xl bg-[color:var(--surface)] p-3 text-xs leading-5 text-[color:var(--secondary)]">
+                          <p className="mt-2 rounded-lg bg-[color:var(--surface)] p-3 text-xs leading-5 text-[color:var(--secondary)]">
                             <b>Suggested title:</b> {a.suggested_title}
                           </p>
                         )}
@@ -902,7 +902,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             </div>
 
             <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-              <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={closeDrawer}>Cancel</button>
+              <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={closeDrawer}>Cancel</button>
               <button type="button" className="btn-primary flex-1" disabled={drawer.saving} onClick={saveDrawer}>
                 {drawer.saving ? 'Saving…' : drawer.item ? 'Save Changes' : 'Add Entry'}
               </button>
@@ -946,7 +946,7 @@ function SH({ title, editing, onEdit, onSave, onCancel }) {
 
 function IR({ label, value }) {
   return (
-    <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+    <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">{label}</p>
       <div className="mt-1.5 text-sm font-semibold text-[color:var(--text)]">{value ?? '—'}</div>
     </div>
@@ -955,7 +955,7 @@ function IR({ label, value }) {
 
 function QuickStat({ label, value, sub }) {
   return (
-    <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+    <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
       <p className="text-xs text-[color:var(--muted)] uppercase tracking-wide">{label}</p>
       <p className="mt-1 text-xl font-bold text-[color:var(--text)]">{value}</p>
       {sub && <p className="mt-0.5 text-xs text-[color:var(--secondary)]">{sub}</p>}
@@ -965,7 +965,7 @@ function QuickStat({ label, value, sub }) {
 
 function StatCard({ label, value, accent }) {
   return (
-    <div className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 text-center">
+    <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 text-center">
       <p className="text-2xl font-bold" style={{ color: accent }}>{value}</p>
       <p className="mt-1 text-xs font-semibold text-[color:var(--secondary)]">{label}</p>
     </div>
@@ -974,7 +974,7 @@ function StatCard({ label, value, accent }) {
 
 function GuideCard({ type, guide }) {
   return (
-    <div className={`rounded-3xl border p-4 ${guide ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]' : 'border-[color:var(--border)] bg-[color:var(--surface)]'}`}>
+    <div className={`rounded-xl border p-4 ${guide ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]' : 'border-[color:var(--border)] bg-[color:var(--surface)]'}`}>
       <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">{type} Guide</p>
       {guide ? (
         <>

@@ -49,7 +49,7 @@ export default function StudentFeesPage() {
                   <p className="mt-1 text-xs text-[color:var(--secondary)]">{fee.transaction_id ? `Transaction ${fee.transaction_id}` : fee.remarks}</p>
                 </div>
                 {fee.status === 'paid' ? (
-                  <button className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--secondary)]">View Receipt</button>
+                  <button className="rounded-lg bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--secondary)]">View Receipt</button>
                 ) : (
                   <button className="btn-primary inline-flex items-center gap-2" onClick={() => setPaying(fee)}><CreditCard size={17} /> Pay Now</button>
                 )}
@@ -63,7 +63,7 @@ export default function StudentFeesPage() {
           <p className="mt-1 text-sm text-[color:var(--secondary)]">Gateway integration will be added later. UI is ready for handoff.</p>
           <div className="mt-5 space-y-3">
             {['UPI', 'Credit / Debit Card', 'Net Banking', 'Bank Transfer'].map((option) => (
-              <div className="safe-row rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4" key={option}>
+              <div className="safe-row rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4" key={option}>
                 <span className="font-semibold text-[color:var(--text)]">{option}</span>
                 <ShieldCheck size={17} className="text-[color:var(--accent)]" />
               </div>
@@ -77,12 +77,12 @@ export default function StudentFeesPage() {
           <div className="card w-full max-w-md p-7" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-2xl font-semibold text-[color:var(--text)]">Payment Preview</h2>
             <p className="mt-2 text-sm text-[color:var(--secondary)]">This is a UI placeholder. Payment gateway integration will be connected later.</p>
-            <div className="mt-5 rounded-3xl bg-[color:var(--surface)] p-5">
+            <div className="mt-5 rounded-xl bg-[color:var(--surface)] p-5">
               <p className="text-sm text-[color:var(--secondary)]">{paying.fee_type}</p>
               <p className="mt-2 text-3xl font-semibold text-[color:var(--text)]">{formatCurrency(paying.amount)}</p>
             </div>
             <div className="safe-actions mt-6 justify-end">
-              <button className="h-11 rounded-[14px] bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setPaying(null)}>Close</button>
+              <button className="h-11 rounded-md bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setPaying(null)}>Close</button>
               <button className="btn-primary" onClick={() => { addToast({ type: 'info', title: 'Payment integration pending' }); setPaying(null) }}>Continue</button>
             </div>
           </div>
