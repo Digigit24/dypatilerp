@@ -16,11 +16,19 @@ import { useCourseStore } from '../../store/courseStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
+import { isVideoEnabled, isBlockedMedia, ALLOWED_MEDIA_ACCEPT } from '../../lib/features.js'
 
 // ─── helpers ───────────────────────────────────────────────────────────────────
 const fmtDuration = (sec) => sec ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` : null
 const fmtBytes = (b) => !b ? '—' : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${(b / 1e3).toFixed(0)} KB`
 
+
+// Video is disabled — split a FileList into what we accept and what we refuse.
+// See CLAUDE.md -> "Disabled features".
+const splitBlocked = (files) => {
+  const list = [...files]
+  return { allowed: list.filter((f) => !isBlockedMedia(f)), blocked: list.filter((f) => isBlockedMedia(f)) }
+}
 const detectType = (mime = '') => {
   if (mime.startsWith('video/')) return 'video'
   if (mime.startsWith('image/')) return 'image'
@@ -151,8 +159,12 @@ export default function MediaManagerPage() {
   const onDrop = (e) => {
     e.preventDefault()
     setDragging(false)
-    const files = [...(e.dataTransfer?.files || [])]
-    if (files.length) { setDropFiles(files); setUploadOpen(true) }
+    const { allowed, blocked } = splitBlocked(e.dataTransfer?.files || [])
+    if (blocked.length) {
+      addToast({ type: 'warning', title: `${blocked.length} file${blocked.length > 1 ? 's' : ''} skipped`,
+        message: 'Video and audio uploads are disabled for now. Documents and images are supported.' })
+    }
+    if (allowed.length) { setDropFiles(allowed); setUploadOpen(true) }
   }
 
   if (!currentCourse?.id) {
@@ -180,7 +192,7 @@ export default function MediaManagerPage() {
         action={
           <div className="flex gap-2">
             <button
-              className="inline-flex items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition"
+              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition"
               onClick={() => setFolderModal({ mode: 'create' })}
             >
               <FolderPlus size={15} /> New Folder
@@ -247,6 +259,7 @@ export default function MediaManagerPage() {
         {TYPE_FILTERS.map(({ key, label }) => {
           const count = key === 'all' ? (items || []).length : (items || []).filter((m) => (m.media_type || 'video') === key).length
           if (key !== 'all' && count === 0) return null
+          if (!isVideoEnabled() && (key === 'video' || key === 'audio')) return null
           return (
             <button key={key} onClick={() => setTypeFilter(key)}
               className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${typeFilter === key ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'bg-[color:var(--surface)] text-[color:var(--secondary)] hover:text-[color:var(--text)]'}`}>
@@ -261,11 +274,11 @@ export default function MediaManagerPage() {
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false) }}
         onDrop={onDrop}
-        className={`relative rounded-3xl transition ${dragging ? 'ring-2 ring-[color:var(--accent)] ring-offset-2' : ''}`}
+        className={`relative rounded-xl transition ${dragging ? 'ring-2 ring-[color:var(--accent)] ring-offset-2' : ''}`}
       >
         {dragging && (
-          <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-3xl bg-[color:var(--accent-tint)]/80 backdrop-blur-sm">
-            <div className="flex items-center gap-2 rounded-2xl bg-[color:var(--card)] px-5 py-3 shadow-lg">
+          <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-xl bg-[color:var(--accent-tint)]/80 backdrop-blur-sm">
+            <div className="flex items-center gap-2 rounded-lg bg-[color:var(--card)] px-5 py-3 shadow-lg">
               <UploadCloud size={18} className="text-[color:var(--accent)]" />
               <span className="text-sm font-semibold text-[color:var(--text)]">Drop files to upload here</span>
             </div>
@@ -339,7 +352,7 @@ export default function MediaManagerPage() {
               <MediaCard
                 key={m.id}
                 media={m}
-                onOpen={() => (m.media_type || 'video') === 'video' && navigate(`/admin/lectures/${m.id}`)}
+                onOpen={() => isVideoEnabled() && (m.media_type || 'video') === 'video' && navigate(`/admin/lectures/${m.id}`)}
                 onEdit={() => setEditItem(m)}
                 onDelete={() => handleDeleteMedia(m)}
                 onAnalytics={() => setAnalyticsFor(m)}
@@ -349,7 +362,7 @@ export default function MediaManagerPage() {
           </div>
         ) : (
           <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="table-wrap">
               <table className="min-w-[760px] w-full text-left text-sm">
                 <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
                   <tr>{['Name', 'Type', 'Size', 'Status', 'Added', ''].map((h, i) => <th key={i} className="px-5 py-3.5">{h}</th>)}</tr>
@@ -512,7 +525,7 @@ function FolderModal({ modal, onClose, onSubmit }) {
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) return; setBusy(true); await onSubmit(name.trim()); setBusy(false) }}
-        className="w-full max-w-sm rounded-[24px] bg-[color:var(--card)] p-6 shadow-2xl"
+        className="w-full max-w-sm rounded-xl bg-[color:var(--card)] p-6 shadow-2xl"
       >
         <div className="flex items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-500">
@@ -556,7 +569,14 @@ function UploadDrawer({ course, folderId, folderName, initialFiles, onClose, add
     getBatches({ course_id: course.id }).then((r) => setBatches(r.data || [])).catch(() => {})
   }, [course.id])
 
-  const addFiles = (files) => setQueue((q) => [...q, ...[...files].map(toQueueItem)])
+  const addFiles = (files) => {
+    const { allowed, blocked } = splitBlocked(files)
+    if (blocked.length) {
+      addToast({ type: 'warning', title: `${blocked.length} file${blocked.length > 1 ? 's' : ''} skipped`,
+        message: 'Video and audio uploads are disabled for now. Documents and images are supported.' })
+    }
+    if (allowed.length) setQueue((q) => [...q, ...allowed.map(toQueueItem)])
+  }
   const removeItem = (key) => setQueue((q) => q.filter((x) => x.key !== key))
   const patchItem = (key, patch) => setQueue((q) => q.map((x) => x.key === key ? { ...x, ...patch } : x))
 
@@ -639,7 +659,7 @@ function UploadDrawer({ course, folderId, folderName, initialFiles, onClose, add
         <div className="flex-1 overflow-auto overscroll-contain p-5 sm:p-7 space-y-4">
           {/* Dropzone / picker */}
           <div
-            className="flex cursor-pointer flex-col items-center justify-center gap-2.5 rounded-3xl border-2 border-dashed border-[color:var(--border)] p-7 transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
+            className="flex cursor-pointer flex-col items-center justify-center gap-2.5 rounded-xl border-2 border-dashed border-[color:var(--border)] p-7 transition hover:border-[color:var(--accent)] hover:bg-[color:var(--accent-tint)]"
             onClick={() => fileRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer?.files || []) }}
@@ -647,7 +667,7 @@ function UploadDrawer({ course, folderId, folderName, initialFiles, onClose, add
             <Upload size={26} className="text-[color:var(--muted)]" />
             <p className="text-sm font-semibold text-[color:var(--text)]">Click to choose files or drag &amp; drop</p>
             <p className="text-xs text-[color:var(--muted)]">Videos, images, audio, PDFs, documents — any file type</p>
-            <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { addFiles(e.target.files || []); e.target.value = '' }} />
+            <input ref={fileRef} type="file" multiple accept={ALLOWED_MEDIA_ACCEPT} className="hidden" onChange={(e) => { addFiles(e.target.files || []); e.target.value = '' }} />
           </div>
 
           {/* Queue */}
@@ -658,7 +678,7 @@ function UploadDrawer({ course, folderId, folderName, initialFiles, onClose, add
                 const meta = TYPE_META[type] || TYPE_META.other
                 const Icon = meta.icon
                 return (
-                  <div key={item.key} className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3">
+                  <div key={item.key} className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] p-3">
                     <div className="flex items-center gap-3">
                       <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${meta.tint}`}><Icon size={15} /></div>
                       <div className="min-w-0 flex-1">
@@ -728,7 +748,7 @@ function UploadDrawer({ course, folderId, folderName, initialFiles, onClose, add
         </div>
 
         <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-          <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" disabled={busy} onClick={() => onClose(didUpload)}>
+          <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" disabled={busy} onClick={() => onClose(didUpload)}>
             {allDone ? 'Close' : 'Cancel'}
           </button>
           {!allDone && (
@@ -814,7 +834,7 @@ function EditDrawer({ media, allFolders, onClose, addToast }) {
                 <option value="private">Private — staff only (draft)</option>
               </select>
             </F>
-            <div className="flex items-center justify-between rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
+            <div className="flex items-center justify-between rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-4">
               <div>
                 <p className="text-sm font-semibold text-[color:var(--text)]">Published</p>
                 <p className="text-xs text-[color:var(--secondary)]">Students can see this {meta.label.toLowerCase()}</p>
@@ -824,13 +844,13 @@ function EditDrawer({ media, allFolders, onClose, addToast }) {
                 <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${form.is_published ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
             </div>
-            <div className="rounded-2xl bg-[color:var(--surface)] px-4 py-3 text-xs text-[color:var(--secondary)]">
+            <div className="rounded-lg bg-[color:var(--surface)] px-4 py-3 text-xs text-[color:var(--secondary)]">
               <p>File: <span className="font-mono">{media.object_key?.split('/').pop()}</span></p>
               <p className="mt-1">Size: {fmtBytes(media.file_size)} · Added {formatDate(media.created_at)}</p>
             </div>
           </div>
           <div className="shrink-0 flex gap-3 border-t border-[color:var(--border)] bg-[color:var(--card)] p-4 sm:p-5">
-            <button type="button" className="h-11 flex-1 rounded-[14px] bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => onClose(false)}>Cancel</button>
+            <button type="button" className="h-11 flex-1 rounded-md bg-[color:var(--surface)] font-semibold text-[color:var(--secondary)]" onClick={() => onClose(false)}>Cancel</button>
             <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2" disabled={saving}>
               {saving && <Loader size={14} className="animate-spin" />}
               Save Changes
@@ -888,7 +908,7 @@ function AnalyticsDrawer({ media, onClose }) {
                     const dur = media.duration_sec || 0
                     const pct = dur > 0 ? Math.min(100, Math.round((log.last_position / dur) * 100)) : 0
                     return (
-                      <div key={log.id} className="rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+                      <div key={log.id} className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="font-semibold text-[color:var(--text)]">{log.student_name}</p>

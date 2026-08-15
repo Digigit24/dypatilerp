@@ -29,6 +29,15 @@ export const env = {
   // email so the institute receives a confirmation copy of every payment email.
   SHORTLIST_EMAIL_CC: process.env.SHORTLIST_EMAIL_CC || '',
   // Zata S3-compatible storage (optional — stub mode if not set)
+  // ── Feature flags ────────────────────────────────────────────────────────
+  // Video upload / streaming / the Lectures module are DISABLED for now.
+  // Documents (formats, submission attachments) are unaffected.
+  // Flip to 'true' only when the video feature is revived — see CLAUDE.md.
+  VIDEO_UPLOADS_ENABLED: process.env.VIDEO_UPLOADS_ENABLED === 'true',
+  // Local disk is a read CACHE only. Zata is the single source of truth.
+  // Leave false on any host with an ephemeral filesystem.
+  STORAGE_LOCAL_CACHE: process.env.STORAGE_LOCAL_CACHE === 'true',
+
   ZATA_ACCESS_KEY: process.env.ZATA_ACCESS_KEY || '',
   ZATA_SECRET_KEY: process.env.ZATA_SECRET_KEY || '',
   ZATA_ENDPOINT: process.env.ZATA_ENDPOINT || 'https://idr01.zata.ai',

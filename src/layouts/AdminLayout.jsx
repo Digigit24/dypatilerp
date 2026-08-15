@@ -1,4 +1,4 @@
-import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, ListChecks, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Search, Settings, Shield, Sun, UserCog, Users, Wand2 } from 'lucide-react'
+﻿import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, ListChecks, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Search, Settings, Shield, Sun, UserCog, Users, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -15,6 +15,7 @@ import useScrollLock from '../hooks/useScrollLock.js'
 import { logout } from '../api/services/userService.js'
 import { USE_MOCK } from '../api/config.js'
 import { getCourses } from '../api/services/courseService.js'
+import { isVideoEnabled } from '../lib/features.js'
 
 export default function AdminLayout() {
   const currentUser = useAuthStore((s) => s.currentUser)
@@ -92,7 +93,8 @@ export default function AdminLayout() {
     {
       title: 'TOOLS',
       items: [
-        { to: '/admin/lectures',      label: 'Media',         icon: PlayCircle, perm: 'lectures' },
+        // Video is disabled — this library serves documents only. See CLAUDE.md
+        { to: '/admin/lectures',      label: isVideoEnabled() ? 'Media' : 'Documents', icon: isVideoEnabled() ? PlayCircle : FileText, perm: 'lectures' },
         { to: '/admin/test-builder',  label: 'Test Builder',  icon: FileText,   perm: 'tests' },
         { to: '/admin/notifications', label: 'Notifications', icon: Bell,       perm: 'notifications' },
       ],
@@ -120,11 +122,11 @@ export default function AdminLayout() {
   // Neutral loading / controlled retry state for the nav — never a fallback that
   // exposes restricted items.
   const permNotice = !permsLoaded ? (
-    <div className="soft-panel flex items-center gap-2 rounded-2xl p-3 text-xs text-[color:var(--secondary)]">
+    <div className="soft-panel flex items-center gap-2 rounded-md p-2.5 text-xs text-[color:var(--secondary)]">
       <Loader2 size={14} className="animate-spin" /> Loading menu…
     </div>
   ) : permsFailed ? (
-    <div className="soft-panel rounded-2xl p-3 text-xs">
+    <div className="soft-panel rounded-lg p-3 text-xs">
       <p className="font-semibold text-[color:var(--text)]">Menu unavailable</p>
       <p className="mb-2 mt-0.5 text-[color:var(--secondary)]">Couldn’t load your permissions.</p>
       <button
@@ -147,8 +149,8 @@ export default function AdminLayout() {
         mobileOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}
         footer={
-          <div className="soft-panel flex items-center gap-3 rounded-3xl p-3 text-sm">
-            <div className="grid h-10 w-10 place-items-center rounded-full bg-[color:var(--accent-tint)] font-semibold text-[color:var(--accent)]">
+          <div className="soft-panel flex items-center gap-3 rounded-xl p-2.5 text-sm">
+            <div className="grid h-8 w-8 place-items-center rounded-full bg-[color:var(--accent-tint)] font-semibold text-[color:var(--accent)]">
               {initials}
             </div>
             <div className="min-w-0 flex-1">
@@ -169,7 +171,7 @@ export default function AdminLayout() {
           <button className="sidebar-toggle desktop-sidebar-trigger" aria-label="Collapse sidebar" onClick={() => setCollapsed((v) => !v)}>
             {collapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
           </button>
-          <label className="admin-search soft-panel flex h-14 items-center gap-3 rounded-full px-5">
+          <label className="admin-search soft-panel flex h-9 items-center gap-2 rounded-lg px-3">
             <Search size={18} className="text-[color:var(--muted)]" />
             <input className="w-full bg-transparent text-sm outline-none placeholder:text-[color:var(--muted)]" placeholder="Search anything..." />
           </label>

@@ -8,6 +8,7 @@ import useScrollLock from '../hooks/useScrollLock.js'
 import { useAuthStore } from '../store/authStore.js'
 import { useLabelStore, useLabels } from '../store/labelStore.js'
 import { logout } from '../api/services/userService.js'
+import { isVideoEnabled } from '../lib/features.js'
 
 export default function StudentLayout() {
   const currentUser = useAuthStore((s) => s.currentUser)
@@ -43,7 +44,8 @@ export default function StudentLayout() {
       { to: '/student/fees', label: 'Fees', icon: IndianRupee },
       { to: '/student/profile',           label: 'My Profile',       icon: UserCircle },
       { to: '/student/profile/research',  label: 'Research Profile', icon: FlaskConical },
-      { to: '/student/lectures',          label: 'Lectures',         icon: PlayCircle },
+      // Lectures hidden while the video feature is disabled — see CLAUDE.md
+      ...(isVideoEnabled() ? [{ to: '/student/lectures', label: 'Lectures', icon: PlayCircle }] : []),
       { to: '/student/notifications',     label: 'Notifications',    icon: Bell },
     ],
   }]
@@ -59,8 +61,8 @@ export default function StudentLayout() {
         onClose={() => setMobileOpen(false)}
         footer={
           <div className="space-y-2 text-sm">
-            <a className="flex gap-2 rounded-2xl p-3 text-[color:var(--secondary)] hover:bg-[color:var(--surface)]" href="/student/profile"><Settings size={16} />Settings</a>
-            <button className="flex gap-2 rounded-2xl p-3 text-[color:var(--secondary)] w-full hover:bg-[color:var(--surface)]" onClick={handleLogout}><LogOut size={16} />Logout</button>
+            <a className="flex gap-2 rounded-md p-2 text-[color:var(--secondary)] hover:bg-[color:var(--surface)]" href="/student/profile"><Settings size={16} />Settings</a>
+            <button className="flex gap-2 rounded-lg p-3 text-[color:var(--secondary)] w-full hover:bg-[color:var(--surface)]" onClick={handleLogout}><LogOut size={16} />Logout</button>
           </div>
         }
       />

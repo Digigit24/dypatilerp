@@ -9,6 +9,8 @@ import { query } from '../../config/database.js';
 import { IncomingForm } from 'formidable';
 import { unlink, open } from 'fs/promises';
 import { existsSync, createReadStream } from 'fs';
+import crypto from 'crypto';
+import { env } from '../../config/env.js';
 
 // ─── Public-ish video listing ─────────────────────────────────────────────────
 
@@ -81,8 +83,17 @@ export const getOne = asyncHandler(async (req, res) => {
 });
 
 export const create = asyncHandler(async (req, res) => {
+  // Video feature is disabled — documents only. See CLAUDE.md.
+  const mediaType = req.body?.media_type || 'video';
+  if (mediaType === 'video' && !env.VIDEO_UPLOADS_ENABLED) {
+    return res.status(422).json({
+      success: false,
+      code: 'VIDEO_DISABLED',
+      message: 'Video is currently disabled. Upload documents (PDF, PPT, DOCX, images) instead.',
+    });
+  }
   const video = await svc.createVideo(req.body, req.user.id);
-  created(res, video, 'Video created');
+  created(res, video, 'Media registered');
 });
 
 export const update = asyncHandler(async (req, res) => {
@@ -164,16 +175,15 @@ export const streamVideo = asyncHandler(async (req, res) => {
   const range = req.headers.range;
   const contentType = session.mime_type || 'video/mp4';
 
-  // ── 1. Local storage (primary — works even when Zata is down) ─────────────
-  if (session.object_key && local.videoExists(session.object_key)) {
-    return local.streamRange(session.object_key, range, res, contentType);
-  }
-
-  // ── 2. Zata fallback ──────────────────────────────────────────────────────
+  // ── 1. Zata is the source of truth — always read it first ────────────────
   if (s3.isConfigured() && session.object_key) {
     try {
       return await s3.streamVideoRange(session.object_key, range, res);
     } catch (err) {
+      // Fall through to the local cache below before surfacing an error.
+      if (env.STORAGE_LOCAL_CACHE && session.object_key && local.videoExists(session.object_key)) {
+        return local.streamRange(session.object_key, range, res, contentType);
+      }
       if (!res.headersSent) {
         return res.status(502).json({
           success: false,
@@ -210,13 +220,13 @@ export const downloadMedia = asyncHandler(async (req, res) => {
   const ext = session.object_key?.split('.').pop() || '';
   res.setHeader('Content-Disposition', `attachment; filename="${safeName}${ext ? `.${ext}` : ''}"`);
 
-  if (session.object_key && local.videoExists(session.object_key)) {
-    return local.streamRange(session.object_key, null, res, contentType);
-  }
   if (s3.isConfigured() && session.object_key) {
     try {
       return await s3.streamVideoRange(session.object_key, null, res);
     } catch (err) {
+      if (env.STORAGE_LOCAL_CACHE && session.object_key && local.videoExists(session.object_key)) {
+        return local.streamRange(session.object_key, null, res, contentType);
+      }
       if (!res.headersSent) {
         return res.status(502).json({ success: false, message: 'Storage temporarily unavailable', detail: err.message });
       }
@@ -297,8 +307,17 @@ export const getProgress = asyncHandler(async (req, res) => {
  *  3. Auto-generate thumbnail + probe duration via ffmpeg (best-effort)
  */
 export const proxyUpload = asyncHandler(async (req, res) => {
-  if (!s3.isConfigured() && process.env.NODE_ENV === 'production') {
-    return res.status(503).json({ success: false, message: 'Storage not configured' });
+  // Zata is the SINGLE SOURCE OF TRUTH. The old implementation wrote to local
+  // disk first and pushed to Zata as unawaited background work whose failure was
+  // only a console.warn — on a host with an ephemeral filesystem that silently
+  // lost files while the DB row still claimed they existed. Now: upload to Zata,
+  // verify it landed, and only then report success. Local disk is an optional
+  // read cache, never the record.
+  if (!s3.isConfigured()) {
+    return res.status(503).json({
+      success: false,
+      message: 'File storage is not configured. Set ZATA_ACCESS_KEY, ZATA_SECRET_KEY, ZATA_ENDPOINT and ZATA_VIDEOS_BUCKET.',
+    });
   }
 
   const form = new IncomingForm({ maxFileSize: 4 * 1024 * 1024 * 1024 }); // 4 GB
@@ -309,43 +328,64 @@ export const proxyUpload = asyncHandler(async (req, res) => {
   const file = Array.isArray(files.file) ? files.file[0] : files.file;
   if (!file) return res.status(400).json({ success: false, message: 'No file uploaded' });
 
-  const filename     = (Array.isArray(fields.filename)    ? fields.filename[0]    : fields.filename)    || file.originalFilename;
-  const course_code  = (Array.isArray(fields.course_code) ? fields.course_code[0] : fields.course_code);
-  const video_id     = (Array.isArray(fields.video_id)    ? fields.video_id[0]    : fields.video_id);
-  const content_type = (Array.isArray(fields.content_type)? fields.content_type[0]: fields.content_type) || file.mimetype || 'application/octet-stream';
+  const one = (v) => (Array.isArray(v) ? v[0] : v);
+  const filename     = one(fields.filename)     || file.originalFilename;
+  const course_code  = one(fields.course_code);
+  const video_id     = one(fields.video_id);
+  const content_type = one(fields.content_type) || file.mimetype || 'application/octet-stream';
   const isVideo = content_type.startsWith('video/');
 
+  const cleanup = async () => { await unlink(file.filepath).catch(() => {}); };
+
+  // ── Video feature is disabled — reject video uploads at the door ─────────
+  if (isVideo && !env.VIDEO_UPLOADS_ENABLED) {
+    await cleanup();
+    return res.status(422).json({
+      success: false,
+      code: 'VIDEO_DISABLED',
+      message: 'Video uploads are currently disabled. Documents (PDF, PPT, DOCX, images) are supported.',
+    });
+  }
+
   if (!filename || !course_code || !video_id) {
-    await unlink(file.filepath).catch(() => {});
+    await cleanup();
     return res.status(400).json({ success: false, message: 'filename, course_code and video_id are required' });
   }
 
   const objectKey = s3.buildVideoKey(course_code, video_id, filename);
 
   try {
-    // ── 1. Save locally ───────────────────────────────────────────────────
-    local.saveVideo(file.filepath, objectKey);
-    console.log(`[upload] Saved locally: ${objectKey}`);
+    // ── 1. Upload to Zata and BLOCK on it ─────────────────────────────────
+    await s3.uploadFile(objectKey, file.filepath, content_type, file.size);
 
-    // ── 2. Push to Zata in background ────────────────────────────────────
-    if (s3.isConfigured()) {
-      s3.uploadFile(objectKey, local.videoPath(objectKey), content_type, file.size)
-        .then(() => console.log(`[upload] Synced to Zata: ${objectKey}`))
-        .catch((e) => console.warn(`[upload] Zata sync failed (non-fatal): ${e.message}`));
+    // ── 2. Verify it actually landed before we tell anyone it succeeded ────
+    let verifiedSize = file.size;
+    try {
+      const head = await s3.headObject(objectKey);
+      if (head?.ContentLength != null) verifiedSize = Number(head.ContentLength);
+    } catch (headErr) {
+      return res.status(502).json({
+        success: false,
+        message: 'Upload could not be verified in storage — please retry.',
+        detail: headErr.message,
+      });
     }
 
-    // ── 3. Thumbnail + duration — videos only (best-effort, non-blocking) ──
-    if (isVideo) {
-      local.generateThumbnail(objectKey, video_id).catch(() => {});
-      local.probeDuration(objectKey).then((dur) => {
-        if (dur > 0) svc.updateVideo(video_id, { duration_sec: dur }).catch(() => {});
-      }).catch(() => {});
+    // ── 3. Optional local read cache. Failure here is genuinely harmless. ──
+    if (env.STORAGE_LOCAL_CACHE) {
+      try { local.saveVideo(file.filepath, objectKey); } catch { /* cache only */ }
     }
 
-    ok(res, { object_key: objectKey, file_size: file.size, mime_type: content_type });
+    return ok(res, { object_key: objectKey, file_size: verifiedSize, mime_type: content_type });
+  } catch (err) {
+    // Nothing is written to the database when the object is not in storage.
+    return res.status(502).json({
+      success: false,
+      message: 'Storage upload failed — nothing was saved. Please retry.',
+      detail: err.message,
+    });
   } finally {
-    // Temp file from formidable — safe to delete since we copied it
-    await unlink(file.filepath).catch(() => {});
+    await cleanup();
   }
 });
 
@@ -354,6 +394,9 @@ export const requestUploadUrl = asyncHandler(async (req, res) => {
     return res.status(503).json({ success: false, message: 'Storage not configured' });
   }
   const { filename, course_code, video_id, content_type } = req.body;
+  if ((content_type || '').startsWith('video/') && !env.VIDEO_UPLOADS_ENABLED) {
+    return res.status(422).json({ success: false, code: 'VIDEO_DISABLED', message: 'Video uploads are currently disabled.' });
+  }
   if (!filename || !course_code || !video_id) {
     return res.status(400).json({ success: false, message: 'filename, course_code and video_id are required' });
   }

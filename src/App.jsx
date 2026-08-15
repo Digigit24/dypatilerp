@@ -51,6 +51,7 @@ import ResearchProfilePage from './pages/student/ResearchProfilePage.jsx'
 import SubmissionsPage from './pages/student/SubmissionsPage.jsx'
 import SubmitPage from './pages/student/SubmitPage.jsx'
 import { useUiStore } from './store/uiStore.js'
+import { isVideoEnabled } from './lib/features.js'
 
 const ADMIN_ROLES = ['admin', 'coordinator', 'academic_guide', 'industry_mentor']
 
@@ -102,8 +103,11 @@ export default function App() {
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="formats" element={<StudentFormatsPage />} />
           <Route path="assignments" element={<StudentAssignmentsPage />} />
-          <Route path="lectures" element={<LecturesGalleryPage />} />
-          <Route path="lectures/:id" element={<LecturePlayerPage />} />
+          {/* Lectures/video disabled — see CLAUDE.md. Deep links redirect home. */}
+          {isVideoEnabled() ? <>
+            <Route path="lectures" element={<LecturesGalleryPage />} />
+            <Route path="lectures/:id" element={<LecturePlayerPage />} />
+          </> : <Route path="lectures/*" element={<Navigate to="/student/dashboard" replace />} />}
         </Route>
 
         {/* Admin routes */}
@@ -133,7 +137,10 @@ export default function App() {
           <Route path="formats" element={<FormatsPage />} />
           <Route path="assignments" element={<AssignmentsPage />} />
           <Route path="lectures" element={<MediaManagerPage />} />
-          <Route path="lectures/:id" element={<AdminLectureDetailPage />} />
+          {/* Video detail/player is disabled; the media library itself stays for documents. */}
+          {isVideoEnabled()
+            ? <Route path="lectures/:id" element={<AdminLectureDetailPage />} />
+            : <Route path="lectures/:id" element={<Navigate to="/admin/lectures" replace />} />}
           <Route path="courses" element={<Navigate to="/admin/wizard" replace />} />
           <Route path="courses/:id/settings" element={<CourseSettingsPage />} />
           <Route path="users" element={<UserManagementPage />} />

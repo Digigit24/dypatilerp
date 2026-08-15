@@ -380,6 +380,214 @@ const run = async () => {
     `);
     console.log(`✓  reconciled ${healed.rowCount} applicant(s) stuck in test_pending with a submitted attempt`);
 
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // 25. V2 SUBMISSION MODEL — additive only, zero deletion.
+    //     See documentation/SOP-V2.html §2 and CLAUDE.md before changing.
+    //     This block is BEHAVIOUR-NEUTRAL: it only adds structure. No existing
+    //     code path reads the new columns until the V2 phases are wired up.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // 25a. Milestones become Targets. Rename in place — no data is moved — and
+    //      leave an auto-updatable compatibility view behind so every existing
+    //      query, insert and update against progress_reports keeps working
+    //      while the application cuts over across several deploys.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM pg_class WHERE relname='progress_reports' AND relkind='r')
+           AND NOT EXISTS (SELECT 1 FROM pg_class WHERE relname='targets' AND relkind='r') THEN
+          ALTER TABLE progress_reports RENAME TO targets;
+          CREATE VIEW progress_reports AS SELECT * FROM targets;
+        END IF;
+      END $$;
+    `);
+    await client.query(`
+      ALTER TABLE targets
+        ADD COLUMN IF NOT EXISTS requires_file BOOLEAN DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS is_mandatory  BOOLEAN DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS order_index   INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS created_by    UUID REFERENCES users(id),
+        ADD COLUMN IF NOT EXISTS approved_at   TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS approved_by   UUID REFERENCES users(id)
+    `);
+    await client.query(`COMMENT ON COLUMN targets.module_name IS 'Target name — labelled "Target" in the UI (was milestone/module)'`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_targets_student_sem ON targets(student_user_id, semester)`);
+    console.log('✓  targets: renamed from progress_reports (+ compat view) and extended');
+
+    // 25b. Progress-report cycles — one per batch per semester (6-monthly).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS progress_report_cycles (
+        id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        batch_id    UUID NOT NULL REFERENCES batches(id) ON DELETE RESTRICT,
+        semester    INTEGER NOT NULL,
+        title       VARCHAR(255) NOT NULL,
+        description TEXT,
+        opens_at    DATE,
+        due_date    DATE,
+        status      VARCHAR(12) NOT NULL DEFAULT 'open',
+        created_by  UUID REFERENCES users(id),
+        created_at  TIMESTAMP DEFAULT NOW(),
+        updated_at  TIMESTAMP DEFAULT NOW(),
+        UNIQUE (batch_id, semester)
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_pr_cycles_batch ON progress_report_cycles(batch_id)`);
+    console.log('✓  progress_report_cycles table');
+
+    // 25c. The third submission kind.
+    await client.query(`ALTER TYPE submission_type ADD VALUE IF NOT EXISTS 'target'`).catch(() => {});
+
+    // 25d. Submissions: links to the thing being submitted against, a snapshot
+    //      of the workflow that applied, and merge bookkeeping.
+    await client.query(`
+      ALTER TABLE submissions
+        ADD COLUMN IF NOT EXISTS cycle_id       UUID REFERENCES progress_report_cycles(id),
+        ADD COLUMN IF NOT EXISTS target_id      UUID REFERENCES targets(id),
+        ADD COLUMN IF NOT EXISTS workflow_kind  VARCHAR(12),
+        ADD COLUMN IF NOT EXISTS merged_into_id UUID REFERENCES submissions(id),
+        ADD COLUMN IF NOT EXISTS legacy_flag    VARCHAR(24)
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_submissions_cycle  ON submissions(cycle_id)  WHERE cycle_id IS NOT NULL`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_submissions_target ON submissions(target_id) WHERE target_id IS NOT NULL`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_submissions_merged ON submissions(merged_into_id) WHERE merged_into_id IS NOT NULL`);
+    console.log('✓  submissions: cycle_id, target_id, workflow_kind, merge bookkeeping');
+
+    // 25e. Media: named file slots, folder taxonomy keys, storage verification.
+    await client.query(`
+      ALTER TABLE videos
+        ADD COLUMN IF NOT EXISTS slot         VARCHAR(24),
+        ADD COLUMN IF NOT EXISTS batch_id_ref UUID REFERENCES batches(id),
+        ADD COLUMN IF NOT EXISTS semester     INTEGER,
+        ADD COLUMN IF NOT EXISTS preview_key  TEXT,
+        ADD COLUMN IF NOT EXISTS checksum     VARCHAR(64),
+        ADD COLUMN IF NOT EXISTS verified_at  TIMESTAMP
+    `);
+    await client.query(`
+      ALTER TABLE media_folders
+        ADD COLUMN IF NOT EXISTS batch_id  UUID REFERENCES batches(id) ON DELETE CASCADE,
+        ADD COLUMN IF NOT EXISTS semester  INTEGER,
+        ADD COLUMN IF NOT EXISTS kind      VARCHAR(24),
+        ADD COLUMN IF NOT EXISTS is_system BOOLEAN DEFAULT FALSE
+    `);
+    console.log('✓  media: file slots, folder taxonomy, storage verification columns');
+
+    // 25f. Document-style feedback. `comments` stays the plain-text mirror used
+    //      by emails, lists and exports; feedback_html is the document view.
+    await client.query(`
+      ALTER TABLE approvals
+        ADD COLUMN IF NOT EXISTS feedback_html       TEXT,
+        ADD COLUMN IF NOT EXISTS feedback_updated_at TIMESTAMP
+    `);
+    console.log('✓  approvals: document-style feedback columns');
+
+    // 25g. Permissions for the new modules.
+    //      CRITICAL: every existing progress_reports grant is mirrored onto
+    //      targets with the SAME scope. Without this, renaming the module locks
+    //      every coordinator, guide and scholar out of targets on deploy.
+    await client.query(`
+      INSERT INTO permissions (module, action)
+      SELECT m.module, a.action::permission_action
+      FROM (VALUES ('targets'),('storage')) AS m(module)
+      CROSS JOIN (VALUES ('create'),('read'),('update'),('delete')) AS a(action)
+      ON CONFLICT (module, action) DO NOTHING
+    `);
+    const mirrored = await client.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT rp.role_id, pt.id, rp.scope
+      FROM role_permissions rp
+      JOIN permissions pp ON pp.id = rp.permission_id AND pp.module = 'progress_reports'
+      JOIN permissions pt ON pt.module = 'targets' AND pt.action = pp.action
+      ON CONFLICT (role_id, permission_id) DO NOTHING
+    `);
+    await client.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT r.id, p.id, 'all' FROM roles r CROSS JOIN permissions p
+      WHERE r.name = 'admin' AND p.module = 'storage'
+      ON CONFLICT (role_id, permission_id) DO NOTHING
+    `);
+    console.log(`✓  permissions: targets (${mirrored.rowCount} grants mirrored from progress_reports) + storage`);
+
+    // 25h. BACKFILL — classify what already exists so old and new read correctly.
+
+    // Mark every pre-existing submission so the UI can tell V1 rows from V2 rows.
+    const flagged = await client.query(`UPDATE submissions SET legacy_flag='pre_v2' WHERE legacy_flag IS NULL`);
+
+    // Stamp the workflow that ACTUALLY applied. Old assignments really did go
+    // through an approval chain; recording that keeps their history readable
+    // after assignments stop being approved.
+    const stamped = await client.query(`
+      UPDATE submissions SET workflow_kind =
+        CASE WHEN submission_type = 'assignment'
+                  AND EXISTS (SELECT 1 FROM approvals a WHERE a.submission_id = submissions.id)
+             THEN 'chain'
+             WHEN submission_type = 'assignment' THEN 'none'
+             ELSE 'chain' END
+      WHERE workflow_kind IS NULL
+    `);
+
+    // One cycle per batch per semester actually reached, plus semester 1 for
+    // every batch that is upcoming or active.
+    await client.query(`
+      INSERT INTO progress_report_cycles (batch_id, semester, title, status)
+      SELECT b.id, s.sem,
+             'Progress Report — Semester ' || s.sem,
+             CASE WHEN s.sem = mx.max_sem THEN 'open' ELSE 'closed' END
+      FROM batches b
+      JOIN (SELECT batch_id, GREATEST(MAX(current_semester), 1) AS max_sem
+              FROM batch_enrollments WHERE status = 'active' GROUP BY batch_id) mx
+        ON mx.batch_id = b.id
+      CROSS JOIN LATERAL generate_series(1, mx.max_sem) AS s(sem)
+      ON CONFLICT (batch_id, semester) DO NOTHING
+    `);
+    const cycles = await client.query(`
+      INSERT INTO progress_report_cycles (batch_id, semester, title, status)
+      SELECT b.id, 1, 'Progress Report — Semester 1', 'open'
+      FROM batches b WHERE b.status IN ('upcoming','active')
+      ON CONFLICT (batch_id, semester) DO NOTHING
+    `);
+
+    // Attach legacy progress reports to their semester's cycle.
+    const linked = await client.query(`
+      UPDATE submissions s SET cycle_id = c.id
+      FROM progress_report_cycles c
+      WHERE s.submission_type = 'progress_report'
+        AND s.cycle_id IS NULL
+        AND c.batch_id = s.batch_id
+        AND c.semester = s.semester
+    `);
+    console.log(`✓  backfill: ${flagged.rowCount} flagged pre_v2, ${stamped.rowCount} workflow_kind stamped, ${linked.rowCount} reports linked to cycles`);
+
+    // 25i. Duplicate guards — created ONLY when the data is already clean.
+    //      Namita/Satish-style split reports must be merged first (SOP-V2 §3
+    //      Step 3). Attempting this on dirty data would abort the migration, so
+    //      we check first and report instead of failing.
+    const dupCycle = await client.query(`
+      SELECT COUNT(*)::int AS n FROM (
+        SELECT cycle_id, student_user_id FROM submissions
+        WHERE cycle_id IS NOT NULL AND merged_into_id IS NULL
+        GROUP BY cycle_id, student_user_id HAVING COUNT(*) > 1
+      ) d
+    `);
+    if (dupCycle.rows[0].n === 0) {
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_sub_cycle
+          ON submissions (cycle_id, student_user_id)
+          WHERE cycle_id IS NOT NULL AND merged_into_id IS NULL
+      `);
+      console.log('✓  uq_sub_cycle created — one progress report per scholar per cycle');
+    } else {
+      console.log(`⚠  uq_sub_cycle SKIPPED — ${dupCycle.rows[0].n} scholar/cycle pair(s) still have multiple submissions.`);
+      console.log('   Run the merge (documentation/SOP-V2.html §3 Step 3), then re-run this migration.');
+      console.log('   Inspect with query 2 of documentation/diagnostics/audit-submissions.sql');
+    }
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_sub_target
+        ON submissions (target_id, student_user_id)
+        WHERE target_id IS NOT NULL AND merged_into_id IS NULL
+    `);
+    console.log('✓  uq_sub_target created — one submission per scholar per target');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

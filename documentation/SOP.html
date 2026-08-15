@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>DYPERF ERP — Role-wise SOP &amp; Complete Software Lifecycle</title>
+<style>
+:root{
+  --bg:#f8f6f5; --surface:#ffffff; --panel:#fbfaf9; --border:#e6e1dd;
+  --text:#1b1917; --secondary:#57534e; --muted:#8b8580;
+  --accent:#4f46e5; --accent-tint:#eef2ff;
+  --ok:#059669; --ok-t:#ecfdf5; --warn:#b45309; --warn-t:#fffbeb;
+  --bad:#dc2626; --bad-t:#fef2f2; --info:#0369a1; --info-t:#f0f9ff;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+html[data-theme="dark"]{
+  --bg:#121212; --surface:#1b1b1d; --panel:#212124; --border:#2f2f33;
+  --text:#f3f2f1; --secondary:#b3aeaa; --muted:#807a76;
+  --accent:#ff5c8a; --accent-tint:#3a1f28;
+  --ok:#34d399; --ok-t:#0d2a22; --warn:#fbbf24; --warn-t:#2c2410;
+  --bad:#f87171; --bad-t:#2c1414; --info:#7dd3fc; --info-t:#0e2230;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.layout{display:flex;min-height:100vh}
+/* ── Sidebar ─────────────────────────────────────────── */
+.side{width:290px;flex:0 0 290px;background:var(--surface);border-right:1px solid var(--border);
+  position:sticky;top:0;height:100vh;overflow:auto;padding:20px 14px 40px}
+.brand{padding:6px 10px 14px;border-bottom:1px solid var(--border);margin-bottom:14px}
+.brand h1{font-size:15px;margin:0 0 4px;letter-spacing:-.2px}
+.brand p{margin:0;font-size:11.5px;color:var(--muted)}
+.side input{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:9px;
+  background:var(--panel);color:var(--text);font-size:13px;margin-bottom:12px}
+.side .grp{font-size:10px;font-weight:800;letter-spacing:.14em;color:var(--muted);
+  padding:14px 10px 6px;text-transform:uppercase}
+.side a{display:block;padding:7px 10px;border-radius:8px;font-size:13.2px;color:var(--secondary)}
+.side a:hover{background:var(--panel);text-decoration:none;color:var(--text)}
+.side a.on{background:var(--accent-tint);color:var(--accent);font-weight:600}
+/* ── Main ────────────────────────────────────────────── */
+.main{flex:1;min-width:0;padding:34px 46px 120px;max-width:1180px}
+.topbar{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-bottom:18px}
+.btn{border:1px solid var(--border);background:var(--surface);color:var(--text);
+  padding:7px 13px;border-radius:9px;font-size:12.5px;cursor:pointer;font-weight:600}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+h2{font-size:27px;margin:56px 0 6px;letter-spacing:-.5px;scroll-margin-top:20px;
+   padding-bottom:10px;border-bottom:2px solid var(--border)}
+h2:first-of-type{margin-top:6px}
+h3{font-size:19px;margin:34px 0 8px;letter-spacing:-.2px;scroll-margin-top:20px}
+h4{font-size:15px;margin:22px 0 6px;color:var(--secondary);text-transform:uppercase;
+   letter-spacing:.08em;font-weight:800}
+p{margin:10px 0}
+ul,ol{margin:10px 0 10px 22px;padding:0}
+li{margin:5px 0}
+code{font-family:var(--mono);font-size:12.6px;background:var(--panel);
+  border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+/* ── Components ──────────────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:20px 22px;margin:16px 0}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(255px,1fr))}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.kpi b{display:block;font-size:22px;letter-spacing:-.5px}
+.kpi span{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.4px;
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+th{background:var(--panel);text-align:left;padding:10px 12px;font-size:11px;
+  text-transform:uppercase;letter-spacing:.09em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:800}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:0}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10.5px;
+  font-weight:800;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.t-ok{background:var(--ok-t);color:var(--ok)}
+.t-warn{background:var(--warn-t);color:var(--warn)}
+.t-bad{background:var(--bad-t);color:var(--bad)}
+.t-info{background:var(--info-t);color:var(--info)}
+.t-neutral{background:var(--panel);color:var(--secondary);border:1px solid var(--border)}
+.note{border-left:4px solid var(--accent);background:var(--accent-tint);
+  padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;font-size:13.6px}
+.warnbox{border-left:4px solid var(--warn);background:var(--warn-t);
+  padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;font-size:13.6px}
+.badbox{border-left:4px solid var(--bad);background:var(--bad-t);
+  padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;font-size:13.6px}
+.okbox{border-left:4px solid var(--ok);background:var(--ok-t);
+  padding:12px 16px;border-radius:0 10px 10px 0;margin:14px 0;font-size:13.6px}
+/* Step list */
+.steps{list-style:none;margin:16px 0;padding:0;counter-reset:s}
+.steps>li{counter-increment:s;position:relative;padding:0 0 20px 46px;
+  border-left:2px solid var(--border);margin-left:15px}
+.steps>li:last-child{border-left-color:transparent;padding-bottom:0}
+.steps>li::before{content:counter(s);position:absolute;left:-15px;top:-2px;width:29px;height:29px;
+  border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;
+  font-size:12.5px;font-weight:800}
+.steps>li b{display:block;font-size:14.8px;margin-bottom:2px}
+.steps>li .who{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+/* Flow chips */
+.flow{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:14px 0}
+.chip{background:var(--surface);border:1px solid var(--border);border-radius:99px;
+  padding:6px 13px;font-size:12.5px;font-weight:650}
+.chip.a{border-color:var(--accent);color:var(--accent);background:var(--accent-tint)}
+.chip.r{border-color:var(--bad);color:var(--bad);background:var(--bad-t)}
+.arr{color:var(--muted);font-weight:800}
+/* Role header */
+.rolehead{display:flex;gap:14px;align-items:center;background:var(--surface);
+  border:1px solid var(--border);border-left:5px solid var(--accent);border-radius:12px;padding:16px 20px;margin:18px 0}
+.rolehead .ic{width:44px;height:44px;border-radius:11px;background:var(--accent-tint);
+  color:var(--accent);display:grid;place-items:center;font-size:19px;font-weight:800;flex:0 0 44px}
+.rolehead h3{margin:0;font-size:19px}
+.rolehead p{margin:2px 0 0;font-size:12.8px;color:var(--secondary)}
+details{background:var(--surface);border:1px solid var(--border);border-radius:11px;
+  padding:12px 16px;margin:10px 0}
+summary{cursor:pointer;font-weight:700;font-size:14px}
+.mono{font-family:var(--mono);font-size:12.5px}
+.hide{display:none !important}
+hr{border:0;border-top:1px solid var(--border);margin:34px 0}
+@media print{.side,.topbar{display:none}.main{padding:0;max-width:100%}
+  h2{page-break-before:always}h2:first-of-type{page-break-before:auto}
+  body{background:#fff}}
+@media(max-width:1000px){.side{display:none}.main{padding:20px}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="side">
+  <div class="brand">
+    <h1>DYPERF ERP — Operations Manual</h1>
+    <p>Role-wise SOP · Full lifecycle · Gap audit</p>
+  </div>
+  <input id="q" type="search" placeholder="Filter sections…"/>
+  <div id="toc"></div>
+</nav>
+<main class="main">
+<div class="topbar">
+  <button class="btn" onclick="tgl()">Toggle theme</button>
+  <button class="btn" onclick="openAll()">Expand all</button>
+  <button class="btn" onclick="window.print()">Print / PDF</button>
+</div>
+
+<h2 id="about">0 · About this document</h2>
+<p>This is the single operating manual for the <b>DYPERF ERP</b> (Dr. D. Y. Patil Education
+and Research Foundation — Applied Business Research / Post-Doctoral Fellowship platform).
+It is written for three audiences at once:</p>
+<div class="grid">
+  <div class="kpi"><span>For staff</span><b>SOPs</b>
+    <p style="font-size:12.8px;color:var(--secondary);margin:6px 0 0">Exactly what each role
+    clicks, in what order, and what must never be skipped.</p></div>
+  <div class="kpi"><span>For trainers</span><b>Lifecycle</b>
+    <p style="font-size:12.8px;color:var(--secondary);margin:6px 0 0">The whole 2-year, 4-semester
+    journey in sequence, so training can follow the real timeline.</p></div>
+  <div class="kpi"><span>For the build team</span><b>Gap audit</b>
+    <p style="font-size:12.8px;color:var(--secondary);margin:6px 0 0">What is missing before this
+    can be handed to real users, ranked P0/P1/P2 with the fix.</p></div>
+</div>
+<div class="note"><b>How to read the status tags.</b>
+<span class="tag t-ok">Built</span> the feature exists and works end-to-end ·
+<span class="tag t-warn">Partial</span> exists but has a hole that will bite in production ·
+<span class="tag t-bad">Missing</span> nothing in the codebase does this yet.</div>
+
+<h3 id="stack">System at a glance</h3>
+<table>
+<tr><th>Layer</th><th>What it is</th><th>Where</th></tr>
+<tr><td>Frontend</td><td>React 18 + Vite, Tailwind v4, React Router v6, Zustand stores</td><td><code>src/</code></td></tr>
+<tr><td>Backend</td><td>Express (ESM), modular routes/controllers/services</td><td><code>backend/src/modules/</code></td></tr>
+<tr><td>Database</td><td>PostgreSQL (Neon serverless) — <code>schema.sql</code> + incremental <code>alter.js</code></td><td><code>backend/src/db/</code></td></tr>
+<tr><td>Auth</td><td>JWT access + refresh tokens; separate token path for entrance-test candidates</td><td><code>modules/auth</code>, <code>modules/tests/test-auth</code></td></tr>
+<tr><td>Authorization</td><td>Scoped RBAC — (role, module, action, scope) where scope ∈ all / course / batch / own</td><td><code>middleware/rbac.js</code></td></tr>
+<tr><td>Email</td><td>Brevo (API key or SMTP), 16 registered templates + queue worker for scheduled scans</td><td><code>modules/email</code>, <code>notify.service.js</code></td></tr>
+<tr><td>Media</td><td>Lectures, formats and submission attachments all go through one media pipeline (<code>videos</code> table) with signed session streaming</td><td><code>modules/videos</code></td></tr>
+<tr><td>Audit</td><td>Global middleware logs every successful create/update/delete on every module</td><td><code>middleware/auditTrail.js</code></td></tr>
+</table>
+
+<h3 id="roles">The six roles</h3>
+<table>
+<tr><th>Role</th><th>Who they are in real life</th><th>Lives in</th><th>Scope of what they see</th></tr>
+<tr><td><b>Admin</b></td><td>Program head / system owner. One or two people.</td><td><code>/admin</code></td><td><span class="tag t-info">all</span> Everything, every course, every batch, plus Users, Roles, Settings, Audit Logs, Email Templates.</td></tr>
+<tr><td><b>Coordinator</b></td><td>Program officer who actually runs admissions and day-to-day academics.</td><td><code>/admin</code></td><td><span class="tag t-info">course</span> Their assigned course(s) — applicants, students, batches, fees, assignments, tests, approvals stage 1.</td></tr>
+<tr><td><b>Academic Guide</b></td><td>Internal faculty supervising a scholar's research.</td><td><code>/admin</code></td><td><span class="tag t-info">batch</span> Only scholars assigned to them — read submissions, act on their approval stage, read progress.</td></tr>
+<tr><td><b>Industry Mentor</b></td><td>External industry supervisor, final reviewer.</td><td><code>/admin</code></td><td><span class="tag t-info">batch</span> Same as guide but read-only on submissions; acts on the final approval stage.</td></tr>
+<tr><td><b>Student (Scholar)</b></td><td>An enrolled fellow, 2 years / 4 semesters.</td><td><code>/student</code></td><td><span class="tag t-info">own</span> Own submissions, fees, progress, profile; course-wide assignments, formats, lectures.</td></tr>
+<tr><td><b>Applicant (Candidate)</b></td><td>Not yet a user — a row in <code>applicants</code>. Only ever touches the public apply form and the test screens.</td><td><code>/apply</code>, <code>/test-login</code></td><td>No dashboard at all.</td></tr>
+</table>
+<div class="warnbox"><b>Important mental model.</b> Coordinator, Academic Guide and Industry Mentor
+all log into the <i>same</i> <code>/admin</code> shell. They do not see different apps — they see
+different <i>menus</i>, because the sidebar is filtered by <code>GET /roles/my-permissions</code>
+and fails closed (nothing shows until permissions load). Train them on "your menu will be shorter,
+that is correct" so a guide does not report a missing Fees tab as a bug.</div>
+
+<h2 id="lifecycle">1 · The complete software lifecycle</h2>
+<p>Read this section top to bottom once. Everything else in this manual is a zoom-in on one of
+these phases. Time markers assume a standard 24-month, 4-semester fellowship.</p>
+
+<div class="flow">
+  <span class="chip a">P0 Setup</span><span class="arr">→</span>
+  <span class="chip a">P1 Admissions</span><span class="arr">→</span>
+  <span class="chip a">P2 Enrolment</span><span class="arr">→</span>
+  <span class="chip a">P3 Sem 1</span><span class="arr">→</span>
+  <span class="chip a">Sem 2</span><span class="arr">→</span>
+  <span class="chip a">Sem 3</span><span class="arr">→</span>
+  <span class="chip a">Sem 4</span><span class="arr">→</span>
+  <span class="chip a">P4 Completion</span>
+</div>
+
+<h3 id="p0">Phase 0 — One-time institutional setup</h3>
+<p><b>Who:</b> Admin only. <b>When:</b> before any applicant is touched. <b>Where:</b>
+<code>/admin/wizard</code> (six tabs) plus <code>/admin/settings</code>.</p>
+<ol class="steps">
+<li><b>Configure email delivery</b><span class="who">Admin · /admin/settings</span>
+  Enter the Brevo API key / sender name / sender email, then use <b>Send test email</b>.
+  Nothing else in the system works properly until this is green — candidate credentials,
+  shortlist letters, approval alerts and fee reminders all ride on it.
+  <code>GET /settings/email/effective</code> tells you whether the server is in
+  <span class="tag t-ok">live</span> or <span class="tag t-warn">mock</span> mode.</li>
+<li><b>Brand the portal</b><span class="who">Admin · /admin/settings</span>
+  Upload light and dark logos (data-URL, under 500&nbsp;KB each) and set the UI labels — this is
+  where "Student" becomes "Scholar" across every screen for every role.</li>
+<li><b>Create the course</b><span class="who">Admin · /admin/wizard → Courses</span>
+  Name, code, duration (24 months), max students per batch, and the <b>fee structure</b> as a
+  per-semester map, e.g. <code>{"1":50000,"2":50000,"3":50000,"4":50000}</code>.
+  Course preferences also decide which modules appear for that course.</li>
+<li><b>Create the batch</b><span class="who">Admin / Coordinator · /admin/batches</span>
+  A batch belongs to one course and carries start date, end date, seat cap and status
+  (<code>upcoming → active → completed</code>). Every scholar, fee, submission, assignment and
+  progress report hangs off a batch — a batch is the real unit of operation.</li>
+<li><b>Define the approval workflow for that batch</b><span class="who">Admin · /admin/wizard → Workflows</span>
+  This writes <code>batches.approval_config.stages</code>. Default is the classic three layers:
+  Coordinator (role) → Academic Guide (the scholar's own guide) → Industry Mentor (the scholar's own mentor).
+  You can add, remove or reorder stages, or point a stage at a specific user.
+  <b>Set this before the first submission</b> — the chain is snapshotted at submit time.</li>
+<li><b>Create staff accounts and assign roles</b><span class="who">Admin · /admin/users, /admin/roles</span>
+  Create the coordinator, guides and mentors. Assign each a role <i>scoped</i> to the course or
+  batch. Then send credentials (<code>POST /users/:id/send-credentials</code>, or bulk from the wizard).</li>
+<li><b>Tune notification rules</b><span class="who">Admin · /admin/wizard → Notifications</span>
+  Per event, choose channel and receivers. Instant events (application received, test completed,
+  stage opened, approved, needs revision) fire on the action; scheduled events
+  (<code>fee_due</code>, <code>deadline_overdue</code>) are swept daily by the queue worker.</li>
+<li><b>Build the entrance test</b><span class="who">Admin / Coordinator · /admin/test-builder</span>
+  Create the test (duration, total marks, passing marks, instructions), add sections and questions
+  (MCQ, true/false, short, long, file upload), optionally set <code>pick_count</code> per section
+  for randomised question sets — then <b>Publish</b>. A draft test cannot be assigned.</li>
+<li><b>Upload formats and lectures</b><span class="who">Admin / Coordinator · /admin/formats, /admin/lectures</span>
+  Formats are the downloadable templates (progress report format, thesis chapter format…).
+  Lectures are the media library, organised in folders, streamed to scholars through signed sessions.</li>
+</ol>
+<div class="okbox"><b>Done-when check for Phase 0:</b> test email delivered · course exists with a
+fee map · batch exists and is <code>active</code> · approval_config saved · coordinator can log in
+and sees Applicants · entrance test shows status <code>published</code>.</div>
+
+<h3 id="p1">Phase 1 — Admissions pipeline</h3>
+<p><b>Who:</b> Coordinator drives it, Admin supervises. <b>Where:</b> <code>/admin/applicants</code>
+(list view or Kanban board). <b>Duration:</b> typically 6–10 weeks per intake.</p>
+<div class="flow">
+  <span class="chip">Applied</span><span class="arr">→</span>
+  <span class="chip">Shortlisted for Test</span><span class="arr">→</span>
+  <span class="chip">Test Sent</span><span class="arr">→</span>
+  <span class="chip">Test Submitted</span><span class="arr">→</span>
+  <span class="chip">Final Shortlist</span><span class="arr">→</span>
+  <span class="chip">Registration Fee Paid</span><span class="arr">→</span>
+  <span class="chip a">Enrolled</span>
+  <span class="arr">·</span><span class="chip r">Rejected (side branch, any stage)</span>
+</div>
+<ol class="steps">
+<li><b>Candidate applies</b><span class="who">Public · /apply</span>
+  Multi-step public form → <code>POST /public/applications</code> (rate-limited, body-size capped).
+  Creates an <code>applicants</code> row at status <code>submitted</code>. Two emails fire:
+  <code>application_submitted</code> to the candidate and <code>application_submitted_staff</code>
+  to whoever the notification rules name. Candidate lands on <code>/confirmation</code>.
+  <br><i>Alternative:</i> Coordinator bulk-imports candidates from Excel via the Import drawer on
+  <code>/admin/applicants</code>, or adds one manually.</li>
+<li><b>Screen the application</b><span class="who">Coordinator · Applied column</span>
+  Open the card, read PhD details, discipline, thesis title, Scopus publications, research statement.
+  Then either <b>Shortlist for Test</b> (→ <code>shortlisted_test</code>) or <b>Reject</b>
+  (a remark is mandatory; the system records which stage they were rejected <i>from</i>).</li>
+<li><b>Send the test</b><span class="who">Coordinator · Shortlisted for Test column</span>
+  Click <b>Send Test</b>, pick the published test → <code>POST /tests/:id/assign</code>.
+  The system creates a candidate login, generates a password, and emails the
+  <code>test_credentials</code> template with the login URL, username, password, duration and
+  section list. Status → <code>test_pending</code>.
+  <br>Column-level bulk action: <b>Remind everyone who hasn't started</b> sends
+  <code>test_reminder</code> to the whole column.</li>
+<li><b>Candidate takes the test</b><span class="who">Candidate · /test-login → /test/:id/instructions → /test/:id</span>
+  Logs in with the emailed credentials (<code>POST /test-auth/login</code>), reads instructions,
+  starts (<code>POST /tests/:id/start</code> — this stamps <code>started_at</code> and freezes the
+  question set), answers with periodic autosave (<code>PATCH /tests/:id/autosave</code>), submits
+  (<code>POST /tests/:id/submit</code>). MCQ and true/false auto-score. Status → <code>test_completed</code>.
+  Emails: <code>test_completed</code> to the candidate, <code>test_completed_staff</code> to staff.
+  <div class="warnbox" style="margin:8px 0 0">The Kanban shows a live <b>Test in progress</b> badge
+  while an attempt is inside its time window. If a candidate is locked out (browser crash, power cut),
+  the coordinator uses <b>Reset attempt</b> — that is the only supported recovery.</div></li>
+<li><b>Review scores and decide</b><span class="who">Coordinator / Admin · Test Submitted column</span>
+  Open <code>/admin/applicants/:id/test-results</code> to see per-question responses, award marks on
+  descriptive answers, and see pass/fail against <code>passing_marks</code>.
+  Then <b>Final Shortlist</b> or <b>Reject</b>.</li>
+<li><b>Final shortlist → registration fee</b><span class="who">Coordinator · Final Shortlist column</span>
+  Moving to <code>shortlisted</code> <b>automatically emails</b>
+  <code>applicant_shortlisted</code> — the interview-qualified letter that carries the registration
+  fee amount and bank details. The column has a bulk <b>Payment reminder</b> action
+  (<code>applicant_shortlist_payment_reminder</code>) with a 24-hour per-candidate cooldown so
+  nobody gets spammed.</li>
+<li><b>Mark the fee received</b><span class="who">Coordinator · Final Shortlist column</span>
+  When the transfer lands, tick the candidates and <b>Mark as paid</b> → status
+  <code>payment_received</code>. This is a manual reconciliation step against the bank statement —
+  there is no payment gateway in the loop.</li>
+<li><b>Convert to scholar</b><span class="who">Coordinator / Admin · Registration Fee Paid column</span>
+  <b>Convert to student</b> → <code>POST /applicants/:id/convert</code>. In one transaction the system:
+  creates the <code>users</code> row (or reuses the test account), generates a fresh password,
+  creates the <code>batch_enrollments</code> row with an enrolment number and
+  <code>current_semester = 1</code>, grants the <code>student</code> role scoped to that batch, and
+  flips the applicant to <code>enrolled</code>. Credentials are then emailed via
+  <code>login_credentials</code>.</li>
+</ol>
+<div class="note"><b>The Rejected column is reversible.</b> A rejected candidate keeps the stage they
+were rejected from, so the Rejected tab can be filtered by origin, and <b>Reconsider</b> puts them
+back into the pipeline with the from-stage marker cleared. Rejection remarks are mandatory and
+permanent — treat them as the official record.</div>
+
+<h3 id="p2">Phase 2 — Onboarding a new scholar (week 0)</h3>
+<p>Conversion creates the account. It does <b>not</b> create everything the scholar needs. This
+checklist is what turns a raw account into a working scholar, and several of its steps are
+manual today (see the <a href="#gaps">gap audit</a>).</p>
+<table>
+<tr><th>#</th><th>Action</th><th>Role</th><th>Screen</th><th>Status</th></tr>
+<tr><td>1</td><td>Send login credentials to the scholar</td><td>Admin / Coordinator</td><td><code>/admin/users</code> or wizard → Credentials (bulk)</td><td><span class="tag t-ok">Built</span></td></tr>
+<tr><td>2</td><td>Assign the Academic Guide</td><td>Coordinator</td><td><code>/admin/students/:id</code> → Guides</td><td><span class="tag t-ok">Built</span></td></tr>
+<tr><td>3</td><td>Assign the Industry Mentor</td><td>Coordinator</td><td><code>/admin/students/:id</code> → Guides</td><td><span class="tag t-ok">Built</span></td></tr>
+<tr><td>4</td><td>Create Semester&nbsp;1 fee rows for the scholar</td><td>Coordinator</td><td><code>/admin/fees</code></td><td><span class="tag t-warn">Manual, one at a time</span></td></tr>
+<tr><td>5</td><td>Create Semester&nbsp;1 progress-report milestones</td><td>Coordinator</td><td><code>/admin/progress</code></td><td><span class="tag t-warn">Manual, one at a time</span></td></tr>
+<tr><td>6</td><td>Publish Semester&nbsp;1 assignments for the batch</td><td>Coordinator</td><td><code>/admin/assignments</code></td><td><span class="tag t-ok">Built (batch-level, done once)</span></td></tr>
+<tr><td>7</td><td>Scholar completes their profile + research profile</td><td>Scholar</td><td><code>/student/profile</code>, <code>/student/profile/research</code></td><td><span class="tag t-ok">Built</span></td></tr>
+</table>
+<div class="badbox"><b>Do not skip step 2 and 3.</b> The approval chain resolves the Academic Guide
+and Industry Mentor stages from <code>student_guides</code> <i>at the moment of submission</i>.
+If no guide is assigned, the stage is created with an empty reviewer and the submission silently
+stalls after coordinator approval. This is the single most likely day-one production failure.</div>
+
+<h3 id="p3">Phase 3 — The academic engine (repeats × 4 semesters)</h3>
+<p>Semesters 1 → 4 are structurally identical. Everything below repeats each semester; only the
+<code>semester</code> number on assignments, fees, progress reports and submissions changes.</p>
+
+<h4>3a · Setting up a semester</h4>
+<ol class="steps">
+<li><b>Publish the semester's assignments</b><span class="who">Coordinator · /admin/assignments</span>
+  Per batch, per semester: title, description, due date, and two switches that matter —
+  <b>Mandatory</b> and <b>Published</b>. Mandatory assignments run the full approval chain;
+  optional ones need only a single coordinator approval. Unpublished assignments are invisible to scholars.</li>
+<li><b>Raise the semester fee</b><span class="who">Coordinator · /admin/fees</span>
+  Create a fee per scholar: batch, semester, amount, due date. The scheduled
+  <code>fee_due</code> scan starts nudging 7 days before the due date and repeats every 3 days.</li>
+<li><b>Define progress milestones</b><span class="who">Coordinator · /admin/progress</span>
+  Per scholar, per semester: a named module (e.g. "Literature Review"), description and due date,
+  starting at <code>not_started</code> / 0%.</li>
+<li><b>Load lectures and formats for the semester</b><span class="who">Coordinator · /admin/lectures, /admin/formats</span>
+  Media can be scoped course-wide or to a single batch; visibility is enforced server-side.</li>
+</ol>
+
+<h4>3b · The scholar's working loop</h4>
+<ol class="steps">
+<li><b>Sign in and read the dashboard</b><span class="who">Scholar · /student/dashboard</span>
+  Pending assignments, submission statuses, fee position, unread notifications.</li>
+<li><b>Download the format</b><span class="who">Scholar · /student/formats</span>
+  Always draft against the current template — reviewers reject on format.</li>
+<li><b>Attend / watch lectures</b><span class="who">Scholar · /student/lectures</span>
+  Streamed through a signed session; watch progress is logged and visible to staff analytics.</li>
+<li><b>Submit the work</b><span class="who">Scholar · /student/assignments → Submit, or /student/submit</span>
+  One submission per assignment, enforced by a DB unique index. Attach the file, then
+  <b>Submit for review</b>. A progress report cannot be submitted without a verified attachment.
+  Status goes <code>draft → submitted</code> and the approval chain is created.</li>
+<li><b>Track it</b><span class="who">Scholar · /student/submissions</span>
+  See the stage-by-stage approval trail, reviewer comments and the remarks thread.</li>
+<li><b>Revise if asked</b><span class="who">Scholar</span>
+  On <code>needs_revision</code>, edit and resubmit — pending approvals are cleared and the chain
+  restarts cleanly from stage 1.</li>
+<li><b>Pay the semester fee</b><span class="who">Scholar · /student/fees</span>
+  The scholar sees amount, due date, status and payments recorded so far. Payment itself happens
+  offline; the coordinator records it.</li>
+<li><b>Keep the research profile current</b><span class="who">Scholar · /student/profile/research</span>
+  Bio, interests, institution, ORCID, Scholar link, publications. Toggling
+  <b>public</b> exposes it at <code>/p/:slug</code> — a genuine public URL, so treat it as publishing.</li>
+</ol>
+
+<h4>3c · The review chain</h4>
+<div class="flow">
+  <span class="chip">Scholar submits</span><span class="arr">→</span>
+  <span class="chip a">Stage 1 · Coordinator</span><span class="arr">→</span>
+  <span class="chip a">Stage 2 · Academic Guide</span><span class="arr">→</span>
+  <span class="chip a">Stage 3 · Industry Mentor</span><span class="arr">→</span>
+  <span class="chip">Approved</span>
+</div>
+<ul>
+<li>Each stage opening emails exactly one party: <code>approval_stage_opened</code> to that stage's reviewer.</li>
+<li>A reviewer may only act on a review assigned to them, or on an unassigned role-slot whose role they hold.
+  <b>There is no blanket admin override</b> — an admin cannot rubber-stamp someone else's named stage.</li>
+<li>Three actions: <b>Approve</b> (advances to the next stage, or finalises), <b>Request revision</b>
+  (bounces to the scholar), <b>Reject</b>. Both reject and request-revision send the scholar the
+  <code>submission_needs_revision</code> email.</li>
+<li>Separately from the chain there is a <b>remarks thread</b> on every submission — any authorised
+  reviewer can leave notes at any time without acting on their stage. Use this for coaching;
+  use the stage action for decisions.</li>
+<li>Optional assignments collapse the chain to a single coordinator approval. Mandatory ones use the
+  batch's <code>approval_config</code>, defaulting to the three layers above.</li>
+</ul>
+
+<h4>3d · Semester rollover</h4>
+<div class="badbox"><b>This is the biggest hole in the lifecycle today.</b> Every enrolment row carries
+<code>batch_enrollments.current_semester</code>, and the whole UI reads it — but
+<b>nothing in the codebase ever writes it after enrolment</b>. There is no endpoint, no button, no
+bulk action. A scholar who finishes Semester 1 stays on Semester 1 forever unless the row is edited
+in the database by hand. See <a href="#gaps">G-01</a> for the proposed fix.</div>
+<p>The rollover that <i>should</i> happen at the end of each semester:</p>
+<ol>
+<li>Confirm every mandatory Semester&nbsp;N assignment is approved (or formally waived).</li>
+<li>Confirm every Semester&nbsp;N progress milestone is <code>completed</code>.</li>
+<li>Confirm the Semester&nbsp;N fee is <code>paid</code> or <code>waived</code>.</li>
+<li>Advance <code>current_semester</code> to N+1 for the batch (or for selected scholars).</li>
+<li>Publish Semester&nbsp;N+1 assignments, fees and milestones.</li>
+<li>Announce the new semester to the batch from <code>/admin/notifications</code>.</li>
+</ol>
+
+<h3 id="p4">Phase 4 — Completion and exit</h3>
+<ol class="steps">
+<li><b>Final submission approved</b><span class="who">Chain</span>
+  The last mandatory Semester&nbsp;4 submission clears all stages.</li>
+<li><b>All dues cleared</b><span class="who">Coordinator · /admin/fees</span>
+  No fee row left in <code>pending</code> or <code>overdue</code>.</li>
+<li><b>Enrolment marked completed</b><span class="who">Coordinator · /admin/students</span>
+  Set <code>batch_enrollments.status = completed</code> via the bulk action on the students page.
+  <span class="tag t-warn">Partial</span> — completion is a status flip; there is no completion
+  certificate, transcript export or exit checklist yet (<a href="#gaps">G-07</a>).</li>
+<li><b>Batch closed</b><span class="who">Admin · /admin/batches</span>
+  Set the batch to <code>completed</code> once every scholar in it is done.</li>
+<li><b>Public research profile stays live</b><span class="who">Alumnus</span>
+  <code>/p/:slug</code> keeps working — it is the lasting artefact of the fellowship.</li>
+</ol>
+
+<h2 id="sops">2 · Role-wise SOPs</h2>
+<p>Each SOP is written so it can be handed to one person as their entire job description on this
+system. Give a new joiner only their own section plus <a href="#lifecycle">Section 1</a>.</p>
+
+<div class="rolehead">
+  <div class="ic">A</div>
+  <div><h3 id="sop-admin">SOP · Administrator</h3>
+  <p>System owner. Configures everything, owns the data, unblocks everyone else. 1–2 people, never more.</p></div>
+</div>
+<h4>What only you can do</h4>
+<ul>
+<li>Create and edit users, and assign or revoke roles (<code>/admin/users</code>, <code>/admin/roles</code>).</li>
+<li>Change what any role is allowed to do, and at what scope (<code>/admin/roles</code>).</li>
+<li>Global settings: email credentials, branding, UI labels (<code>/admin/settings</code>).</li>
+<li>Edit the email template library (<code>/admin/email-templates</code>).</li>
+<li>Read the audit log of every create/update/delete in the system (<code>/admin/audit-logs</code>).</li>
+<li>Bulk-import assignment submissions on behalf of scholars (admin-only endpoint).</li>
+<li>Reset any user's password.</li>
+</ul>
+<h4>First-week SOP (do in this order)</h4>
+<ol class="steps">
+<li><b>Verify email delivery</b><span class="who">/admin/settings</span>
+  Save the Brevo key, send a test to yourself, confirm mode is <b>live</b> not <b>mock</b>.
+  If it says mock, the server <code>.env</code> has no SMTP credentials — no candidate will ever
+  receive a password.</li>
+<li><b>Brand and label</b><span class="who">/admin/settings</span>
+  Logos (light + dark) and the student/scholar wording.</li>
+<li><b>Course → Batch → Workflow</b><span class="who">/admin/wizard</span>
+  Create the course with its fee map, create the batch, then set the batch's approval workflow
+  before anyone can submit anything.</li>
+<li><b>People</b><span class="who">/admin/users → /admin/roles</span>
+  Create the coordinator first, scoped to the course. Then guides and mentors, scoped to the batch.
+  Send credentials. Ask each to log in and confirm their menu looks right.</li>
+<li><b>Notification rules</b><span class="who">/admin/wizard → Notifications</span>
+  Decide who gets staff alerts. If you leave this default, staff alerts go to coordinators and admins.</li>
+<li><b>Dry run</b><span class="who">All screens</span>
+  Before real candidates: apply as a fake candidate, shortlist, send the test, take the test,
+  shortlist finally, mark paid, convert, log in as that scholar, submit an assignment, and approve it
+  through all three stages. If any step surprises you, fix it before go-live — not after.</li>
+</ol>
+<h4>Ongoing rhythm</h4>
+<table>
+<tr><th>Cadence</th><th>Do this</th><th>Where</th></tr>
+<tr><td>Daily</td><td>Scan the dashboard for stalled submissions and overdue fees</td><td><code>/admin</code></td></tr>
+<tr><td>Weekly</td><td>Review the audit log for unexpected deletes or role changes</td><td><code>/admin/audit-logs</code></td></tr>
+<tr><td>Weekly</td><td>Check the notification queue is draining (no stuck sends)</td><td><code>/admin/notifications</code></td></tr>
+<tr><td>Per intake</td><td>Publish the entrance test; verify passing marks are set</td><td><code>/admin/test-builder</code></td></tr>
+<tr><td>Per semester</td><td>Drive the rollover checklist (see <a href="#p3">3d</a>)</td><td>Multiple</td></tr>
+</table>
+<div class="warnbox"><b>Admin cautions.</b> Deleting a format also deletes its underlying media file.
+Changing a batch's <code>approval_config</code> does not retro-fit submissions already in flight.
+Rotating a scholar's password on re-conversion invalidates the one they already have — tell them first.</div>
+
+<div class="rolehead">
+  <div class="ic">C</div>
+  <div><h3 id="sop-coord">SOP · Coordinator</h3>
+  <p>The engine of the program. Runs admissions end-to-end, then runs the academic calendar for every batch in the course.</p></div>
+</div>
+<h4>Your menu</h4>
+<p>Applicants · Students · Batches · Formats · Progress Reports · Assignments · Submissions ·
+Approvals · Fees · Media · Test Builder · Notifications. No Users, Roles, Settings or Audit Logs —
+that is correct, not a bug.</p>
+<h4>Admissions SOP</h4>
+<ol class="steps">
+<li><b>Work the board, not the list</b><span class="who">/admin/applicants → Kanban</span>
+  The Kanban is stage-aware: each column offers exactly the actions valid at that stage, so you
+  cannot skip a step by accident. Use the list view only for search and export.</li>
+<li><b>Applied → screen within 48 hours</b>
+  Open each card, check PhD completion, discipline, publications and the research statement.
+  Shortlist for test, or reject with a real remark (the remark is permanent and is the official reason).</li>
+<li><b>Shortlisted for Test → send in batches</b>
+  Send the test to the whole column at once where possible. Confirm the emails actually went —
+  the toast tells you the send count.</li>
+<li><b>Test Sent → chase, don't wait</b>
+  Use the column's bulk reminder for anyone who hasn't started. Watch for the
+  <b>Test in progress</b> badge; only use <b>Reset attempt</b> for a genuine technical failure, and
+  note why in the candidate's record.</li>
+<li><b>Test Submitted → evaluate descriptive answers</b>
+  Auto-scoring covers MCQ and true/false only. Open the test-results screen and award marks on
+  short/long answers before making a shortlist decision.</li>
+<li><b>Final Shortlist → the fee letter goes automatically</b>
+  Moving a candidate here sends the registration-fee email by itself. Do not also send it manually.
+  Use the bulk payment reminder (24-hour cooldown) as the deadline approaches.</li>
+<li><b>Reconcile payments daily</b>
+  Against the bank statement, tick candidates and mark paid. This is manual and it is your
+  responsibility — no gateway does it for you.</li>
+<li><b>Convert, then immediately complete the onboarding checklist</b>
+  Conversion is not onboarding. Straight after converting: send credentials, assign the academic
+  guide and industry mentor, create the Semester&nbsp;1 fee, create the Semester&nbsp;1 milestones.
+  A scholar without guides will stall at their first submission.</li>
+</ol>
+<h4>Academic SOP (per semester)</h4>
+<ol>
+<li>Publish assignments for the batch with correct semester, due date and mandatory flag.</li>
+<li>Raise fee rows for every active scholar for that semester.</li>
+<li>Create progress milestones per scholar.</li>
+<li>Upload the semester's formats and lectures.</li>
+<li>Clear your approvals queue at least twice a week — you are stage 1, so you are the bottleneck
+    for the entire chain.</li>
+<li>At semester end, run the rollover checklist and announce the next semester to the batch.</li>
+</ol>
+<div class="note"><b>Course switcher.</b> If you run more than one course, the header switcher sets
+the course context that every list obeys. Empty screens are almost always the wrong course selected —
+check the switcher before reporting a bug.</div>
+
+<div class="rolehead">
+  <div class="ic">G</div>
+  <div><h3 id="sop-guide">SOP · Academic Guide</h3>
+  <p>Internal faculty supervisor. Stage 2 of the approval chain. Sees only the scholars assigned to them.</p></div>
+</div>
+<h4>Your menu</h4>
+<p>Students · Submissions · Approvals · Progress Reports · Assignments (read) · Media (read) ·
+Notifications. Everything is scoped to your batch and your scholars.</p>
+<ol class="steps">
+<li><b>Log in and open Approvals</b><span class="who">/admin/approvals</span>
+  This is your work queue. A row appears here when the coordinator has approved a submission and
+  your stage has opened. You also get the <code>approval_stage_opened</code> email.</li>
+<li><b>Read the submission properly</b><span class="who">/admin/submissions</span>
+  Open the attachment, read the content, check it against the published format and the assignment
+  brief. Check the remarks thread for what earlier reviewers already said.</li>
+<li><b>Coach in remarks, decide in the stage action</b>
+  Leave detailed feedback as a remark — it stays with the submission and the scholar sees it.
+  Then take exactly one stage action.</li>
+<li><b>Approve / Request revision / Reject</b>
+  <b>Approve</b> passes it to the Industry Mentor. <b>Request revision</b> returns it to the scholar
+  and restarts the chain on resubmission — always write a comment saying what to change.
+  <b>Reject</b> is for work that should not be resubmitted in its current form.</li>
+<li><b>Track your scholars' progress</b><span class="who">/admin/students/:id, /admin/progress</span>
+  Check milestone completion percentages between submissions, not only at deadlines.</li>
+</ol>
+<div class="warnbox"><b>You cannot act on someone else's stage.</b> If an approval row does not appear
+in your queue, it is either not yet your turn or you are not the assigned guide for that scholar.
+Ask the coordinator to check the guide assignment — do not ask an admin to approve it for you;
+the system deliberately forbids that.</div>
+<h4>Service level</h4>
+<p>Recommended: act on any open stage within <b>5 working days</b>. Everything downstream — the
+mentor's review, the scholar's semester progress, the rollover — waits on you.</p>
+
+<div class="rolehead">
+  <div class="ic">M</div>
+  <div><h3 id="sop-mentor">SOP · Industry Mentor</h3>
+  <p>External industry supervisor. The final approval stage. Read-only everywhere except their own approval action.</p></div>
+</div>
+<h4>Your menu</h4>
+<p>Students (read) · Submissions (read) · Approvals (act) · Progress Reports (read) · Notifications.
+You deliberately cannot edit submissions, fees, assignments or any scholar record.</p>
+<ol class="steps">
+<li><b>Watch for the review email</b>
+  You are notified only when stage 3 opens for one of your scholars — coordinator and guide have
+  already passed it.</li>
+<li><b>Review for applied/industry relevance</b><span class="who">/admin/approvals</span>
+  Your lens is different from the guide's: practical applicability, industry validity of the method,
+  usefulness of the conclusions.</li>
+<li><b>Take the final action</b>
+  <b>Approve</b> marks the whole submission <code>approved</code> and emails the scholar.
+  <b>Request revision</b> sends it back to the scholar and the chain restarts from stage 1 on
+  resubmission — use it deliberately, it costs the scholar a full cycle.</li>
+<li><b>Leave a remark, always</b>
+  A one-line remark on approval is worth more to the scholar than a silent green tick.</li>
+</ol>
+
+<div class="rolehead">
+  <div class="ic">S</div>
+  <div><h3 id="sop-scholar">SOP · Scholar (Student)</h3>
+  <p>The enrolled fellow. Two years, four semesters, one portal.</p></div>
+</div>
+<h4>Your menu</h4>
+<p>Dashboard · Assignments · My Submissions · Formats · Progress Reports · Fees · My Profile ·
+Research Profile · Lectures · Notifications.</p>
+<h4>Week one</h4>
+<ol class="steps">
+<li><b>Log in and change your password</b><span class="who">/login → /student/profile</span>
+  Use the credentials emailed to you. Change the password immediately.</li>
+<li><b>Complete your profile</b><span class="who">/student/profile</span>
+  Contact details and photo. Staff use this to reach you.</li>
+<li><b>Build your research profile</b><span class="who">/student/profile/research</span>
+  Bio, research interests, institution, designation, ORCID, Google Scholar, LinkedIn, and your
+  publications. Set it public only when you are happy for the world to read it — it becomes a live
+  page at <code>/p/your-slug</code>.</li>
+<li><b>Read the notice board</b><span class="who">/student/notifications</span>
+  Announcements, Zoom links and due-date reminders all land here as well as in your inbox.</li>
+</ol>
+<h4>Every semester</h4>
+<ol class="steps">
+<li><b>Check Assignments first</b><span class="who">/student/assignments</span>
+  Every published assignment for your batch, with its semester, due date, whether it is mandatory,
+  and your current submission status.</li>
+<li><b>Download the format before you write</b><span class="who">/student/formats</span></li>
+<li><b>Watch the lectures</b><span class="who">/student/lectures</span></li>
+<li><b>Submit — once</b><span class="who">/student/assignments → Submit</span>
+  You get one submission per assignment. Attach the file and click Submit for review. A progress
+  report will not submit without an attachment.</li>
+<li><b>Follow the review</b><span class="who">/student/submissions</span>
+  Coordinator → Academic Guide → Industry Mentor. You can see which stage is open and every comment.</li>
+<li><b>Revise fast</b>
+  On <b>needs revision</b>, fix and resubmit. The chain restarts at stage 1, so a slow revision costs
+  you the full review cycle again.</li>
+<li><b>Pay the fee before the due date</b><span class="who">/student/fees</span>
+  Reminders start 7 days out. Payment happens offline; your coordinator records it and the status
+  turns <b>paid</b>. If you have paid and it still says pending, tell the coordinator — the system
+  cannot see your bank.</li>
+<li><b>Keep progress milestones moving</b><span class="who">/student/progress</span>
+  Your guide reads these between submissions.</li>
+</ol>
+<div class="note"><b>Golden rules for scholars.</b> One submission per assignment · always draft on
+the current format · a revision restarts the whole chain · your research profile is public the moment
+you toggle it.</div>
+
+<div class="rolehead">
+  <div class="ic">?</div>
+  <div><h3 id="sop-applicant">SOP · Applicant (Candidate)</h3>
+  <p>Not a user of the portal. Touches exactly three screens, then either becomes a scholar or does not.</p></div>
+</div>
+<ol class="steps">
+<li><b>Apply</b><span class="who">/apply</span>
+  Complete the multi-step form: personal details, academic record (PhD university, year, discipline,
+  thesis title, Scopus publications), and research statement. You get a confirmation email with a
+  reference ID.</li>
+<li><b>Wait for the test invitation</b>
+  If shortlisted, you receive an email with a login link, username, password, test duration and the
+  section list. Keep that email — it is your only credential.</li>
+<li><b>Take the entrance test</b><span class="who">/test-login</span>
+  Log in, read the instructions page, then start. <b>The clock starts when you click start and does
+  not stop.</b> Answers autosave. Submit before the timer ends. You get a confirmation email with
+  your score where applicable.</li>
+<li><b>If finally shortlisted</b>
+  You receive the interview-qualification letter with the registration fee amount and bank details.
+  Pay before the stated deadline and inform the office.</li>
+<li><b>On enrolment</b>
+  You receive a fresh set of portal credentials — different from your test credentials — and you are
+  now a scholar. Go to <a href="#sop-scholar">the scholar SOP</a>.</li>
+</ol>
+<div class="warnbox"><b>If you are locked out mid-test</b> — browser crash, power cut, network drop —
+contact the program office immediately. Only a coordinator can reset the attempt, and only within a
+sensible window.</div>
+
+<h2 id="screens">3 · Screen reference</h2>
+<p>Every route in the application, who can reach it, and what it is for. Use this as the index when
+writing training material or debugging "I can't find X".</p>
+<h4>Public (no login)</h4>
+<table>
+<tr><th>Route</th><th>Purpose</th></tr>
+<tr><td><code>/login</code></td><td>Single login for every internal role; redirects by role.</td></tr>
+<tr><td><code>/apply</code></td><td>Public multi-step application form.</td></tr>
+<tr><td><code>/confirmation</code></td><td>Post-application confirmation with reference ID.</td></tr>
+<tr><td><code>/test-login</code></td><td>Candidate entrance-test login (separate auth path).</td></tr>
+<tr><td><code>/test/:id/instructions</code></td><td>Rules, duration and section breakdown before starting.</td></tr>
+<tr><td><code>/test/:id</code></td><td>Full-screen timed test with autosave.</td></tr>
+<tr><td><code>/p/:slug</code></td><td>Public research profile of a scholar who opted in.</td></tr>
+<tr><td><code>/onboard</code></td><td>Account setup screen. <span class="tag t-warn">Route exists; no backend endpoint references it</span></td></tr>
+</table>
+<h4>Scholar (<code>/student/*</code>)</h4>
+<table>
+<tr><th>Route</th><th>Purpose</th></tr>
+<tr><td><code>/student/dashboard</code></td><td>Pending work, submission states, fees, notifications.</td></tr>
+<tr><td><code>/student/assignments</code></td><td>Published assignments for their batch + own submission status.</td></tr>
+<tr><td><code>/student/submit</code></td><td>Create and submit a submission.</td></tr>
+<tr><td><code>/student/submissions</code></td><td>All own submissions with the approval trail and remarks.</td></tr>
+<tr><td><code>/student/formats</code></td><td>Download templates for the course/batch.</td></tr>
+<tr><td><code>/student/progress</code></td><td>Own progress milestones and completion percentages.</td></tr>
+<tr><td><code>/student/fees</code></td><td>Fee rows, due dates, payments recorded.</td></tr>
+<tr><td><code>/student/profile</code></td><td>Personal details, password change.</td></tr>
+<tr><td><code>/student/profile/research</code></td><td>Research profile + publications, public toggle.</td></tr>
+<tr><td><code>/student/lectures</code>, <code>/student/lectures/:id</code></td><td>Media gallery and secure player.</td></tr>
+<tr><td><code>/student/notifications</code></td><td>In-app notice board.</td></tr>
+</table>
+<h4>Staff (<code>/admin/*</code>)</h4>
+<table>
+<tr><th>Route</th><th>Purpose</th><th>Typically used by</th></tr>
+<tr><td><code>/admin</code></td><td>Admin dashboard, aggregates trimmed by permission.</td><td>All staff</td></tr>
+<tr><td><code>/admin/applicants</code></td><td>Admissions pipeline — list + Kanban + import + export.</td><td>Coordinator, Admin</td></tr>
+<tr><td><code>/admin/applicants/:id/test-results</code></td><td>Per-question responses and manual marking.</td><td>Coordinator, Admin</td></tr>
+<tr><td><code>/admin/students</code></td><td>Enrolled scholars; bulk actions, import, export.</td><td>Coordinator, Admin</td></tr>
+<tr><td><code>/admin/students/:id</code></td><td>Full scholar profile: enrolment, guides, fees, progress, submissions.</td><td>All staff</td></tr>
+<tr><td><code>/admin/batches</code>, <code>/admin/batches/:id/students</code></td><td>Batch management and roster.</td><td>Coordinator, Admin</td></tr>
+<tr><td><code>/admin/assignments</code></td><td>Create/publish assignments; view submissions per assignment; bulk-import submissions.</td><td>Coordinator, Admin</td></tr>
+<tr><td><code>/admin/submissions</code></td><td>All submissions in scope, with remarks.</td><td>All staff</td></tr>
+<tr><td><code>/admin/approvals</code></td><td>The reviewer work queue.</td><td>Coordinator, Guide, Mentor</td></tr>
+<tr><td><code>/admin/progress</code></td><td>Progress reports across scholars; upload on behalf.</td><td>Coordinator, Admin</td></tr>
+<tr><td><code>/admin/fees</code></td><td>Fee rows, record payments, fee structure editor.</td><td>Coordinator, Admin</td></tr>
+<tr><td><code>/admin/formats</code></td><td>Template library management.</td><td>Coordinator, Admin</td></tr>
+<tr><td><code>/admin/lectures</code>, <code>/admin/lectures/:id</code></td><td>Media manager, folders, upload, analytics.</td><td>Coordinator, Admin</td></tr>
+<tr><td><code>/admin/test-builder</code></td><td>Build, section, publish and close tests.</td><td>Coordinator, Admin</td></tr>
+<tr><td><code>/admin/notifications</code></td><td>Send announcements / Zoom links; view queue; run scans.</td><td>Coordinator, Admin</td></tr>
+<tr><td><code>/admin/wizard</code></td><td>Six-tab setup: Org chart, Team, Workflows, Notifications, Credentials, Courses.</td><td>Admin</td></tr>
+<tr><td><code>/admin/users</code></td><td>Create users, send credentials, reset passwords.</td><td>Admin</td></tr>
+<tr><td><code>/admin/roles</code></td><td>Role → permission → scope matrix, and role assignments.</td><td>Admin</td></tr>
+<tr><td><code>/admin/courses/:id/settings</code></td><td>Per-course preferences and module toggles.</td><td>Admin</td></tr>
+<tr><td><code>/admin/email-templates</code></td><td>Edit the 16 transactional templates.</td><td>Admin</td></tr>
+<tr><td><code>/admin/audit-logs</code></td><td>Every create/update/delete, by user and resource.</td><td>Admin</td></tr>
+<tr><td><code>/admin/settings</code></td><td>Email config, branding, UI labels.</td><td>Admin</td></tr>
+</table>
+
+<h2 id="perms">4 · Permission matrix</h2>
+<p>This is what the seed grants each role. <b>Scope</b> matters as much as the permission:
+<code>all</code> = everywhere · <code>course</code> = their assigned courses ·
+<code>batch</code> = their assigned batches · <code>own</code> = only their own rows.</p>
+<table>
+<tr><th>Module</th><th>Admin</th><th>Coordinator</th><th>Academic Guide</th><th>Industry Mentor</th><th>Scholar</th></tr>
+<tr><td>users</td><td>CRUD</td><td>—</td><td>—</td><td>—</td><td>R/U <i>own</i></td></tr>
+<tr><td>roles</td><td>CRUD</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>courses</td><td>CRUD</td><td>R</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>batches</td><td>CRUD</td><td>C/R/U</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>applicants</td><td>CRUD</td><td>C/R/U</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>students</td><td>CRUD</td><td>R/U</td><td>R <i>batch</i></td><td>R <i>batch</i></td><td>R/U <i>own</i></td></tr>
+<tr><td>tests</td><td>CRUD</td><td>C/R/U</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>assignments</td><td>CRUD</td><td>C/R/U</td><td>R</td><td>—</td><td>R <i>course</i></td></tr>
+<tr><td>submissions</td><td>CRUD</td><td>C/R/U</td><td>R/U</td><td>R</td><td>C/R/U <i>own</i></td></tr>
+<tr><td>approvals</td><td>CRUD</td><td>C/R/U</td><td>C/R/U</td><td>C/R/U</td><td>R <i>own</i></td></tr>
+<tr><td>progress_reports</td><td>CRUD</td><td>C/R/U</td><td>R</td><td>R</td><td>C/R <i>own</i></td></tr>
+<tr><td>fees</td><td>CRUD</td><td>C/R/U</td><td>—</td><td>—</td><td>R <i>own</i></td></tr>
+<tr><td>formats</td><td>CRUD</td><td>R</td><td>—</td><td>—</td><td>R <i>course</i></td></tr>
+<tr><td>lectures</td><td>CRUD</td><td>C/R/U</td><td>R</td><td>—</td><td>R <i>course</i></td></tr>
+<tr><td>notifications</td><td>CRUD</td><td>C/R</td><td>C/R</td><td>R</td><td>R <i>own</i></td></tr>
+<tr><td>research_profiles</td><td>CRUD</td><td>R</td><td>R</td><td>R</td><td>C/R/U <i>own</i></td></tr>
+<tr><td>dashboard / dashboard_admin</td><td>R</td><td>R</td><td>R <i>course</i></td><td>R <i>course</i></td><td>—</td></tr>
+<tr><td>dashboard_student</td><td>R</td><td>—</td><td>—</td><td>—</td><td>R <i>own</i></td></tr>
+</table>
+<div class="note">Admin can change any of this live at <code>/admin/roles</code>. The permission
+cache refreshes every 60 seconds server-side, and the frontend reloads grants on login — so a role
+change may take up to a minute, or one logout/login, to appear in someone's menu.</div>
+
+<h2 id="emails">5 · Email &amp; notification catalogue</h2>
+<p>Sixteen registered templates. "Instant" fires on the triggering action; "scheduled" is swept by
+the queue worker.</p>
+<table>
+<tr><th>Template key</th><th>Goes to</th><th>Fires when</th><th>Kind</th></tr>
+<tr><td><code>application_submitted</code></td><td>Candidate</td><td>Public application submitted</td><td>Instant</td></tr>
+<tr><td><code>application_submitted_staff</code></td><td>Staff</td><td>Same event, staff alert</td><td>Instant</td></tr>
+<tr><td><code>test_credentials</code></td><td>Candidate</td><td>Entrance test assigned</td><td>Instant</td></tr>
+<tr><td><code>test_reminder</code></td><td>Candidate</td><td>Coordinator nudges the Test Sent column</td><td>Manual bulk</td></tr>
+<tr><td><code>test_completed</code></td><td>Candidate</td><td>Test submitted</td><td>Instant</td></tr>
+<tr><td><code>test_completed_staff</code></td><td>Staff</td><td>Test submitted, staff alert</td><td>Instant</td></tr>
+<tr><td><code>applicant_shortlisted</code></td><td>Candidate</td><td>Moved to Final Shortlist — carries fee + bank details</td><td>Instant, automatic</td></tr>
+<tr><td><code>applicant_shortlist_payment_reminder</code></td><td>Candidate</td><td>Coordinator nudges the Final Shortlist column (24h cooldown)</td><td>Manual bulk</td></tr>
+<tr><td><code>login_credentials</code></td><td>New user</td><td>Credentials sent or reset</td><td>Instant / bulk</td></tr>
+<tr><td><code>approval_stage_opened</code></td><td>The stage's reviewer</td><td>A submission reaches their stage</td><td>Instant</td></tr>
+<tr><td><code>submission_approved</code></td><td>Scholar</td><td>Final stage approved</td><td>Instant</td></tr>
+<tr><td><code>submission_needs_revision</code></td><td>Scholar</td><td>Revision requested or rejected</td><td>Instant</td></tr>
+<tr><td><code>fee_due</code></td><td>Scholar</td><td>7 days before due date, repeating every 3 days</td><td>Scheduled scan</td></tr>
+<tr><td><code>deadline_overdue</code></td><td>Scholar</td><td>Assignment due date passed with no submission, every 2 days</td><td>Scheduled scan</td></tr>
+<tr><td><code>announcement</code></td><td>Chosen audience</td><td>Staff sends an announcement</td><td>Manual</td></tr>
+<tr><td><code>zoom_link</code></td><td>Chosen audience</td><td>Staff shares a session link</td><td>Manual</td></tr>
+</table>
+<div class="warnbox">Scheduled scans run at <b>08:00 IST</b> per course and self-deduplicate per day.
+If reminders are not going out, check three things in order: email mode is <b>live</b> not mock ·
+the notification worker is running · the course's notification rules have not disabled that event.</div>
+
+<h2 id="gaps">6 · Lifecycle gap audit</h2>
+<p>Findings from reading the route tree, the RBAC layer, the schema and every module service.
+Ranked by what will break a real 2-year cohort soonest. <b>P0</b> = the lifecycle cannot complete
+without it. <b>P1</b> = it will complete, but staff will do painful manual work and mistakes will
+happen. <b>P2</b> = polish and reporting.</p>
+<div class="grid">
+  <div class="kpi"><span>P0 blockers</span><b>4</b></div>
+  <div class="kpi"><span>P1 friction</span><b>7</b></div>
+  <div class="kpi"><span>P2 polish</span><b>6</b></div>
+</div>
+
+<h3 id="p0gaps">P0 — must exist before real users</h3>
+
+<details open><summary>G-01 · No way to advance a scholar to the next semester <span class="tag t-bad">Missing</span></summary>
+<p><b>Evidence.</b> <code>batch_enrollments.current_semester</code> is created with a default of 1 and
+read in several places (student profile view, imports, exports), but a repository-wide search finds
+<b>no UPDATE statement and no endpoint that ever changes it</b>. The only writes are at insert time
+(conversion, bulk import, dev seed).</p>
+<p><b>Consequence.</b> A 4-semester program permanently stuck on Semester 1. Every semester-scoped
+list — assignments, fees, progress, submissions — drifts out of alignment with reality, and no
+report of "who is in which semester" is trustworthy.</p>
+<p><b>Proposed fix.</b></p>
+<ul>
+<li>Backend: <code>POST /batches/:id/advance-semester</code> — body <code>{ to_semester, student_user_ids? }</code>.
+  Guard with <code>batches:update</code>. Bump <code>current_semester</code>, write an audit entry,
+  and enqueue a batch announcement.</li>
+<li>Backend: <code>PATCH /students/:id/semester</code> for a single-scholar correction (a scholar who
+  is held back or accelerated).</li>
+<li>Frontend: a <b>Promote to Semester N+1</b> button on <code>/admin/batches/:id/students</code>
+  with a confirmation modal listing who will move, plus a per-scholar override on the profile page.</li>
+<li>Optional guardrail: warn (do not block) when a scholar has unpaid fees or unapproved mandatory
+  assignments in the current semester.</li>
+</ul>
+</details>
+
+<details open><summary>G-02 · Fees are not generated from the course fee structure <span class="tag t-warn">Partial</span></summary>
+<p><b>Evidence.</b> <code>courses.fee_structure</code> stores the per-semester amounts
+(<code>{"1":50000,…}</code>) and <code>bulkCreateFees()</code> exists in
+<code>fees.service.js</code> — but <b>no route exposes it</b>. The only fee creation path is
+<code>POST /fees</code>, one row for one scholar.</p>
+<p><b>Consequence.</b> For a 30-scholar batch across 4 semesters that is 120 fee rows created by hand,
+each an opportunity to fumble an amount or a due date. Fee reminders then fire on wrong data.</p>
+<p><b>Proposed fix.</b> Expose <code>POST /fees/bulk</code> (batch + semester + due date, amount
+defaulted from the course fee structure, applied to all active enrolments, idempotent so re-running
+does not duplicate). Add a <b>Generate semester fees</b> action on <code>/admin/fees</code>.
+Ideally chain it to G-01 so promoting a semester offers to raise that semester's fees.</p>
+</details>
+
+<details open><summary>G-03 · Onboarding does not enforce guide assignment <span class="tag t-bad">Missing</span></summary>
+<p><b>Evidence.</b> <code>submitForReview()</code> resolves the academic-guide and industry-mentor
+stages from <code>student_guides</code>. If no active guide exists, <code>resolvedReviewerId</code>
+is <code>null</code> and the approval row is inserted anyway with a null reviewer and, for
+<code>student_guide</code>-type stages, no <code>reviewer_role</code> fallback either.</p>
+<p><b>Consequence.</b> The submission passes coordinator approval and then sits in a stage no-one
+can see or action. It appears in nobody's queue. Silent, and only discovered when a scholar complains
+weeks later.</p>
+<p><b>Proposed fix.</b> Three layers: (1) block conversion-to-scholar from being marked complete
+until both guides are assigned, or surface a persistent "needs guides" flag on the student list;
+(2) at submit time, if a <code>student_guide</code> stage cannot resolve, fall back to
+<code>reviewer_role</code> so a coordinator/admin can act, and notify staff; (3) add an
+<b>Unassigned reviewer</b> filter to <code>/admin/approvals</code> so stalls are visible.</p>
+</details>
+
+<details open><summary>G-04 · No semester/lifecycle state machine — statuses can be skipped <span class="tag t-warn">Partial</span></summary>
+<p><b>Evidence.</b> <code>updateApplicantStatus()</code> accepts any target status with no transition
+validation. The Kanban UI is disciplined about which buttons it shows, but the API is not — and the
+list view and bulk actions share the same endpoint.</p>
+<p><b>Consequence.</b> A candidate can reach <code>payment_received</code> without ever having a test
+attempt, or <code>enrolled</code> without a recorded fee. Pipeline metrics stop meaning anything.</p>
+<p><b>Proposed fix.</b> Define the allowed transition map server-side (forward moves, plus the
+explicit corrections the UI already offers, plus reject-from-anywhere and reconsider) and reject the
+rest with a clear 400. Same treatment for <code>submission_status</code> and
+<code>enrollment_status</code>.</p>
+</details>
+
+<h3 id="p1gaps">P1 — will cause daily pain</h3>
+<table>
+<tr><th>ID</th><th>Gap</th><th>Evidence</th><th>Fix</th></tr>
+<tr><td>G-05</td><td><b>No bulk progress-milestone creation</b> <span class="tag t-warn">Partial</span></td>
+<td><code>POST /progress-reports</code> takes exactly one scholar, one module. A 30-scholar batch with
+5 milestones per semester = 150 manual creations per semester.</td>
+<td>Add <code>POST /progress-reports/bulk</code> (batch + semester + list of module templates) and a
+per-course milestone template set, so a semester's milestones are created in one action.</td></tr>
+
+<tr><td>G-06</td><td><b>No fee receipt output</b> <span class="tag t-bad">Missing</span></td>
+<td><code>fee_payments.receipt_url</code> is stored but nothing generates a receipt.
+<code>@react-pdf/renderer</code> is already a dependency.</td>
+<td>Generate a PDF receipt on payment record; attach it to the fee row and email it to the scholar.</td></tr>
+
+<tr><td>G-07</td><td><b>No completion / exit flow</b> <span class="tag t-bad">Missing</span></td>
+<td>Completion is a status flip on the enrolment row. No certificate, no transcript, no exit checklist,
+no "all requirements met" validation.</td>
+<td>Add a completion checklist view per scholar (all 4 semesters: fees clear, mandatory assignments
+approved, milestones complete), then a generated completion certificate PDF.</td></tr>
+
+<tr><td>G-08</td><td><b>Approval chain has no reassignment or escalation</b> <span class="tag t-bad">Missing</span></td>
+<td>Only the assigned reviewer or a matching role-slot holder can act, and there is deliberately no
+admin override. If a guide leaves, resigns or goes silent, the submission is stuck permanently.</td>
+<td>Add an admin-only <b>Reassign reviewer</b> action on an approval row (fully audit-logged, which
+preserves the integrity the current rule is protecting), plus an SLA-breach report of stages open
+longer than N days.</td></tr>
+
+<tr><td>G-09</td><td><b>Test evaluation is half-manual with no queue</b> <span class="tag t-warn">Partial</span></td>
+<td>MCQ and true/false auto-score. Short/long/file-upload answers need manual marks per question,
+but there is no "tests awaiting evaluation" queue — you must open candidates one by one.</td>
+<td>Add an evaluation queue filtered to attempts with unscored descriptive responses, and show
+<code>evaluated_at</code> / evaluator on the applicant card.</td></tr>
+
+<tr><td>G-10</td><td><b>Onboard route is orphaned</b> <span class="tag t-warn">Partial</span></td>
+<td><code>/onboard</code> is routed in <code>App.jsx</code>, but no backend endpoint or email links
+to it. Conversion issues a generated password instead of an invite link.</td>
+<td>Either wire it up as a proper first-login set-password flow (token-based invite, and drop the
+generated-password email), or remove the route so it cannot confuse anyone.</td></tr>
+
+<tr><td>G-11</td><td><b>Registration fee is not a fee record</b> <span class="tag t-warn">Partial</span></td>
+<td>The admission registration fee lives only as the applicant status <code>payment_received</code> —
+amount, date and reference are never captured anywhere.</td>
+<td>Capture amount / date / transaction reference when marking paid, and carry it into the scholar's
+fee ledger on conversion so the financial record is continuous from application to completion.</td></tr>
+</table>
+
+<h3 id="p2gaps">P2 — polish, reporting, hardening</h3>
+<table>
+<tr><th>ID</th><th>Gap</th><th>Note</th></tr>
+<tr><td>G-12</td><td><b>No semester-wise dashboard view</b></td><td>Dashboards aggregate by batch and
+course but not by semester, so "how is Semester 3 doing" cannot be answered without exports.</td></tr>
+<tr><td>G-13</td><td><b>Global search box is decorative</b></td><td>The admin topbar search input has
+no handler. Either implement cross-entity search or remove it — a dead search box reads as a broken app.</td></tr>
+<tr><td>G-14</td><td><b><code>schema.sql</code> has drifted from reality</b></td><td>Assignments,
+formats, media folders, app_settings, notification_queue, submission_remarks, approval scope columns
+and two enum values all exist only via <code>alter.js</code>. A fresh install from
+<code>schema.sql</code> alone is incomplete. Consolidate into a single ordered migration set.</td></tr>
+<tr><td>G-15</td><td><b>No batch-level analytics</b></td><td>Approval turnaround time, submission
+on-time rate, fee collection rate — all computable from existing tables, none surfaced.</td></tr>
+<tr><td>G-16</td><td><b>Frontend constants out of sync with the DB</b></td><td><code>SUBMISSION_STATUS</code>
+in <code>src/lib/constants.js</code> lists <code>PENDING</code>, which is not a value of the
+<code>submission_status</code> enum (<code>draft, submitted, under_review, approved, needs_revision,
+rejected</code>). Align them before anyone writes new filter logic against the constant.</td></tr>
+<tr><td>G-17</td><td><b>No withdrawal / suspension workflow</b></td><td><code>enrollment_status</code>
+supports <code>withdrawn</code> and <code>suspended</code>, but no screen sets them with a reason,
+and no rule says what happens to that scholar's open fees and submissions.</td></tr>
+</table>
+
+<h3 id="fixorder">Suggested build order for the next 3–4 days</h3>
+<table>
+<tr><th>Day</th><th>Ship</th><th>Why this order</th></tr>
+<tr><td>Day 1</td><td>G-01 semester advancement (API + button) · G-03 guide-assignment guard</td>
+<td>These two unblock the lifecycle itself. Nothing else matters if scholars cannot move forward and
+submissions silently stall.</td></tr>
+<tr><td>Day 2</td><td>G-02 bulk fee generation · G-05 bulk milestone creation</td>
+<td>Turns the onboarding checklist from ~270 manual actions per batch into about six clicks. This is
+what makes the software survive contact with a real coordinator.</td></tr>
+<tr><td>Day 3</td><td>G-04 status transition guards · G-08 reviewer reassignment · G-13 remove or wire the search box</td>
+<td>Data integrity plus the one escalation path staff will need in week one.</td></tr>
+<tr><td>Day 4</td><td>Full dry run with real staff, then G-06 receipts / G-16 constants cleanup if time allows</td>
+<td>Run the entire lifecycle with the actual coordinator and one guide, in the real environment, with
+real email. Fix what that surfaces before anything cosmetic.</td></tr>
+</table>
+<div class="okbox"><b>Cut line.</b> If time runs out, ship G-01, G-02, G-03 and G-05 and nothing else.
+With those four, a coordinator can run a full cohort. Without G-01, they cannot run a second semester
+at all.</div>
+
+<h2 id="training">7 · Rollout &amp; training plan</h2>
+<p>Sized for the 3–4 day window, assuming the P0 fixes land alongside.</p>
+<table>
+<tr><th>Session</th><th>Audience</th><th>Length</th><th>Cover</th><th>Leave them with</th></tr>
+<tr><td>1 · System setup</td><td>Admin</td><td>90 min</td><td>Phase 0 end to end, live: settings, course, batch, workflow, users, roles, notification rules, test builder</td><td>Admin SOP + a working configured course</td></tr>
+<tr><td>2 · Admissions</td><td>Coordinator (+ Admin observing)</td><td>120 min</td><td>The whole Kanban, worked with three dummy candidates: apply → shortlist → test → evaluate → final shortlist → mark paid → convert → onboarding checklist</td><td>Coordinator SOP + the onboarding checklist as a printed card</td></tr>
+<tr><td>3 · Academics</td><td>Coordinator</td><td>60 min</td><td>Assignments, fees, milestones, formats, lectures, the approvals queue, semester rollover</td><td>Per-semester checklist</td></tr>
+<tr><td>4 · Reviewing</td><td>Academic Guides + Industry Mentors</td><td>45 min</td><td>Just their queue: read, remark, act. Explicitly explain the short menu and the no-override rule.</td><td>One-page Guide/Mentor SOP</td></tr>
+<tr><td>5 · Scholar orientation</td><td>Scholars</td><td>45 min</td><td>Login, profile, research profile, assignments, submit, revise, fees, lectures</td><td>Scholar SOP + the golden rules card</td></tr>
+</table>
+<h4>Pre-flight checklist before any training session</h4>
+<ul>
+<li>Email is in <b>live</b> mode and a test message has actually arrived in an inbox.</li>
+<li>A demo course, demo batch and a published demo test exist, separate from real data.</li>
+<li>Each trainee has their own account with the real role they will hold — never train on a shared admin login.</li>
+<li>At least one scholar account is fully onboarded (guides assigned, fee raised, assignment published)
+    so the review chain can be demonstrated in one sitting.</li>
+<li>Someone is nominated as the day-one support contact, and the trainees know who it is.</li>
+</ul>
+
+<h2 id="glossary">8 · Glossary of statuses</h2>
+<table>
+<tr><th>Field</th><th>Values</th><th>Meaning</th></tr>
+<tr><td><code>applicant_status</code></td><td>submitted · shortlisted_test · test_pending · test_completed · shortlisted · payment_received · enrolled · rejected</td><td>Position in the admissions pipeline. Shown on the Kanban as Applied / Shortlisted for Test / Test Sent / Test Submitted / Final Shortlist / Registration Fee Paid / Enrolled / Rejected.</td></tr>
+<tr><td><code>batch_status</code></td><td>upcoming · active · completed</td><td>Lifecycle of a cohort.</td></tr>
+<tr><td><code>enrollment_status</code></td><td>active · withdrawn · completed · suspended</td><td>A scholar's standing in a batch.</td></tr>
+<tr><td><code>submission_status</code></td><td>draft · submitted · under_review · approved · needs_revision · rejected</td><td><code>under_review</code> means at least one stage has approved and another is open.</td></tr>
+<tr><td><code>approval_status</code></td><td>pending · approved · rejected · needs_revision · skipped</td><td>Per stage, not per submission.</td></tr>
+<tr><td><code>progress_status</code></td><td>not_started · in_progress · completed</td><td>Milestone state, paired with a 0–100 completion percentage.</td></tr>
+<tr><td><code>fee_status</code></td><td>pending · paid · overdue · waived</td><td>Flips to <code>paid</code> automatically once recorded payments cover the amount.</td></tr>
+<tr><td><code>attempt_status</code></td><td>in_progress · submitted · evaluated · timed_out</td><td>Entrance test attempt.</td></tr>
+<tr><td><code>test_status</code></td><td>draft · published · closed</td><td>Only <code>published</code> tests can be assigned.</td></tr>
+</table>
+
+<hr/>
+<p style="color:var(--muted);font-size:12.5px">
+Generated from a direct read of the repository — route tree, RBAC middleware, database schema and
+every backend module service. Regenerate this document whenever the approval workflow, the role
+permission matrix or the admissions pipeline changes; those three drive almost every SOP above.
+</p>
+</main>
+</div>
+<script>
+// Build the table of contents from the headings actually present
+(function(){
+  var toc = document.getElementById('toc');
+  var heads = document.querySelectorAll('.main h2[id], .main h3[id]');
+  heads.forEach(function(h){
+    var a = document.createElement('a');
+    a.href = '#' + h.id;
+    a.textContent = h.textContent.replace(/\s+/g,' ').trim();
+    if (h.tagName === 'H3') { a.style.paddingLeft = '24px'; a.style.fontSize = '12.5px'; }
+    else { a.style.fontWeight = '700'; a.style.marginTop = '8px'; }
+    toc.appendChild(a);
+  });
+  // Scroll spy
+  var links = toc.querySelectorAll('a');
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (!e.isIntersecting) return;
+      links.forEach(function(l){ l.classList.toggle('on', l.getAttribute('href') === '#' + e.target.id); });
+    });
+  }, { rootMargin: '0px 0px -75% 0px' });
+  heads.forEach(function(h){ obs.observe(h); });
+  // Filter
+  document.getElementById('q').addEventListener('input', function(e){
+    var v = e.target.value.toLowerCase();
+    links.forEach(function(l){ l.classList.toggle('hide', v && l.textContent.toLowerCase().indexOf(v) === -1); });
+  });
+})();
+function tgl(){
+  var r = document.documentElement;
+  r.dataset.theme = r.dataset.theme === 'dark' ? 'light' : 'dark';
+}
+function openAll(){
+  document.querySelectorAll('details').forEach(function(d){ d.open = true; });
+}
+</script>
+</body>
+</html>

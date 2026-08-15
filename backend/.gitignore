@@ -6,3 +6,6 @@ storage/videos/
 storage/thumbnails/
 logs/
 *.log
+
+# V2 migration baseline snapshot (local, per-environment)
+src/db/.v2-baseline.json
