@@ -518,6 +518,8 @@ table { border-collapse: collapse; }
   flex-wrap: nowrap;
   gap: 6px;
   white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: keep-all;
 }
 
 .btn-table-action {
@@ -525,12 +527,15 @@ table { border-collapse: collapse; }
   align-items: center;
   gap: 6px;
   height: 28px;
-  padding: 0 10px;
-  border-radius: 6px;
+  padding: 0 12px;
+  border-radius: 9999px;
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  flex-shrink: 0;
   border: 1px solid transparent;
   background: var(--surface);
   color: var(--text);

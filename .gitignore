@@ -32,3 +32,6 @@ test-results
 *.njsproj
 *.sln
 *.sw?
+
+# Multi-agent orchestration tracking (local-only, never committed)
+/orchestrations/

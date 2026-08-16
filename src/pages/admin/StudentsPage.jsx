@@ -1,5 +1,5 @@
 import {
-  CheckSquare, ClipboardList, Download, ExternalLink, FileText, Filter, KeyRound,
+  CheckSquare, ClipboardList, Download, ExternalLink, FileText, Filter, KeyRound, Lock,
   Loader2, RotateCcw, Square, Trash2, Upload, Users, XCircle,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -9,7 +9,9 @@ import { getProgressReportsByStudent, getSubmissionsByStudent } from '../../api/
 import { archiveStudent, bulkStudentAction, exportStudents, getStudents } from '../../api/services/studentService.js'
 import { bulkSendCredentials, getUsers, sendCredentials } from '../../api/services/userService.js'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
+import ConfirmDialog from '../../components/shared/ConfirmDialog.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
+import ResetPasswordModal from '../../components/shared/ResetPasswordModal.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
@@ -66,6 +68,9 @@ export default function StudentsPage() {
   const [exportLoading,  setExportLoading]  = useState(false)
   const [showImport,     setShowImport]     = useState(false)
   const [sendingCredId,  setSendingCredId]  = useState(null)      // per-row credential send in flight (user_id)
+  const [confirmDialog,  setConfirmDialog]  = useState(null)      // { title, message, confirmLabel, tone, onConfirm }
+  const [confirmBusy,    setConfirmBusy]    = useState(false)
+  const [resetTarget,    setResetTarget]    = useState(null)      // { id, first_name, last_name, email } pending password reset
   const addToast = useUiStore((s) => s.addToast)
   const { currentCourse, currentBatch } = useCourseStore()
 
@@ -75,6 +80,9 @@ export default function StudentsPage() {
   //  - bulk send is admin-only, matching the backend requireRole('admin') guard
   const canSendCreds     = usePermStore((s) => s.can('students', 'update'))
   const canBulkSendCreds = usePermStore((s) => s.hasRole('admin'))
+  // Reset-password endpoint is admin-only server-side; gate identically so the
+  // chip never renders for a role that would just get a 403.
+  const canResetPassword = usePermStore((s) => s.hasRole('admin'))
   // getUsers requires users:read (guide/mentor lack it). Gate it so it never 403s.
   const canReadUsers     = usePermStore((s) => s.can('users', 'read'))
 
@@ -231,14 +239,24 @@ export default function StudentsPage() {
   // Mirrors the User Management / Student Profile credential flow exactly:
   // one click rotates to a fresh secure password and emails it; the toast is
   // driven by the returned email_sent flag.
-  const sendCredsOne = async (student, e) => {
+  const sendCredsOne = (student, e) => {
     e?.stopPropagation()
     if (!student.user_id) {
       addToast({ type: 'error', title: 'No linked login account', message: `${nameOf(student)} has no user account, so login details can't be sent.` })
       return
     }
     const name = nameOf(student)
-    if (!window.confirm(`Send fresh login details to ${name} by email? This resets their password to a new secure one.`)) return
+    setConfirmDialog({
+      title: 'Send Login Details',
+      message: `Send fresh login details to ${name} by email? This resets their password to a new secure one.`,
+      confirmLabel: 'Send Details',
+      tone: 'accent',
+      onConfirm: () => sendCredsConfirmed(student),
+    })
+  }
+
+  const sendCredsConfirmed = async (student) => {
+    setConfirmBusy(true)
     setSendingCredId(student.user_id)
     try {
       const r = await sendCredentials(student.user_id)
@@ -251,17 +269,29 @@ export default function StudentsPage() {
       addToast({ type: 'error', title: 'Failed to send login details', message: err.response?.data?.message })
     } finally {
       setSendingCredId(null)
+      setConfirmBusy(false)
+      setConfirmDialog(null)
     }
   }
 
   // Admin-only bulk: rotate + email fresh login details to every selected scholar.
-  const bulkSendCreds = async () => {
+  const bulkSendCreds = () => {
     const ids = [...selectedIds].filter(Boolean) // never send an undefined user_id
     if (!ids.length) {
       addToast({ type: 'error', title: 'No scholars with a linked login account are selected.' })
       return
     }
-    if (!window.confirm(`Send fresh login details to ${ids.length} scholar(s) by email? This resets each of their passwords to a new secure one.`)) return
+    setConfirmDialog({
+      title: 'Send Login Details',
+      message: `Send fresh login details to ${ids.length} scholar(s) by email? This resets each of their passwords to a new secure one.`,
+      confirmLabel: `Send to ${ids.length}`,
+      tone: 'accent',
+      onConfirm: () => bulkSendCredsConfirmed(ids),
+    })
+  }
+
+  const bulkSendCredsConfirmed = async (ids) => {
+    setConfirmBusy(true)
     setBulkLoading(true)
     try {
       const r = await bulkSendCredentials(ids)
@@ -273,20 +303,36 @@ export default function StudentsPage() {
       addToast({ type: 'error', title: 'Bulk send failed', message: err.response?.data?.message })
     } finally {
       setBulkLoading(false)
+      setConfirmBusy(false)
+      setConfirmDialog(null)
     }
   }
 
   // ── Single-row archive / restore (soft delete) ─────────────────────────────
-  const archiveOne = async (student, e) => {
+  const archiveOne = (student, e) => {
     e?.stopPropagation()
     const name = nameOf(student)
-    if (!window.confirm(`Archive ${name}? They'll be hidden from the active list but can be restored from the Archived tab.`)) return
+    setConfirmDialog({
+      title: 'Archive Scholar',
+      message: `Archive ${name}? They'll be hidden from the active list but can be restored from the Archived tab.`,
+      confirmLabel: 'Archive',
+      tone: 'danger',
+      onConfirm: () => archiveConfirmed(student),
+    })
+  }
+
+  const archiveConfirmed = async (student) => {
+    const name = nameOf(student)
+    setConfirmBusy(true)
     try {
       await archiveStudent(student.user_id)
       addToast({ type: 'success', title: `${name} archived.` })
       await loadStudents()
     } catch {
       addToast({ type: 'error', title: 'Archive failed. Please try again.' })
+    } finally {
+      setConfirmBusy(false)
+      setConfirmDialog(null)
     }
   }
 
@@ -367,7 +413,7 @@ export default function StudentsPage() {
 
         {/* ── Table ── */}
         <div className="table-wrap">
-          <table className="min-w-[1180px] w-full text-left text-sm">
+          <table className="min-w-[1480px] w-full text-left text-sm">
             <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
               <tr>
                 {/* Checkbox select-all */}
@@ -387,7 +433,7 @@ export default function StudentsPage() {
                 {['Name', 'Permanent ID', 'Batch', 'Enrolled', 'Progress', 'Submissions', 'Progress Reports', 'Status'].map((h) => (
                   <th key={h} className="px-6 py-4">{h}</th>
                 ))}
-                <th className="px-6 py-4 text-right">Actions</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -464,7 +510,7 @@ export default function StudentsPage() {
                       </button>
                     </td>
                     <td className="px-6"><StatusBadge status={s.status} /></td>
-                    <td className="px-6 text-right" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-6 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <div className="table-actions">
                         {canSendCreds && (
                           s.user_id ? (
@@ -479,10 +525,29 @@ export default function StudentsPage() {
                           ) : (
                             <button
                               disabled
-                              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--muted)] opacity-60"
+                              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--muted)] opacity-60"
                               title="This scholar has no linked login account, so login details can't be sent."
                             >
                               <KeyRound size={13} /> Send Login Details
+                            </button>
+                          )
+                        )}
+                        {canResetPassword && (
+                          s.user_id ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setResetTarget({ id: s.user_id, first_name: nameOf(s), last_name: '', email: emailOf(s) }) }}
+                              className="btn-table-action btn-table-action--warn"
+                              title="Set a custom password (or auto-generate one) for this scholar"
+                            >
+                              <Lock size={13} /> Reset Password
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--muted)] opacity-60"
+                              title="This scholar has no linked login account, so their password can't be reset."
+                            >
+                              <Lock size={13} /> Reset Password
                             </button>
                           )
                         )}
@@ -784,6 +849,26 @@ export default function StudentsPage() {
         <ImportDrawer
           onClose={() => setShowImport(false)}
           onImported={() => { setShowImport(false); loadStudents() }}
+        />
+      )}
+
+      {/* ── Confirm dialog (replaces window.confirm) ── */}
+      <ConfirmDialog
+        open={Boolean(confirmDialog)}
+        title={confirmDialog?.title}
+        message={confirmDialog?.message}
+        confirmLabel={confirmDialog?.confirmLabel}
+        tone={confirmDialog?.tone}
+        busy={confirmBusy}
+        onConfirm={() => confirmDialog?.onConfirm?.()}
+        onClose={() => setConfirmDialog(null)}
+      />
+
+      {/* ── Admin: set a custom password ── */}
+      {resetTarget && (
+        <ResetPasswordModal
+          user={resetTarget}
+          onClose={() => setResetTarget(null)}
         />
       )}
     </div>
