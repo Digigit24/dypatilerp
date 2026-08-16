@@ -58,6 +58,8 @@ const allowedOrigins = [
   'https://dyperf.netlify.app',
   'http://localhost:5173',
   'http://localhost:3000',
+  'http://digitech.tail7572d2.ts.net:5173',
+  'https://digitech.tail7572d2.ts.net',
 ].filter(Boolean)
 
 app.use(cors({

@@ -6,6 +6,11 @@ export default defineConfig({
   plugins: [react()],
   // Required for the automatic JSX runtime in Vitest test files (no `import React`).
   esbuild: { jsx: 'automatic' },
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+    allowedHosts: ['digitech.tail7572d2.ts.net'],
+  },
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
