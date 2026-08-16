@@ -247,11 +247,24 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
               AS submissions_count,
             (SELECT COUNT(*) FROM submissions s2 WHERE s2.student_user_id = be.user_id
                AND s2.submission_type = 'progress_report')::int
-              AS progress_reports_count
+              AS progress_reports_count,
+            (SELECT COUNT(*) FROM submissions s2 WHERE s2.student_user_id = be.user_id
+               AND s2.submission_type = 'assignment')::int
+              AS assignments_count,
+            (SELECT json_build_object(
+               'completed', COUNT(*) FILTER (WHERE t2.status = 'completed'),
+               'total', COUNT(*)
+             )
+             FROM targets t2
+             WHERE t2.student_user_id = be.user_id AND t2.batch_id = be.batch_id
+               AND t2.semester = be.current_semester)
+              AS milestones_count,
+            (spd.onboarding_completed_at IS NOT NULL) AS onboarding_completed
      FROM batch_enrollments be
      JOIN users u ON u.id=be.user_id
      JOIN batches b ON b.id=be.batch_id
      JOIN courses c ON c.id=b.course_id
+     LEFT JOIN student_profile_details spd ON spd.user_id = be.user_id
      ${scopedWhere} ORDER BY be.enrolled_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
     [...params, limit, offset]
   );
