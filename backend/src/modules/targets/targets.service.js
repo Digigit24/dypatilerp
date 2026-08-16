@@ -202,13 +202,31 @@ export const markTargetSubmitted = async (targetId) => {
 };
 
 /**
- * Derived progress for a scholar, per semester. This replaces the old
- * hand-typed completion_percentage as the number the UI trusts.
+ * Derived progress for a scholar, scoped to their CURRENT semester only —
+ * this replaces the old hand-typed completion_percentage as the number the
+ * UI trusts. "Current semester" comes from `batch_enrollments.current_semester`
+ * for that scholar's active enrollment (falling back to their most recent
+ * enrollment if none is active, e.g. withdrawn/completed scholars).
  */
 export const getProgressSummary = async (studentUserId) => {
-  const { rows } = await query(
-    `SELECT t.semester,
-            COUNT(*)::int                                                        AS total,
+  const { rows: [active] } = await query(
+    `SELECT batch_id, current_semester FROM batch_enrollments
+     WHERE user_id = $1 AND status = 'active'
+     ORDER BY enrolled_at DESC LIMIT 1`,
+    [studentUserId]
+  );
+  const enrollment = active || (await query(
+    `SELECT batch_id, current_semester FROM batch_enrollments
+     WHERE user_id = $1 ORDER BY enrolled_at DESC LIMIT 1`,
+    [studentUserId]
+  )).rows[0];
+
+  if (!enrollment) {
+    return { batch_id: null, semester: null, total: 0, approved: 0, awaiting_review: 0, not_started: 0, percent: 0 };
+  }
+
+  const { rows: [row] } = await query(
+    `SELECT COUNT(*)::int                                                        AS total,
             COUNT(*) FILTER (WHERE t.status = 'completed')::int                  AS approved,
             COUNT(*) FILTER (WHERE t.status <> 'completed' AND s.id IS NOT NULL)::int AS awaiting_review,
             COUNT(*) FILTER (WHERE t.status = 'not_started' AND s.id IS NULL)::int    AS not_started
@@ -217,18 +235,17 @@ export const getProgressSummary = async (studentUserId) => {
        SELECT id FROM submissions
        WHERE target_id = t.id AND status <> 'draft' AND merged_into_id IS NULL LIMIT 1
      ) s ON TRUE
-     WHERE t.student_user_id = $1
-     GROUP BY t.semester ORDER BY t.semester`,
-    [studentUserId]
+     WHERE t.student_user_id = $1 AND t.batch_id = $2 AND t.semester = $3`,
+    [studentUserId, enrollment.batch_id, enrollment.current_semester]
   );
-  const bySemester = rows.map((r) => ({
-    ...r,
-    percent: r.total ? Math.round((r.approved / r.total) * 100) : 0,
-  }));
-  const total = bySemester.reduce((a, r) => a + r.total, 0);
-  const approved = bySemester.reduce((a, r) => a + r.approved, 0);
+
   return {
-    by_semester: bySemester,
-    overall: { total, approved, percent: total ? Math.round((approved / total) * 100) : 0 },
+    batch_id: enrollment.batch_id,
+    semester: enrollment.current_semester,
+    total: row.total,
+    approved: row.approved,
+    awaiting_review: row.awaiting_review,
+    not_started: row.not_started,
+    percent: row.total ? Math.round((row.approved / row.total) * 100) : 0,
   };
 };
