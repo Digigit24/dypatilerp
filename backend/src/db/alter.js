@@ -588,6 +588,48 @@ const run = async () => {
     `);
     console.log('✓  uq_sub_target created — one submission per scholar per target');
 
+    // 26. V4 ONBOARDING — student personal-info fields + profile-scoped file
+    //     uploads (CV, research proposal, publications list, research statement,
+    //     and identity documents). Additive only. No column is dropped or
+    //     renamed anywhere in this block.
+
+    // 26a. Personal-info fields the onboarding flow collects, plus the flag
+    //      that gates a scholar's dashboard until it's filled in.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS student_profile_details (
+        user_id                 UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        father_name             VARCHAR(255),
+        mother_name             VARCHAR(255),
+        date_of_birth            DATE,
+        postal_address          TEXT,
+        blood_group             VARCHAR(8),
+        onboarding_completed_at TIMESTAMP,
+        created_at              TIMESTAMP DEFAULT NOW(),
+        updated_at              TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('✓  student_profile_details table created (or already exists)');
+
+    // 26b. Profile-scoped uploads reuse the existing generic media table
+    // (`videos`) instead of a new one — it already has `slot`/`mime_type`/
+    // `object_key`/`upload_status`. It just has no way today to hang off a
+    // bare user profile (every row requires course/batch/assignment/
+    // submission); this adds that one nullable link.
+    await client.query(`
+      ALTER TABLE videos
+        ADD COLUMN IF NOT EXISTS owner_user_id UUID REFERENCES users(id)
+    `);
+    console.log('✓  videos.owner_user_id column added (or already exists)');
+
+    // 26c. One current file per (owner, slot) — a re-upload replaces, it does
+    // not create a second row for the same document type.
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_videos_owner_slot
+        ON videos (owner_user_id, slot)
+        WHERE owner_user_id IS NOT NULL AND slot IS NOT NULL
+    `);
+    console.log('✓  uq_videos_owner_slot created — one current file per profile document slot');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);
