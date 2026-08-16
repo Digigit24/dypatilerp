@@ -78,13 +78,15 @@ export default function AdminWizardPage() {
       )}
 
       {/* ── Tabs ── */}
-      <div className="tab-group w-fit max-w-full mb-5">
-        {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`tab-segment ${tab === t.key ? 'tab-segment--active' : ''}`}>
-            <t.icon size={14} /> {t.label}
-          </button>
-        ))}
+      <div className="mb-5 max-w-full overflow-x-auto no-scrollbar">
+        <div className="tab-group w-max">
+          {TABS.map((t) => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`tab-segment shrink-0 ${tab === t.key ? 'tab-segment--active' : ''}`}>
+              <t.icon size={14} /> {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === 'org' && (course ? <OrgChartTab course={course} /> : <NoCourse />)}

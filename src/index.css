@@ -703,6 +703,10 @@ table { border-collapse: collapse; }
 
 .tab-strip::-webkit-scrollbar { display: none; }
 
+/* === Reusable: hide scrollbar on a scrollable container ============ */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 .tab-strip-item {
   display: inline-flex;
   align-items: center;
