@@ -9,7 +9,7 @@ import PublicLayout from './layouts/PublicLayout.jsx'
 import StudentLayout from './layouts/StudentLayout.jsx'
 import AdminDashboard from './pages/admin/AdminDashboard.jsx'
 import ApplicantsPage from './pages/admin/ApplicantsPage.jsx'
-import ApprovalsPage from './pages/admin/ApprovalsPage.jsx'
+import SubmissionPreviewPage from './pages/admin/SubmissionPreviewPage.jsx'
 import BatchesPage from './pages/admin/BatchesPage.jsx'
 import BatchStudentsPage from './pages/admin/BatchStudentsPage.jsx'
 import CourseSettingsPage from './pages/admin/CourseSettingsPage.jsx'
@@ -98,6 +98,9 @@ export default function App() {
           }
         >
           <Route path="onboarding" element={<OnboardingPage />} />
+          {/* Full-page, outside StudentLayout — same component as admin's preview,
+              read-only here since SubmissionPreviewPage gates action buttons by role. */}
+          <Route path="submissions/:id/preview" element={<SubmissionPreviewPage />} />
           <Route element={<StudentLayout />}>
             <Route index element={<Navigate to="/student/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
@@ -136,8 +139,10 @@ export default function App() {
           <Route path="batches" element={<BatchesPage />} />
           <Route path="batches/students" element={<BatchStudentsPage />} />
           <Route path="batches/:batchId/students" element={<BatchStudentsPage />} />
-          <Route path="approvals" element={<ApprovalsPage />} />
+          {/* Approvals merged into Submissions — old links/bookmarks keep working. */}
+          <Route path="approvals" element={<Navigate to="/admin/submissions" replace />} />
           <Route path="submissions" element={<AdminSubmissionsPage />} />
+          <Route path="submissions/:id/preview" element={<SubmissionPreviewPage />} />
           <Route path="fees" element={<FeesPage />} />
           <Route path="test-builder" element={<TestBuilderPage />} />
           <Route path="applicants/:applicantId/test-results" element={<ApplicantTestResultsPage />} />

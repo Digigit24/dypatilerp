@@ -14,8 +14,7 @@ import {
   Link2, Pencil, Plus, Save, Shield, UploadCloud, User, X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { getApprovals } from '../../api/services/approvalService.js'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   addResearchItem, getProfile, togglePublic,
   updateProfile, updateResearchItem,
@@ -77,6 +76,7 @@ const BLANK_DRAWER = { open: false, section: null, item: null, draft: {}, saving
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function StudentProfileView({ studentId, isAdminView = false, defaultTab = 'profile', defaultSubTab }) {
+  const navigate = useNavigate()
   // Translate legacy outer-tab values onto the new (outer, inner) shape so existing
   // call sites (e.g. ResearchProfilePage passing defaultTab='research') keep working.
   const _normalizeTab = (() => {
@@ -107,8 +107,6 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [reportDocs,      setReportDocs]      = useState([])
   const [reportUploadOpen,setReportUploadOpen]= useState(false)
   const [openReportId,    setOpenReportId]    = useState(null)
-  const [selectedSub,     setSelectedSub]     = useState(null)
-  const [subApprovals,    setSubApprovals]    = useState([])
   const [notFound,        setNotFound]        = useState(false)
   const [tab,             setTab]             = useState(_normalizeTab.outer)
   // Inner subtab — only meaningful when outer tab is 'profile' or 'submissions'.
@@ -122,7 +120,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // Only institute staff file a report on a scholar's behalf.
   const isStaff = usePermStore((s) => s.hasRole('admin') || s.hasRole('coordinator'))
   const canUploadReport = isAdminView && isStaff
-  useScrollLock(drawer.open || Boolean(selectedSub) || reportUploadOpen)
+  useScrollLock(drawer.open || reportUploadOpen)
 
   // ── Data loading ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -233,14 +231,8 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const feesPct   = totalDue > 0 ? Math.round((totalPaid / totalDue) * 100) : 0
 
   // ── Submission detail ───────────────────────────────────────────────────────
-  const openSub = async (sub) => {
-    setSelectedSub(sub)
-    setSubApprovals([])
-    try {
-      const approvalRes = await getApprovals()
-      setSubApprovals((approvalRes.data || []).filter((a) => a.submission_id === sub.id))
-    } catch { /* no approvals */ }
-  }
+  // Full-page preview (with feedback panel) instead of a sidedrawer.
+  const openSub = (sub) => navigate(`/${isAdminView ? 'admin' : 'student'}/submissions/${sub.id}/preview`)
 
   // ── Bio save ────────────────────────────────────────────────────────────────
   const saveBio = async () => {
@@ -917,84 +909,6 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         </div>
       )}
 
-      {/* ── Submission detail drawer ── */}
-      {selectedSub && (
-        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={() => setSelectedSub(null)}>
-          <div className="drawer-panel lg:!w-[min(840px,calc(100vw-32px))]" onClick={(e) => e.stopPropagation()}>
-            <div className="shrink-0 safe-row border-b border-[color:var(--border)] p-6">
-              <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Submission Detail</p>
-                <h2 className="mt-2 line-clamp-2 text-xl font-semibold text-[color:var(--text)]">{selectedSub.title}</h2>
-                <p className="mt-1 text-sm text-[color:var(--secondary)]">
-                  Report {selectedSub.report_period} · v{selectedSub.title_version || 1} · {formatDate(selectedSub.submitted_at)}
-                </p>
-              </div>
-              <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setSelectedSub(null)}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-auto overscroll-contain p-6 space-y-5 xl:grid xl:grid-cols-[1fr_300px] xl:gap-5 xl:space-y-0">
-              <div className="space-y-5">
-                {/* Submission file */}
-                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
-                  <div className="safe-row">
-                    <div>
-                      <p className="font-semibold text-[color:var(--text)]">Submission File</p>
-                      <p className="mt-1 text-xs text-[color:var(--secondary)]">{selectedSub.file_urls?.[0]?.name || 'No file attached'}</p>
-                    </div>
-                    {selectedSub.file_urls?.[0] && <SubmissionFileLink file={selectedSub.file_urls[0]} />}
-                  </div>
-                  {!selectedSub.file_urls?.[0] && (
-                    <div className="mt-4 grid h-40 place-items-center rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
-                      <div>
-                        <FileText className="mx-auto text-[color:var(--accent)]" size={30} />
-                        <p className="mt-3 text-sm text-[color:var(--secondary)]">No file attached to this submission.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Submission metadata */}
-                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
-                  <p className="font-semibold text-[color:var(--text)]">Submission Info</p>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <IR label="Type"          value={(selectedSub.submission_type || '—').replaceAll('_', ' ')} />
-                    <IR label="Version"       value={`v${selectedSub.version || 1}`} />
-                    <IR label="Status"        value={<StatusBadge status={selectedSub.status} />} />
-                    <IR label="Submitted"     value={formatDate(selectedSub.submitted_at)} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Approval thread */}
-              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
-                <p className="font-semibold text-[color:var(--text)]">Approval Thread</p>
-                {subApprovals.length === 0 ? (
-                  <p className="mt-3 text-sm text-[color:var(--secondary)]">No approval records yet.</p>
-                ) : (
-                  <div className="mt-4 space-y-3">
-                    {subApprovals.map((a) => (
-                      <div key={a.id} className="rounded-xl bg-[color:var(--card)] p-4">
-                        <div className="safe-row items-start">
-                          <p className="text-sm font-semibold capitalize text-[color:var(--text)]">{a.stage?.replaceAll('_', ' ')}</p>
-                          <StatusBadge status={a.status} />
-                        </div>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]">{a.comments || 'No comment.'}</p>
-                        {a.suggested_title && (
-                          <p className="mt-2 rounded-lg bg-[color:var(--surface)] p-3 text-xs leading-5 text-[color:var(--secondary)]">
-                            <b>Suggested title:</b> {a.suggested_title}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Add / Edit research item drawer ── */}
       {drawer.open && (

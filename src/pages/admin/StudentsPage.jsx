@@ -3,8 +3,7 @@ import {
   Loader2, RotateCcw, Square, Trash2, Upload, Users, XCircle,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { getApprovalsBySubmission } from '../../api/services/approvalService.js'
+import { Link, useNavigate } from 'react-router-dom'
 import { getProgressReportsByStudent, getSubmissionsByStudent } from '../../api/services/submissionService.js'
 import { archiveStudent, bulkStudentAction, exportStudents, getStudents } from '../../api/services/studentService.js'
 import { bulkSendCredentials, getUsers, sendCredentials } from '../../api/services/userService.js'
@@ -14,8 +13,6 @@ import PageHeader from '../../components/shared/PageHeader.jsx'
 import ResetPasswordModal from '../../components/shared/ResetPasswordModal.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
-import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
-import SubmissionRemarks from '../../components/shared/SubmissionRemarks.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
@@ -45,6 +42,7 @@ const BULK_ACTIONS = [
 ]
 
 export default function StudentsPage() {
+  const navigate = useNavigate()
   const labels = useLabels()
   const [items,          setItems]          = useState(null)
   const [total,          setTotal]          = useState(0)
@@ -60,8 +58,6 @@ export default function StudentsPage() {
   const [drawerMode,     setDrawerMode]     = useState('full')
   const [studentSubs,    setStudentSubs]    = useState([])
   const [studentReports, setStudentReports] = useState([])           // uploaded progress-report submissions
-  const [selectedSub,    setSelectedSub]    = useState(null)
-  const [subApprovals,   setSubApprovals]   = useState([])
   const [statusFilter,   setStatusFilter]   = useState('all')
   const [selectedIds,    setSelectedIds]    = useState(new Set())   // bulk selection (user_id)
   const [bulkLoading,    setBulkLoading]    = useState(false)
@@ -173,7 +169,6 @@ export default function StudentsPage() {
   const openStudent = async (student, mode = 'full') => {
     setSelected(student)
     setDrawerMode(mode)
-    setSelectedSub(null)
     setStudentSubs([])
     setStudentReports([])
     const [subs, reports] = await Promise.all([
@@ -184,16 +179,8 @@ export default function StudentsPage() {
     setStudentReports(reports.data || [])
   }
 
-  const openSubmission = async (sub) => {
-    setSelectedSub(sub)
-    setSubApprovals([])
-    try {
-      const approvalRes = await getApprovalsBySubmission(sub.id)
-      setSubApprovals(approvalRes.data || [])
-    } catch {
-      setSubApprovals([])
-    }
-  }
+  // Full-page preview (with feedback panel) instead of a sidedrawer.
+  const openSubmission = (sub) => navigate(`/admin/submissions/${sub.id}/preview`)
 
   // ── Bulk selection ────────────────────────────────────────────────────────
   const allFilteredIds = filtered.map((s) => s.user_id)
@@ -758,91 +745,6 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* ── Submission detail (nested z-50) ── */}
-      {selectedSub && (
-        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm" onClick={() => setSelectedSub(null)}>
-          <div className="drawer-panel lg:!w-[min(900px,calc(100vw-32px))]" onClick={(e) => e.stopPropagation()}>
-            <div className="shrink-0 safe-row border-b border-[color:var(--border)] p-6">
-              <div className="min-w-0">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Submission Detail</p>
-                <h2 className="mt-2 line-clamp-2 text-xl font-semibold text-[color:var(--text)]">{selectedSub.title}</h2>
-                <p className="mt-1 text-sm text-[color:var(--secondary)]">Semester {selectedSub.semester || 1} · {nameOf(selected)}</p>
-              </div>
-              <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setSelectedSub(null)}>
-                <XCircle size={18} />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-auto overscroll-contain p-6 space-y-5 xl:grid xl:grid-cols-[1fr_320px] xl:gap-5 xl:space-y-0">
-              <div className="space-y-5">
-                {/* Uploaded documents — the file(s) actually attached to this submission */}
-                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
-                  <p className="font-semibold text-[color:var(--text)]">Documents</p>
-                  {!Array.isArray(selectedSub.file_urls) || selectedSub.file_urls.length === 0 ? (
-                    <div className="mt-4 grid h-32 place-items-center rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 text-center">
-                      <div>
-                        <FileText className="mx-auto text-[color:var(--accent)]" size={28} />
-                        <p className="mt-3 text-sm text-[color:var(--secondary)]">No file attached to this submission.</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-4 space-y-2">
-                      {selectedSub.file_urls.map((f, i) => (
-                        <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-3 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-[color:var(--text)]">{f.name}</p>
-                            {f.size ? <p className="text-xs text-[color:var(--muted)]">{(f.size / 1024 / 1024).toFixed(2)} MB</p> : null}
-                          </div>
-                          <SubmissionFileLink file={f} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
-                  <p className="font-semibold text-[color:var(--text)]">Submission Info</p>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <Info label="Type"      value={(selectedSub.submission_type || '—').replaceAll('_', ' ')} />
-                    <Info label="Semester"  value={`Semester ${selectedSub.semester || 1}`} />
-                    <Info label="Version"   value={`v${selectedSub.version || 1}`} />
-                    <Info label="Status"    value={<StatusBadge status={selectedSub.status} />} />
-                    <Info label="Submitted" value={formatDate(selectedSub.submitted_at)} />
-                  </div>
-                </div>
-
-                {/* Feedback thread — admin can post as any staff role on their behalf */}
-                <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
-                  <SubmissionRemarks submissionId={selectedSub.id} />
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5">
-                <p className="font-semibold text-[color:var(--text)]">Approval Thread</p>
-                {subApprovals.length === 0
-                  ? <p className="mt-3 text-sm text-[color:var(--secondary)]">No approval records yet.</p>
-                  : <div className="mt-4 space-y-3">
-                    {[...subApprovals].sort((a, b) => (a.order_index || 0) - (b.order_index || 0)).map((a) => (
-                      <div key={a.id} className="rounded-xl bg-[color:var(--card)] p-4">
-                        <div className="safe-row items-start">
-                          <p className="text-sm font-semibold capitalize text-[color:var(--text)]">{a.stage?.replaceAll('_', ' ')}</p>
-                          <StatusBadge status={a.status} />
-                        </div>
-                        <p className="mt-2 text-sm leading-6 text-[color:var(--secondary)]">{a.comments || 'No comment.'}</p>
-                        {a.suggested_title && (
-                          <p className="mt-2 rounded-lg bg-[color:var(--surface)] p-3 text-xs leading-5 text-[color:var(--secondary)]">
-                            <b>Suggested title:</b> {a.suggested_title}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                }
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Import side drawer ── */}
       {showImport && (
