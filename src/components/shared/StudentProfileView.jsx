@@ -21,6 +21,7 @@ import {
 } from '../../api/services/researchProfileService.js'
 import { assignGuide, getStudentById, updateStudent } from '../../api/services/studentService.js'
 import { getUsers, updateUser } from '../../api/services/userService.js'
+import { getApprovalsBySubmission } from '../../api/services/approvalService.js'
 import DatePicker from './DatePicker.jsx'
 import Select from './Select.jsx'
 import StudentOnboardingPanel from './StudentOnboardingPanel.jsx'
@@ -36,6 +37,7 @@ import UploadProgressReportDrawer from '../admin/UploadProgressReportDrawer.jsx'
 import OnBehalfSubmissionDrawer from '../admin/OnBehalfSubmissionDrawer.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
+import { latestFeedbackEvent } from '../../lib/feedbackEvent.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { usePermStore } from '../../store/permStore.js'
 import SkeletonCard from './SkeletonCard.jsx'
@@ -112,6 +114,9 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // Uploaded progress-report DOCUMENTS (submissions of type 'progress_report').
   // Distinct from the targets list above.
   const [reportDocs,      setReportDocs]      = useState([])
+  // Most recent reviewer feedback event per report id — { at, kind, text, stage } — so
+  // the list itself shows what the coordinator/admin said, not just a status badge.
+  const [reportFeedback,  setReportFeedback]  = useState({})
   const [reportUploadOpen,setReportUploadOpen]= useState(false)
   const [openTargetId,    setOpenTargetId]    = useState(null)  // which milestone's submit panel is expanded
   const [openAssignmentId,setOpenAssignmentId]= useState(null)  // which assignment's submit panel is expanded
@@ -216,7 +221,18 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   function loadReportDocs() {
     if (!studentId) return
     getProgressReportsByStudent(studentId)
-      .then((r) => setReportDocs(r.data || []))
+      .then(async (r) => {
+        const docs = r.data || []
+        setReportDocs(docs)
+        // Naturally bounded (one report per semester) — safe to fetch approval
+        // history for every row, not just a top-N slice.
+        const lists = await Promise.all(
+          docs.map((d) => getApprovalsBySubmission(d.id).then((res) => res.data || []).catch(() => []))
+        )
+        const map = {}
+        docs.forEach((d, i) => { const ev = latestFeedbackEvent(lists[i]); if (ev) map[d.id] = ev })
+        setReportFeedback(map)
+      })
       .catch(() => setReportDocs([]))
   }
 
@@ -741,6 +757,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             <div className="space-y-3">
               {list.map((r) => {
                 const files = Array.isArray(r.file_urls) ? r.file_urls : []
+                const feedback = reportFeedback[r.id]
                 return (
                   <div
                     key={r.id}
@@ -758,6 +775,15 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                         {r.remarks_count > 0 && <span>{r.remarks_count} remark{r.remarks_count === 1 ? '' : 's'}</span>}
                         <span>{formatDate(r.submitted_at || r.created_at)}</span>
                       </p>
+                      {feedback && (
+                        <div className="mt-2 rounded-lg bg-[color:var(--surface)] p-2.5">
+                          <p className={`text-[10px] font-bold uppercase tracking-wide ${feedback.kind === 'revision' ? 'text-orange-700' : 'text-[color:var(--muted)]'}`}>
+                            {feedback.kind === 'revision' ? 'Revision requested' : feedback.kind === 'approved' ? 'Approved' : 'Feedback'}
+                            {feedback.stage ? ` · ${feedback.stage.replaceAll('_', ' ')}` : ''}
+                          </p>
+                          {feedback.text && <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs leading-5 text-[color:var(--text)]">{feedback.text}</p>}
+                        </div>
+                      )}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <StatusBadge status={r.status} />

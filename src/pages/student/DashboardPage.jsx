@@ -11,6 +11,7 @@ import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { formatDate, timeAgo } from '../../lib/formatters.js'
+import { latestFeedbackEvent } from '../../lib/feedbackEvent.js'
 import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
@@ -18,31 +19,6 @@ import { useUiStore } from '../../store/uiStore.js'
 // for, on the dashboard. Bounded on purpose — this is N extra requests (one
 // per submission) run in parallel, not meant to scan the whole history.
 const FEEDBACK_LOOKBACK = 6
-
-/**
- * Reduce a submission's approval rows to the single most recent "feedback
- * event" worth surfacing on the dashboard: a document-style feedback note,
- * a revision request, or a plain approval — whichever happened most
- * recently. Returns null if nothing has actually happened yet (still
- * pending, no reviewer action taken).
- */
-const latestFeedbackEvent = (submission, approvals) => {
-  let best = null
-  for (const a of approvals || []) {
-    const at = a.feedback_updated_at || a.action_at
-    if (!at) continue
-    if (a.feedback_html) {
-      if (!best || new Date(at) > new Date(best.at)) best = { at, kind: 'feedback', text: a.feedback_html, stage: a.stage }
-    }
-    if (a.status === 'needs_revision' && a.comments) {
-      if (!best || new Date(at) > new Date(best.at)) best = { at, kind: 'revision', text: a.comments, stage: a.stage }
-    } else if (a.status === 'approved') {
-      if (!best || new Date(at) > new Date(best.at)) best = { at, kind: 'approved', text: a.comments || null, stage: a.stage }
-    }
-  }
-  if (!best) return null
-  return { submission, ...best }
-}
 
 export default function DashboardPage() {
   const [data, setData] = useState(null)
@@ -68,7 +44,7 @@ export default function DashboardPage() {
             recent.map((s) => getApprovalsBySubmission(s.id).then((r) => r.data || []).catch(() => []))
           )
           const feedbackItems = recent
-            .map((s, i) => latestFeedbackEvent(s, approvalLists[i]))
+            .map((s, i) => { const ev = latestFeedbackEvent(approvalLists[i]); return ev && { submission: s, ...ev } })
             .filter(Boolean)
             .sort((a, b) => new Date(b.at) - new Date(a.at))
             .slice(0, 5)
