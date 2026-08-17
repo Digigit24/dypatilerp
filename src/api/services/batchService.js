@@ -50,3 +50,16 @@ export const updateApprovalConfig = async (batchId, stages) => {
   const { data: res } = await http.put(`/batches/${batchId}/approval-config`, { stages })
   return ok(res.data)
 }
+
+/**
+ * Advance a batch's active scholars to the next semester (or a given
+ * to_semester). Omit student_user_ids to advance the whole batch. Opens the
+ * progress-report cycle for whatever semester scholars land on, and returns
+ * non-blocking warnings for scholars with open targets / unpaid fees in the
+ * semester they're leaving.
+ */
+export const advanceSemester = async (batchId, payload = {}) => {
+  if (USE_MOCK) { return ok({ advanced: 0, semesters: [], cycles_opened: 0, warnings: [] }) }
+  const { data: res } = await http.post(`/batches/${batchId}/advance-semester`, payload)
+  return ok(res.data, { message: res.message })
+}
