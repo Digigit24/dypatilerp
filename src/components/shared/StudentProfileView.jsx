@@ -573,30 +573,32 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             )}
           </div>
 
-          {/* Guides — admin view */}
-          {isAdminView && (
-            <div className="card p-6">
-              <SH title="Assigned Guides" />
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <GuideCard
-                  type="Academic" guide={academicGuide}
-                  canAssign={isStaff && canReadUsers} options={guideOptions.academic}
-                  assigning={assigningGuide === 'academic'}
-                  onStartAssign={() => setAssigningGuide('academic')}
-                  onCancelAssign={() => setAssigningGuide(null)}
-                  onPick={(id) => handleAssignGuide('academic', id)}
-                />
-                <GuideCard
-                  type="Industry" guide={industryGuide}
-                  canAssign={isStaff && canReadUsers} options={guideOptions.industry}
-                  assigning={assigningGuide === 'industry'}
-                  onStartAssign={() => setAssigningGuide('industry')}
-                  onCancelAssign={() => setAssigningGuide(null)}
-                  onPick={(id) => handleAssignGuide('industry', id)}
-                />
-              </div>
+          {/* Guides — editable for staff (admin/coordinator), read-only display
+              otherwise. Shown on both the admin's view of a scholar and the
+              scholar's own profile — GuideCard itself drops the assign/reassign
+              controls whenever canAssign is false, so a student here only ever
+              sees the guide's name and contact, never a "Choose a guide…" dropdown. */}
+          <div className="card p-6">
+            <SH title="Assigned Guides" />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <GuideCard
+                type="Academic" guide={academicGuide}
+                canAssign={isAdminView && isStaff && canReadUsers} options={guideOptions.academic}
+                assigning={assigningGuide === 'academic'}
+                onStartAssign={() => setAssigningGuide('academic')}
+                onCancelAssign={() => setAssigningGuide(null)}
+                onPick={(id) => handleAssignGuide('academic', id)}
+              />
+              <GuideCard
+                type="Industry" guide={industryGuide}
+                canAssign={isAdminView && isStaff && canReadUsers} options={guideOptions.industry}
+                assigning={assigningGuide === 'industry'}
+                onStartAssign={() => setAssigningGuide('industry')}
+                onCancelAssign={() => setAssigningGuide(null)}
+                onPick={(id) => handleAssignGuide('industry', id)}
+              />
             </div>
-          )}
+          </div>
 
           {/* Fees Summary — admin view */}
           {isAdminView && (
