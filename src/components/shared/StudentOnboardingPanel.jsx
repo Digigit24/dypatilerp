@@ -28,10 +28,10 @@ const INFO_FIELDS = [
 ]
 
 const SLOT_LABELS = {
-  cv: 'CV / Resume',
-  research_proposal: 'Research Proposal',
-  publications_list: 'List of Publications',
-  research_statement: 'Research Statement',
+  cv: 'Your latest CV',
+  research_proposal: 'Proposal for Postdoctoral Research (5 Pages Only)',
+  publications_list: 'List of Publications till date (In APA Format Only)',
+  research_statement: 'Research Statement (2 Pages Only)',
   passport: 'Passport',
   aadhar_card: 'Aadhaar Card',
   pan_card: 'PAN Card',
