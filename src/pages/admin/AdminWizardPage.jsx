@@ -222,19 +222,14 @@ const STAGE_PRESETS = [
   { name: 'industry_mentor', label: 'Industry Mentor', type: 'student_guide', guide_type: 'industry' },
 ]
 
-const APPROVER_ROLES = [
-  { value: 'coordinator',     label: 'Coordinator' },
-  { value: 'academic_guide',  label: 'Academic Guide' },
-  { value: 'industry_mentor', label: 'Industry Mentor' },
-  { value: 'admin',           label: 'Admin' },
-]
-
 function WorkflowsTab({ course }) {
   const addToast = useUiStore((s) => s.addToast)
   const [batches, setBatches] = useState(null)
   const [edits, setEdits] = useState({})   // batchId -> stages[]
   const [savingId, setSavingId] = useState(null)
-  const [approverEdits, setApproverEdits] = useState({})   // batchId -> role
+  // batchId -> stages[] of length 0 or 1 — same shape/editor as the chain
+  // above, just capped at one entry (a target has exactly one approver).
+  const [approverEdits, setApproverEdits] = useState({})
   const [approverSavingId, setApproverSavingId] = useState(null)
 
   useEffect(() => {
@@ -249,9 +244,11 @@ function WorkflowsTab({ course }) {
 
   const stagesOf = (b) => edits[b.id] ?? (b.approval_config?.stages || [])
   const setStages = (b, stages) => setEdits((p) => ({ ...p, [b.id]: stages }))
-  // Milestones default to coordinator — same default the backend falls back
-  // to (workflow.js DEFAULT_TARGET_APPROVER) when a batch hasn't set one.
-  const approverOf = (b) => approverEdits[b.id] ?? (b.approval_config?.target?.approver?.role || 'coordinator')
+  // Milestones default to coordinator (workflow.js DEFAULT_TARGET_APPROVER)
+  // when a batch hasn't set one — [] means "use that built-in default",
+  // exactly like an empty progress-report chain does above.
+  const approverStagesOf = (b) => approverEdits[b.id] ?? (b.approval_config?.target?.approver ? [b.approval_config.target.approver] : [])
+  const setApproverStages = (b, stages) => setApproverEdits((p) => ({ ...p, [b.id]: stages.slice(0, 1) }))
 
   const save = async (b) => {
     setSavingId(b.id)
@@ -268,12 +265,14 @@ function WorkflowsTab({ course }) {
   }
 
   const saveApprover = async (b) => {
-    const role = approverOf(b)
+    const [stage] = approverStagesOf(b)
+    const approver = stage
+      ? { ...stage, order_index: 1 }
+      : { name: 'target_review', label: 'Target Review', type: 'role', role: 'coordinator', order_index: 1 }
     setApproverSavingId(b.id)
     try {
-      const approver = { name: 'target_review', label: 'Target Review', type: 'role', role, order_index: 1 }
       await updateTargetApprover(b.id, approver)
-      addToast({ type: 'success', title: `Milestone approver set to ${APPROVER_ROLES.find((r) => r.value === role)?.label} for ${b.name}.` })
+      addToast({ type: 'success', title: `Milestone approver set to ${approver.label || approver.name} for ${b.name}.` })
       setBatches((xs) => xs.map((x) => x.id === b.id
         ? { ...x, approval_config: { ...x.approval_config, target: { mode: 'single', approver } } } : x))
       setApproverEdits((p) => { const n = { ...p }; delete n[b.id]; return n })
@@ -350,31 +349,71 @@ function WorkflowsTab({ course }) {
             </div>
 
             {/* Milestone approver — a target has exactly ONE approver, unlike
-                the progress-report chain above. Independent save so setting
-                one never requires touching the other. */}
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[color:var(--card)] text-[color:var(--secondary)]"><Target size={13} /></span>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-[color:var(--text)]">Milestone approver</p>
-                  <p className="text-[10px] text-[color:var(--muted)]">Who signs off a scholar's milestone submission</p>
+                the progress-report chain above. Same stage-editor UI as the
+                chain (presets + custom role), just capped at one entry.
+                Independent save so setting one never requires touching the
+                progress-report chain. */}
+            {(() => {
+              const approverStages = approverStagesOf(b)
+              const approverDirty = approverEdits[b.id] !== undefined
+              return (
+                <div className="mt-4 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[color:var(--card)] text-[color:var(--secondary)]"><Target size={13} /></span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-[color:var(--text)]">Milestone approver</p>
+                        <p className="text-[10px] text-[color:var(--muted)]">Who signs off a scholar's milestone submission — one layer only</p>
+                      </div>
+                    </div>
+                    {approverDirty && (
+                      <button className="btn-primary inline-flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-[11px]" disabled={approverSavingId === b.id} onClick={() => saveApprover(b)}>
+                        {approverSavingId === b.id ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mt-2.5 space-y-2">
+                    {approverStages.map((s, i) => (
+                      <div key={i} className="flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-3 py-2">
+                        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[color:var(--accent)] text-[10px] font-bold text-white">1</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold capitalize text-[color:var(--text)]">{(s.label || s.name || '').replaceAll('_', ' ')}</p>
+                          <p className="text-[10px] text-[color:var(--muted)]">{s.type === 'student_guide' ? `Scholar's assigned ${s.guide_type} guide` : s.type === 'role' ? `Anyone with the ${s.role} role` : 'Specific user'}</p>
+                        </div>
+                        <button onClick={() => setApproverStages(b, [])}
+                          className="grid h-6 w-6 place-items-center rounded-full text-[color:var(--muted)] hover:bg-red-50 hover:text-red-500"><Trash2 size={12} /></button>
+                      </div>
+                    ))}
+                    {approverStages.length === 0 && (
+                      <p className="rounded-lg bg-[color:var(--card)] px-3 py-2 text-[11px] text-[color:var(--secondary)]">
+                        Using the built-in default (Coordinator). Pick one below to customise.
+                      </p>
+                    )}
+                  </div>
+
+                  {approverStages.length === 0 && (
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {STAGE_PRESETS.map((p) => (
+                        <button key={p.name}
+                          onClick={() => setApproverStages(b, [{ ...p, name: 'target_review', label: p.label }])}
+                          className="inline-flex items-center gap-1 rounded-xl border border-dashed border-[color:var(--border)] px-2.5 py-1.5 text-[11px] font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]">
+                          <Plus size={11} /> {p.label}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => {
+                          const role = prompt('Custom role name (e.g. dean):')
+                          if (role?.trim()) setApproverStages(b, [{ name: 'target_review', label: role.trim(), type: 'role', role: role.trim() }])
+                        }}
+                        className="inline-flex items-center gap-1 rounded-xl border border-dashed border-[color:var(--border)] px-2.5 py-1.5 text-[11px] font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]">
+                        <Shield size={11} /> Custom role…
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <select
-                  className="input h-8 py-0 text-xs"
-                  value={approverOf(b)}
-                  onChange={(e) => setApproverEdits((p) => ({ ...p, [b.id]: e.target.value }))}
-                >
-                  {APPROVER_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
-                {approverEdits[b.id] !== undefined && (
-                  <button className="btn-primary inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px]" disabled={approverSavingId === b.id} onClick={() => saveApprover(b)}>
-                    {approverSavingId === b.id ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
-                  </button>
-                )}
-              </div>
-            </div>
+              )
+            })()}
           </div>
         )
       })}
