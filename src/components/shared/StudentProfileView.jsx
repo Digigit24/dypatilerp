@@ -19,7 +19,9 @@ import {
   addResearchItem, getProfile, togglePublic,
   updateProfile, updateResearchItem,
 } from '../../api/services/researchProfileService.js'
-import { getStudentById, updateStudent } from '../../api/services/studentService.js'
+import { assignGuide, getStudentById, updateStudent } from '../../api/services/studentService.js'
+import { getUsers, updateUser } from '../../api/services/userService.js'
+import Select from './Select.jsx'
 import StudentOnboardingPanel from './StudentOnboardingPanel.jsx'
 import { getFeesByStudent } from '../../api/services/feeService.js'
 import {
@@ -136,7 +138,25 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // Only institute staff file a report on a scholar's behalf.
   const isStaff = usePermStore((s) => s.hasRole('admin') || s.hasRole('coordinator'))
   const canUploadReport = isAdminView && isStaff
+  // Admin/coordinator staff already hold students:update server-side — this
+  // just stops the UI from hard-coding their own view as permanently read-only.
+  const canEditProfile = !isAdminView || isStaff
+  const canReadUsers = usePermStore((s) => s.can('users', 'read'))
+  const [personalEditing, setPersonalEditing] = useState(false)
+  const [personalDraft,   setPersonalDraft]   = useState({})
+  const [guideOptions,    setGuideOptions]    = useState({ academic: [], industry: [] })
+  const [assigningGuide,  setAssigningGuide]  = useState(null) // 'academic' | 'industry' | null
   useScrollLock(drawer.open || reportUploadOpen)
+
+  // Eligible guides for the assign dropdowns — only fetched for staff who can
+  // actually see the roster (coordinators without users:read see a disabled
+  // "assign" affordance instead of a silently-empty dropdown).
+  useEffect(() => {
+    if (!isAdminView || !isStaff || !canReadUsers) return
+    Promise.all([getUsers({ role: 'academic_guide' }), getUsers({ role: 'industry_mentor' })])
+      .then(([a, i]) => setGuideOptions({ academic: a.data || [], industry: i.data || [] }))
+      .catch(() => setGuideOptions({ academic: [], industry: [] }))
+  }, [isAdminView, isStaff, canReadUsers])
 
   // ── Data loading ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -275,6 +295,44 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
     setStudent(updated.data)
     setBioEditing(false)
     addToast({ type: 'success', title: 'Profile updated.' })
+  }
+
+  // ── Personal info save ──────────────────────────────────────────────────────
+  // Only `phone` is wired to a real save path — PUT /users/:id's field allowlist
+  // is identity-only (first/last name, phone, avatar, is_active). Email, batch
+  // and semester stay read-only here; there's no endpoint that safely mutates
+  // them from this view (semester moves through /batches/:id/advance-semester).
+  const savePersonal = async () => {
+    try {
+      await updateUser(studentId, { phone: personalDraft.phone })
+      setUser((u) => ({ ...u, phone: personalDraft.phone }))
+      setPersonalEditing(false)
+      addToast({ type: 'success', title: 'Contact details updated.' })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Could not save', message: err.response?.data?.message })
+    }
+  }
+
+  // ── Guide assignment ────────────────────────────────────────────────────────
+  // Optimistic: the picked guide appears immediately; a failed request rolls
+  // the card back to "Not assigned" and surfaces why.
+  const handleAssignGuide = async (guideType, guideUserId) => {
+    const pool = guideType === 'academic' ? guideOptions.academic : guideOptions.industry
+    const picked = pool.find((g) => g.id === guideUserId)
+    if (!picked || !student.batch_id) return
+    const prevGuides = student.guides || []
+    setStudent((s) => ({
+      ...s,
+      guides: [...prevGuides.filter((g) => g.guide_type !== guideType), { guide_type: guideType, guide_user_id: picked.id, ...picked }],
+    }))
+    setAssigningGuide(null)
+    try {
+      await assignGuide(studentId, { guide_user_id: picked.id, guide_type: guideType, batch_id: student.batch_id })
+      addToast({ type: 'success', title: `${picked.first_name} ${picked.last_name} assigned as ${guideType === 'academic' ? 'academic guide' : 'industry mentor'}.` })
+    } catch (err) {
+      setStudent((s) => ({ ...s, guides: prevGuides }))
+      addToast({ type: 'error', title: 'Could not assign guide', message: err.response?.data?.message })
+    }
   }
 
   // ── Academic save ───────────────────────────────────────────────────────────
@@ -466,7 +524,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
           <div className="card p-6">
             <SH title="About"
               editing={bioEditing}
-              onEdit={!isAdminView ? () => { setBioDraft({ bio: student.profile?.bio || '', linkedin_url: student.profile?.linkedin_url || '' }); setBioEditing(true) } : undefined}
+              onEdit={canEditProfile ? () => { setBioDraft({ bio: student.profile?.bio || '', linkedin_url: student.profile?.linkedin_url || '' }); setBioEditing(true) } : undefined}
               onSave={saveBio}
               onCancel={() => setBioEditing(false)}
             />
@@ -488,15 +546,30 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
 
           {/* Personal Information */}
           <div className="card p-6">
-            <SH title="Personal Information" />
+            <SH title="Personal Information"
+              editing={personalEditing}
+              onEdit={canEditProfile ? () => { setPersonalDraft({ phone: user.phone || '' }); setPersonalEditing(true) } : undefined}
+              onSave={savePersonal}
+              onCancel={() => setPersonalEditing(false)}
+            />
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <IR label="Email"            value={user.email} />
-              <IR label="Phone"            value={user.phone} />
+              <IR label="Email" value={user.email} />
+              {personalEditing ? (
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Phone</span>
+                  <input className="input mt-1.5 w-full" value={personalDraft.phone} onChange={(e) => setPersonalDraft((p) => ({ ...p, phone: e.target.value }))} />
+                </label>
+              ) : (
+                <IR label="Phone" value={user.phone} />
+              )}
               <IR label="Enrolled"         value={formatDate(student.enrolled_at)} />
               <IR label="Batch"            value={student.batch_name || student.batch_code} />
               <IR label="Course"           value={student.course_name} />
               <IR label="Semester"         value={student.current_semester ? `Semester ${student.current_semester}` : '—'} />
             </div>
+            {personalEditing && (
+              <p className="mt-3 text-xs text-[color:var(--muted)]">Batch, semester and enrollment date change through their own workflows (e.g. advancing a semester) — not editable here.</p>
+            )}
           </div>
 
           {/* Guides — admin view */}
@@ -504,8 +577,22 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             <div className="card p-6">
               <SH title="Assigned Guides" />
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <GuideCard type="Academic" guide={academicGuide} />
-                <GuideCard type="Industry" guide={industryGuide} />
+                <GuideCard
+                  type="Academic" guide={academicGuide}
+                  canAssign={isStaff && canReadUsers} options={guideOptions.academic}
+                  assigning={assigningGuide === 'academic'}
+                  onStartAssign={() => setAssigningGuide('academic')}
+                  onCancelAssign={() => setAssigningGuide(null)}
+                  onPick={(id) => handleAssignGuide('academic', id)}
+                />
+                <GuideCard
+                  type="Industry" guide={industryGuide}
+                  canAssign={isStaff && canReadUsers} options={guideOptions.industry}
+                  assigning={assigningGuide === 'industry'}
+                  onStartAssign={() => setAssigningGuide('industry')}
+                  onCancelAssign={() => setAssigningGuide(null)}
+                  onPick={(id) => handleAssignGuide('industry', id)}
+                />
               </div>
             </div>
           )}
@@ -546,7 +633,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
           <div className="card p-6">
             <SH title="Research Areas & Skills"
               editing={academicEditing}
-              onEdit={!isAdminView ? () => { setAcademicDraft({ research_areas: research?.research_areas?.join(', ') || '', skills: research?.skills?.join(', ') || '' }); setAcademicEditing(true) } : undefined}
+              onEdit={canEditProfile ? () => { setAcademicDraft({ research_areas: research?.research_areas?.join(', ') || '', skills: research?.skills?.join(', ') || '' }); setAcademicEditing(true) } : undefined}
               onSave={saveAcademic}
               onCancel={() => setAcademicEditing(false)}
             />
@@ -587,7 +674,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
               Real API wiring against /students/:userId/profile-details and
               /students/:userId/documents/:slot (replaces the old CERT_TYPES
               block, which only toggled local state and never called an API). */}
-          <StudentOnboardingPanel userId={studentId} editable={!isAdminView} />
+          <StudentOnboardingPanel userId={studentId} editable={canEditProfile} />
         </div>
       )}
 
@@ -991,7 +1078,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                         {label} <span className="text-sm font-normal text-[color:var(--secondary)]">({research[key]?.length || 0})</span>
                       </h2>
                     </div>
-                    {!isAdminView && (
+                    {canEditProfile && (
                       <button onClick={() => openAdd(key)}
                         className="grid h-8 w-8 place-items-center rounded-lg bg-[color:var(--accent-tint)] text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white">
                         <Plus size={16} />
@@ -1014,7 +1101,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
                             {item.is_verified && <StatusBadge status="approved" />}
-                            {!isAdminView && (
+                            {canEditProfile && (
                               <button onClick={() => openEdit(key, item)}
                                 className="grid h-8 w-8 place-items-center rounded-xl bg-[color:var(--surface-strong)] text-[color:var(--muted)] transition hover:bg-[color:var(--accent-tint)] hover:text-[color:var(--accent)]">
                                 <Pencil size={14} />
@@ -1032,9 +1119,9 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
               <div className="card p-6">
                 <div className="safe-row">
                   <h2 className="text-lg font-semibold text-[color:var(--text)]">Skills</h2>
-                  {!isAdminView && (
+                  {canEditProfile && (
                     <button
-                      onClick={() => { setTab('profile'); setAcademicEditing(true); setAcademicDraft({ research_areas: research?.research_areas?.join(', ') || '', skills: research?.skills?.join(', ') || '' }) }}
+                      onClick={() => { setTab('profile'); setSubTab('profile'); setAcademicEditing(true); setAcademicDraft({ research_areas: research?.research_areas?.join(', ') || '', skills: research?.skills?.join(', ') || '' }) }}
                       className="grid h-8 w-8 place-items-center rounded-xl bg-[color:var(--surface-strong)] text-[color:var(--muted)] transition hover:bg-[color:var(--accent-tint)] hover:text-[color:var(--accent)]">
                       <Pencil size={14} />
                     </button>
@@ -1438,7 +1525,7 @@ function StatCard({ label, value, accent }) {
   )
 }
 
-function GuideCard({ type, guide }) {
+function GuideCard({ type, guide, canAssign, options = [], assigning, onStartAssign, onCancelAssign, onPick }) {
   return (
     <div className={`rounded-xl border p-4 ${guide ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]' : 'border-[color:var(--border)] bg-[color:var(--surface)]'}`}>
       <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">{type} Guide</p>
@@ -1446,7 +1533,40 @@ function GuideCard({ type, guide }) {
         <>
           <p className="mt-2 font-semibold text-[color:var(--text)]">{guide.first_name} {guide.last_name}</p>
           <p className="mt-0.5 text-xs text-[color:var(--secondary)]">{guide.email}</p>
+          {canAssign && (
+            assigning ? (
+              <div className="mt-2 space-y-2">
+                <Select
+                  value=""
+                  onChange={(id) => onPick(id)}
+                  options={options.map((g) => ({ value: g.id, label: `${g.first_name} ${g.last_name}` }))}
+                  placeholder={options.length ? 'Reassign to…' : 'No eligible guides found'}
+                  disabled={options.length === 0}
+                />
+                <button onClick={onCancelAssign} className="text-xs font-semibold text-[color:var(--secondary)] hover:text-[color:var(--text)]">Cancel</button>
+              </div>
+            ) : (
+              <button onClick={onStartAssign} className="mt-2 text-xs font-semibold text-[color:var(--accent)] hover:underline">Reassign</button>
+            )
+          )}
         </>
+      ) : canAssign ? (
+        assigning ? (
+          <div className="mt-2 space-y-2">
+            <Select
+              value=""
+              onChange={(id) => onPick(id)}
+              options={options.map((g) => ({ value: g.id, label: `${g.first_name} ${g.last_name}` }))}
+              placeholder={options.length ? 'Choose a guide…' : 'No eligible guides found'}
+              disabled={options.length === 0}
+            />
+            <button onClick={onCancelAssign} className="text-xs font-semibold text-[color:var(--secondary)] hover:text-[color:var(--text)]">Cancel</button>
+          </div>
+        ) : (
+          <button onClick={onStartAssign} className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--accent-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white">
+            Assign a {type.toLowerCase()} guide
+          </button>
+        )
       ) : (
         <p className="mt-2 text-sm text-[color:var(--secondary)]">Not assigned</p>
       )}
