@@ -185,12 +185,13 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         // email, phone, avatar_url come from the JOIN on users). No separate getUserById
         // call needed — that previously broke because r.data.user_id was undefined.
         setUser({
-          id:         s.id,
-          email:      s.email,
-          first_name: s.first_name,
-          last_name:  s.last_name,
-          phone:      s.phone,
-          avatar_url: s.avatar_url,
+          id:          s.id,
+          email:       s.email,
+          first_name:  s.first_name,
+          middle_name: s.middle_name,
+          last_name:   s.last_name,
+          phone:       s.phone,
+          avatar_url:  s.avatar_url,
         })
       })
       .catch(() => setNotFound(true))
@@ -308,7 +309,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
 
   if (!student || !user) return <SkeletonCard rows={8} />
 
-  const name     = `${user.first_name} ${user.last_name}`
+  const name     = [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(' ')
   const initials = name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
 
   // Normalise progress values. Prefer the targets-derived roll-up (authoritative) over

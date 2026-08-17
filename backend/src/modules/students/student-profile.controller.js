@@ -26,8 +26,8 @@ export const getProfileDetails = asyncHandler(async (req, res) => {
 
 export const putProfileDetails = asyncHandler(async (req, res) => {
   if (!assertOwnerOrBroaderScope(req, res)) return;
-  const { first_name, last_name, phone, ...rest } = req.body || {};
-  await svc.updateBasicUserFields(req.params.userId, { first_name, last_name, phone });
+  const { first_name, middle_name, last_name, phone, ...rest } = req.body || {};
+  await svc.updateBasicUserFields(req.params.userId, { first_name, middle_name, last_name, phone });
   const details = await svc.upsertProfileDetails(req.params.userId, rest);
   const onboarding = await svc.getOnboardingStatus(req.params.userId);
   ok(res, { ...details, onboarding }, 'Profile details saved');

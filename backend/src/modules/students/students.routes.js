@@ -242,7 +242,7 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
     : (ownFrag || scopeFrag) ? `WHERE TRUE ${ownFrag} ${scopeFrag}` : '';
 
   const { rows: data } = await query(
-    `SELECT be.*, u.first_name, u.last_name, u.email, u.phone, u.avatar_url,
+    `SELECT be.*, u.first_name, u.middle_name, u.last_name, u.email, u.phone, u.avatar_url,
             b.name as batch_name, b.code as batch_code, c.name as course_name,
             (SELECT COUNT(*) FROM submissions s2 WHERE s2.student_user_id = be.user_id)::int
               AS submissions_count,
@@ -290,7 +290,7 @@ router.get('/:id', requirePermission('students', 'read'), asyncHandler(async (re
     return res.status(403).json({ success: false, code: 'PERMISSION_DENIED', message: 'You can only view your own profile.' });
   }
   const { rows: [student] } = await query(
-    `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.avatar_url,
+    `SELECT u.id, u.email, u.first_name, u.middle_name, u.last_name, u.phone, u.avatar_url,
             be.enrollment_number, be.status, be.current_semester, be.enrolled_at, be.batch_id,
             b.name as batch_name, b.code as batch_code, c.name as course_name
      FROM users u
@@ -356,6 +356,7 @@ router.post('/:id/guides', requirePermission('students', 'update'), validate(ass
  */
 const profileDetailsSchema = z.object({
   first_name: z.string().min(1).max(255).optional(),
+  middle_name: z.string().max(255).optional().nullable(),
   last_name: z.string().min(1).max(255).optional(),
   phone: z.string().max(32).optional(),
   father_name: z.string().max(255).optional(),

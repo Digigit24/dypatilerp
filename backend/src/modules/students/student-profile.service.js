@@ -17,7 +17,7 @@ export const ALL_SLOTS = [...UPLOAD_SLOTS, ...DOCUMENT_SLOTS];
 // last_name / phone, which already live on `users`. Email is intentionally
 // excluded — it's the account identifier and isn't part of onboarding.
 const PROFILE_DETAIL_FIELDS = ['father_name', 'mother_name', 'date_of_birth', 'postal_address', 'blood_group'];
-const USER_INFO_FIELDS = ['first_name', 'last_name', 'phone'];
+const USER_INFO_FIELDS = ['first_name', 'middle_name', 'last_name', 'phone'];
 export const INFO_FIELDS = [...USER_INFO_FIELDS, ...PROFILE_DETAIL_FIELDS];
 
 // ─── Profile details (personal info) ──────────────────────────────────────────
@@ -25,11 +25,12 @@ export const INFO_FIELDS = [...USER_INFO_FIELDS, ...PROFILE_DETAIL_FIELDS];
 export const getProfileDetails = async (userId) => {
   const [{ rows: [details] }, { rows: [user] }] = await Promise.all([
     query('SELECT * FROM student_profile_details WHERE user_id=$1', [userId]),
-    query('SELECT id, first_name, last_name, phone, email FROM users WHERE id=$1', [userId]),
+    query('SELECT id, first_name, middle_name, last_name, phone, email FROM users WHERE id=$1', [userId]),
   ]);
   return {
     user_id: userId,
     first_name: user?.first_name ?? null,
+    middle_name: user?.middle_name ?? null,
     last_name: user?.last_name ?? null,
     phone: user?.phone ?? null,
     email: user?.email ?? null,
@@ -53,13 +54,14 @@ export const setOnboardingSkip = async (userId, skip) => {
   return getProfileDetails(userId);
 };
 
-/** first_name/last_name/phone live on `users` — updated here for onboarding-form convenience (same fields PUT /users/:id already allows). */
-export const updateBasicUserFields = async (userId, { first_name, last_name, phone } = {}) => {
+/** first_name/middle_name/last_name/phone live on `users` — updated here for onboarding-form convenience (same fields PUT /users/:id already allows). */
+export const updateBasicUserFields = async (userId, { first_name, middle_name, last_name, phone } = {}) => {
   const fields = [];
   const params = [];
-  if (first_name !== undefined) { params.push(first_name); fields.push(`first_name=$${params.length}`); }
-  if (last_name !== undefined)  { params.push(last_name);  fields.push(`last_name=$${params.length}`); }
-  if (phone !== undefined)      { params.push(phone);      fields.push(`phone=$${params.length}`); }
+  if (first_name !== undefined)  { params.push(first_name);         fields.push(`first_name=$${params.length}`); }
+  if (middle_name !== undefined) { params.push(middle_name || null); fields.push(`middle_name=$${params.length}`); }
+  if (last_name !== undefined)   { params.push(last_name);          fields.push(`last_name=$${params.length}`); }
+  if (phone !== undefined)       { params.push(phone);              fields.push(`phone=$${params.length}`); }
   if (!fields.length) return;
   params.push(userId);
   await query(`UPDATE users SET ${fields.join(',')}, updated_at=NOW() WHERE id=$${params.length}`, params);

@@ -68,7 +68,7 @@ export const logout = asyncHandler(async (req, res) => {
 export const me = asyncHandler(async (req, res) => {
   const { rows } = await import('../../config/database.js').then(m =>
     m.query(
-      `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.avatar_url, u.is_active,
+      `SELECT u.id, u.email, u.first_name, u.middle_name, u.last_name, u.phone, u.avatar_url, u.is_active,
               u.email_verified, u.last_login_at, u.created_at,
               array_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL) as roles
        FROM users u

@@ -18,6 +18,7 @@ import { useUiStore } from '../../store/uiStore.js'
 
 const INFO_FIELDS = [
   { key: 'first_name',     label: 'First Name',      required: true },
+  { key: 'middle_name',    label: 'Middle Name',     required: false },
   { key: 'last_name',      label: 'Last Name',       required: true },
   { key: 'father_name',    label: "Father's Name",   required: true },
   { key: 'mother_name',    label: "Mother's Name",   required: true },

@@ -8,7 +8,7 @@ import http from '../http.js'
 // good enough to keep the mock-mode app usable without a real backend.
 
 const MOCK_DETAILS = {
-  first_name: 'Demo', last_name: 'Scholar', phone: '9999999999', email: 'demo@example.com',
+  first_name: 'Demo', middle_name: null, last_name: 'Scholar', phone: '9999999999', email: 'demo@example.com',
   father_name: 'Demo Father', mother_name: 'Demo Mother', date_of_birth: '1995-01-01',
   postal_address: '123 Demo Street', blood_group: 'O+', onboarding_completed_at: new Date().toISOString(),
 }

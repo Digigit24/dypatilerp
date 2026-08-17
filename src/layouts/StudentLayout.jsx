@@ -28,7 +28,7 @@ export default function StudentLayout() {
   }
 
   const displayName = currentUser
-    ? `${currentUser.first_name ?? ''} ${currentUser.last_name ?? ''}`.trim()
+    ? [currentUser.first_name, currentUser.middle_name, currentUser.last_name].filter(Boolean).join(' ')
     : labels.student
 
   const enrollmentNumber = currentUser?.enrollment_number ?? ''

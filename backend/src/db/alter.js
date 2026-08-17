@@ -677,6 +677,15 @@ const run = async () => {
     `);
     console.log('✓  videos.approval_id column added (or already exists)');
 
+    // 31. Optional middle name. Nullable — most scholars won't have one, and
+    // nothing downstream should ever print the literal string "null"/"None"
+    // for it; callers filter it out of any full-name join instead.
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS middle_name VARCHAR(100)
+    `);
+    console.log('✓  users.middle_name column added (or already exists)');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);
