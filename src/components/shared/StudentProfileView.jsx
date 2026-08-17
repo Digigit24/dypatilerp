@@ -111,6 +111,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [reportDocs,      setReportDocs]      = useState([])
   const [reportUploadOpen,setReportUploadOpen]= useState(false)
   const [openReportId,    setOpenReportId]    = useState(null)
+  const [openTargetId,    setOpenTargetId]    = useState(null)  // which milestone's submit panel is expanded
   // Current-semester progress-report window (student self-submit only —
   // admin view keeps its existing "Upload Report" on-behalf flow instead).
   const [cycle,           setCycle]           = useState(null)
@@ -170,11 +171,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
       .then((r) => setAssignments(r.data || []))
       .catch(() => setAssignments([]))
 
-    // Milestones now read from /api/targets (real module), not the legacy compatibility
-    // view that used to live at /api/progress-reports.
-    getTargets({ student_user_id: studentId })
-      .then((r) => setTargets(r.data || []))
-      .catch(() => setTargets([]))
+    loadTargets()
     getProgressSummary(studentId)
       .then((r) => setProgressSummary(r.data || null))
       .catch(() => setProgressSummary(null))
@@ -207,6 +204,16 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // can_submit and the attached files always reflect the server's truth.
   function loadCycle() {
     getMyCycle().then((r) => setCycle(r.data || null)).catch(() => setCycle(null))
+  }
+
+  // Milestones read from /api/targets (real module), not the legacy
+  // compatibility view that used to live at /api/progress-reports.
+  // ?student_user_id= also covers admin viewing one scholar's own status.
+  function loadTargets() {
+    if (!studentId) return
+    getTargets({ student_user_id: studentId })
+      .then((r) => setTargets(r.data || []))
+      .catch(() => setTargets([]))
   }
 
   // ── Error / loading states ──────────────────────────────────────────────────
@@ -775,6 +782,10 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                 const state = targetState(t)
                 const pct = t.my_submission_status === 'approved' ? 100 : t.my_submission_id ? 50 : 0
                 const dueLabel = `Semester ${t.semester || 1}`
+                // A scholar can (re)submit while there's nothing yet, or a
+                // reviewer sent it back — never once it's in review/approved.
+                const canSubmit = !isAdminView && ['not_started', 'needs_revision'].includes(state)
+                const isOpen = openTargetId === t.id
                 return (
                   <div key={t.id} className="card p-5">
                     <div className="safe-row items-start">
@@ -783,8 +794,18 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                         <p className="mt-0.5 text-xs text-[color:var(--secondary)]">
                           {dueLabel}{t.batch_name ? ` · ${t.batch_name}` : ''}
                         </p>
+                        {t.description && <p className="mt-1 text-xs text-[color:var(--secondary)]">{t.description}</p>}
                       </div>
-                      <StatusBadge status={state} />
+                      <div className="flex shrink-0 items-center gap-2">
+                        <StatusBadge status={state} />
+                        {canSubmit && (
+                          <button
+                            onClick={() => setOpenTargetId(isOpen ? null : t.id)}
+                            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${isOpen ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--accent-tint)] text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white'}`}>
+                            {state === 'needs_revision' ? 'Resubmit' : 'Submit'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--border)]">
                       <div
@@ -793,6 +814,14 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                       />
                     </div>
                     <p className="mt-1.5 text-right text-xs font-semibold text-[color:var(--secondary)]">{pct}%</p>
+
+                    {isOpen && (
+                      <TargetSubmitPanel
+                        target={t}
+                        onDone={() => { setOpenTargetId(null); loadTargets() }}
+                        addToast={addToast}
+                      />
+                    )}
                   </div>
                 )
               })}
@@ -1023,6 +1052,88 @@ function SH({ title, editing, onEdit, onSave, onCancel }) {
 // Re-upload replaces a slot's file (server-side upsert). Editable while the
 // tied submission is draft/needs_revision or doesn't exist yet; read-only once
 // it's been sent for review.
+// ── Milestone submission (student self-submit) ─────────────────────────────────
+// Multiple files, added one batch at a time and listed with a remove option
+// before submit — unlike the single-file assignment/progress-report forms,
+// a target explicitly allows several supporting files per the spec.
+function TargetSubmitPanel({ target, onDone, addToast }) {
+  const [title,      setTitle]      = useState(target.name || target.module_name || '')
+  const [note,       setNote]       = useState('')
+  const [files,      setFiles]      = useState([])
+  const [submitting, setSubmitting] = useState(false)
+
+  const addFiles = (fileList) => setFiles((prev) => [...prev, ...Array.from(fileList)])
+  const removeFile = (i) => setFiles((prev) => prev.filter((_, j) => j !== i))
+
+  const submit = async () => {
+    if (!title.trim() || files.length === 0) {
+      addToast({ type: 'error', title: 'Add a title and at least one file.' })
+      return
+    }
+    setSubmitting(true)
+    try {
+      const createdRes = await createSubmission({
+        batch_id: target.batch_id,
+        target_id: target.id,
+        title: title.trim(),
+        submission_type: 'target',
+        semester: target.semester || 1,
+        content: note.trim() || undefined,
+      })
+      const submissionId = createdRes.data?.id
+      if (!submissionId) throw new Error('Could not create the submission')
+      // Sequential, not parallel — the backend streams each file through our
+      // own API to storage; keeping this simple and predictable to debug.
+      for (const file of files) {
+        await uploadSubmissionAttachment(submissionId, file)
+      }
+      await submitForReview(submissionId)
+      addToast({ type: 'success', title: `Submitted "${title.trim()}" for review.` })
+      onDone()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Submission failed', message: err.response?.data?.message || err.message })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+      <label className="block">
+        <span className="text-xs font-semibold text-[color:var(--secondary)]">Title</span>
+        <input className="input mt-1 h-9 w-full text-sm" value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <label className="mt-3 block">
+        <span className="text-xs font-semibold text-[color:var(--secondary)]">Note (optional)</span>
+        <textarea className="input mt-1 w-full resize-none text-sm" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Anything the reviewer should know" />
+      </label>
+
+      <div className="mt-3">
+        <span className="text-xs font-semibold text-[color:var(--secondary)]">Files</span>
+        <label className="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[color:var(--border)] bg-[color:var(--card)] px-4 py-6 text-center text-xs font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]">
+          <UploadCloud size={16} /> Click to add files — multiple allowed
+          <input type="file" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
+        </label>
+        {files.length > 0 && (
+          <div className="mt-2 space-y-1.5">
+            {files.map((f, i) => (
+              <div key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 rounded-lg bg-[color:var(--card)] px-3 py-2 text-xs">
+                <span className="truncate text-[color:var(--text)]">{f.name} <span className="text-[color:var(--muted)]">({(f.size / 1024 / 1024).toFixed(2)} MB)</span></span>
+                <button onClick={() => removeFile(i)} className="shrink-0 text-[color:var(--muted)] hover:text-red-500"><X size={14} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button onClick={submit} disabled={submitting} className="btn-primary mt-4 inline-flex items-center gap-2 text-xs disabled:opacity-50">
+        {submitting ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />}
+        {submitting ? 'Submitting…' : 'Submit for Review'}
+      </button>
+    </div>
+  )
+}
+
 function ProgressCycleCard({ cycle, onChange, addToast }) {
   const [busySlot,   setBusySlot]   = useState(null)
   const [submitting, setSubmitting] = useState(false)
