@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.js';
-import { requirePermission, scopeBatchSQL, isOwnScope } from '../../middleware/rbac.js';
+import { requirePermission, requireRole, scopeBatchSQL, isOwnScope } from '../../middleware/rbac.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok, created, notFound } from '../../utils/response.js';
 import { query } from '../../config/database.js';
@@ -394,5 +394,14 @@ router.post('/:userId/documents/:slot', requirePermission('students', 'update'),
  *     summary: Onboarding completeness (drives the login gate) — stamps onboarding_completed_at server-side when complete
  */
 router.get('/:userId/onboarding-status', requirePermission('students', 'read'), profileCtrl.getOnboardingStatus);
+
+/**
+ * @swagger
+ * /students/{userId}/onboarding-skip:
+ *   patch:
+ *     tags: [Students]
+ *     summary: Admin toggle — let this one scholar into the app without finishing onboarding
+ */
+router.patch('/:userId/onboarding-skip', requireRole('admin', 'coordinator'), profileCtrl.setOnboardingSkip);
 
 export default router;

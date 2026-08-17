@@ -45,6 +45,13 @@ export const getOnboardingStatus = asyncHandler(async (req, res) => {
   ok(res, await svc.getOnboardingStatus(req.params.userId));
 });
 
+/** PATCH /students/:userId/onboarding-skip — admin-only, lets one scholar past onboarding without finishing it. */
+export const setOnboardingSkip = asyncHandler(async (req, res) => {
+  const details = await svc.setOnboardingSkip(req.params.userId, !!req.body?.skip);
+  const onboarding = await svc.getOnboardingStatus(req.params.userId);
+  ok(res, { ...details, onboarding }, req.body?.skip ? 'Onboarding skip enabled' : 'Onboarding skip disabled');
+});
+
 // File rules per slot — documents are identity scans/photos, uploads are
 // research documents. Every type is checked three ways (extension, declared
 // MIME, real content signature) so a renamed file is always caught — mirrors

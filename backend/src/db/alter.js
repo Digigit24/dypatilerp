@@ -653,6 +653,17 @@ const run = async () => {
     await client.query(`ALTER TABLE targets ALTER COLUMN student_user_id DROP NOT NULL`);
     console.log('✓  targets.student_user_id relaxed to nullable — targets are batch-scoped definitions now');
 
+    // 29. Per-scholar onboarding-skip flag. Admin can let an individual
+    // scholar into the rest of the app without finishing onboarding; a
+    // matching global flag lives in app_settings (key='onboarding') and
+    // needs no schema change since that table is already a generic
+    // key/value JSONB store.
+    await client.query(`
+      ALTER TABLE student_profile_details
+        ADD COLUMN IF NOT EXISTS onboarding_skip BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    console.log('✓  student_profile_details.onboarding_skip column added (or already exists)');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

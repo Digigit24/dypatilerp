@@ -39,7 +39,18 @@ export const getProfileDetails = async (userId) => {
     postal_address: details?.postal_address ?? null,
     blood_group: details?.blood_group ?? null,
     onboarding_completed_at: details?.onboarding_completed_at ?? null,
+    onboarding_skip: details?.onboarding_skip ?? false,
   };
+};
+
+export const setOnboardingSkip = async (userId, skip) => {
+  await query(
+    `INSERT INTO student_profile_details (user_id, onboarding_skip)
+     VALUES ($1,$2)
+     ON CONFLICT (user_id) DO UPDATE SET onboarding_skip=EXCLUDED.onboarding_skip, updated_at=NOW()`,
+    [userId, !!skip]
+  );
+  return getProfileDetails(userId);
 };
 
 /** first_name/last_name/phone live on `users` — updated here for onboarding-form convenience (same fields PUT /users/:id already allows). */
@@ -109,10 +120,10 @@ export const getOnboardingStatus = async (userId) => {
   const documents = await listDocuments(userId);
   const missingDocuments = documents.filter((d) => !d.present).map((d) => d.slot);
 
-  const complete = missingInfoFields.length === 0 && missingDocuments.length === 0;
+  const genuinelyComplete = missingInfoFields.length === 0 && missingDocuments.length === 0;
   let completedAt = details.onboarding_completed_at;
 
-  if (complete && !completedAt) {
+  if (genuinelyComplete && !completedAt) {
     const { rows: [row] } = await query(
       `INSERT INTO student_profile_details (user_id, onboarding_completed_at)
        VALUES ($1, NOW())
@@ -124,6 +135,13 @@ export const getOnboardingStatus = async (userId) => {
     completedAt = row.onboarding_completed_at;
   }
 
+  // Skip flags let a scholar in without finishing onboarding, but they stay
+  // LIVE — never stamped to onboarding_completed_at — so turning a skip back
+  // off immediately re-locks a scholar who hasn't genuinely completed.
+  const { rows: [globalSetting] } = await query(`SELECT value FROM app_settings WHERE key='onboarding'`);
+  const globalSkip = !!globalSetting?.value?.skip_all;
+  const complete = genuinelyComplete || details.onboarding_skip || globalSkip;
+
   return {
     complete,
     onboarding_completed_at: completedAt,
@@ -131,5 +149,7 @@ export const getOnboardingStatus = async (userId) => {
     documents_complete: missingDocuments.length === 0,
     missing_info_fields: missingInfoFields,
     missing_documents: missingDocuments,
+    onboarding_skip: details.onboarding_skip,
+    global_skip: globalSkip,
   };
 };

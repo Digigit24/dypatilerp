@@ -2,7 +2,7 @@ import { query, getClient } from '../../config/database.js';
 import { notifyStageOpened } from '../notifications/notify.service.js';
 import { env } from '../../config/env.js';
 import { readWorkflow, stagesFor, kindOf } from './workflow.js';
-import { checkSlots } from '../progress-reports/cycles.service.js';
+import { checkSlots, ensureCycle } from '../progress-reports/cycles.service.js';
 
 export const listSubmissions = async ({ batch_id, assignment_id, student_user_id, status, submission_type, search, allowed_batch_ids, limit, offset }) => {
   const params = [];
@@ -142,7 +142,8 @@ export const createSubmission = async (payload, ownerId, createdByUserId = null)
  * one-submission-per-assignment guard in createSubmission applies.
  */
 export const createSubmissionOnBehalf = async (payload, adminUserId) => {
-  let { batch_id, title, submission_type, semester, assignment_id } = payload;
+  let { batch_id, title, submission_type, semester, assignment_id, target_id } = payload;
+  let cycle_id = null;
 
   if (assignment_id) {
     const { rows: [assignment] } = await query('SELECT * FROM assignments WHERE id=$1', [assignment_id]);
@@ -151,6 +152,22 @@ export const createSubmissionOnBehalf = async (payload, adminUserId) => {
     title = assignment.title;
     semester = assignment.semester || 1;
     submission_type = 'assignment';
+  } else if (target_id) {
+    const { rows: [target] } = await query('SELECT * FROM targets WHERE id=$1', [target_id]);
+    if (!target) throw Object.assign(new Error('Milestone not found'), { status: 404 });
+    batch_id = target.batch_id;
+    title = title || target.module_name;
+    semester = target.semester || 1;
+    submission_type = 'target';
+  } else {
+    // Progress report on-behalf: resolve/create the semester's cycle so this
+    // lands in the SAME thread a self-submit would use, instead of an
+    // orphaned row with no cycle_id (the bug that made admin-uploaded and
+    // student-self-submitted reports for the same semester show up as two
+    // disconnected submissions instead of one threaded report).
+    submission_type = 'progress_report';
+    const cycle = await ensureCycle(batch_id, semester || 1, adminUserId);
+    cycle_id = cycle?.id || null;
   }
 
   const enrolled = await isStudentEnrolledInBatch(payload.student_user_id, batch_id);
@@ -158,8 +175,9 @@ export const createSubmissionOnBehalf = async (payload, adminUserId) => {
     throw Object.assign(new Error('Scholar is not actively enrolled in this batch.'), { status: 400 });
   }
   return createSubmission(
-    { batch_id, title, submission_type: submission_type || 'progress_report',
-      semester: semester || 1, content: null, file_urls: [], assignment_id: assignment_id || null },
+    { batch_id, title, submission_type,
+      semester: semester || 1, content: null, file_urls: [],
+      assignment_id: assignment_id || null, target_id: target_id || null, cycle_id },
     payload.student_user_id,
     adminUserId
   );
