@@ -204,10 +204,13 @@ export default function SubmissionsPage() {
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="toolbar mb-5 !gap-3">
-        <label className="admin-search soft-panel flex h-10 min-w-[220px] flex-1 items-center gap-2 rounded-full px-4">
-          <Search size={15} className="text-[color:var(--muted)]" />
+      {/* Filters — search grows to fill the row; the dropdown pills stay a
+          fixed, compact width and sit inline with it. Only .toolbar's own
+          flex-wrap drops them to their own line, and only when the row
+          actually runs out of room (narrow/mobile viewports). */}
+      <div className="toolbar mb-5 flex-nowrap overflow-x-auto !gap-3 max-[860px]:flex-wrap max-[860px]:overflow-visible">
+        <label className="admin-search soft-panel flex h-10 min-w-[180px] flex-1 items-center gap-2 rounded-full px-4">
+          <Search size={15} className="shrink-0 text-[color:var(--muted)]" />
           <input
             className="w-full bg-transparent text-sm outline-none placeholder:text-[color:var(--muted)]"
             placeholder="Search student name, email or title…"
@@ -215,22 +218,17 @@ export default function SubmissionsPage() {
             onChange={(e) => setSearchInput(e.target.value)}
           />
         </label>
-        {/* flex-1 sets an explicit flex-basis, which is what actually sizes a flex
-            item on the main axis — that takes priority over `.input`'s own
-            `width: 100%`, so these size correctly instead of each claiming the
-            full row. min/max-w keeps them from going cramped or oversized, and
-            .toolbar's flex-wrap lets them drop to their own line on narrow screens. */}
-        <FilterSelect className="min-w-[150px] max-w-[210px]" value={batchFilter} onChange={setBatchFilter}>
+        <FilterSelect className="w-[150px]" value={batchFilter} onChange={setBatchFilter}>
           <option value="">All batches</option>
           {batches.map((b) => <option key={b.id} value={b.id}>{b.code || b.name}</option>)}
         </FilterSelect>
         {tab !== 'progress_report' && tab !== 'target' && (
-          <FilterSelect className="min-w-[170px] max-w-[250px]" value={assignmentFilter} onChange={setAssignmentFilter}>
+          <FilterSelect className="w-[180px]" value={assignmentFilter} onChange={setAssignmentFilter}>
             <option value="">All assignments</option>
             {assignments.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
           </FilterSelect>
         )}
-        <FilterSelect className="min-w-[140px] max-w-[190px]" value={statusFilter} onChange={setStatusFilter}>
+        <FilterSelect className="w-[150px]" value={statusFilter} onChange={setStatusFilter}>
           {statusOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </FilterSelect>
         {filtersActive && (
@@ -317,11 +315,14 @@ export default function SubmissionsPage() {
 
 /** Big top-right scholar picker with inline search — filters the whole page to one scholar's submissions. */
 /** Pill-shaped filter dropdown — native <select> underneath (keyboard/a11y for free) with a rounded-tab look and its own chevron instead of the browser's default arrow. */
+/** Fixed-width, non-growing — sized by `className` (e.g. "w-[150px]"), never
+ * stretched by flex-grow, so several of these sit inline at their natural
+ * size instead of each claiming a row on its own. */
 function FilterSelect({ value, onChange, className = '', children }) {
   return (
-    <div className={`relative flex-1 shrink-0 ${className}`}>
+    <div className={`relative shrink-0 ${className}`}>
       <select
-        className="h-10 w-full appearance-none rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] pl-4 pr-9 text-xs font-semibold text-[color:var(--text)] transition hover:border-[color:var(--accent)] hover:bg-[color:var(--card)] focus:border-[color:var(--accent)] focus:outline-none"
+        className="h-10 w-full appearance-none truncate rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] pl-4 pr-9 text-xs font-semibold text-[color:var(--text)] transition hover:border-[color:var(--accent)] hover:bg-[color:var(--card)] focus:border-[color:var(--accent)] focus:outline-none"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
