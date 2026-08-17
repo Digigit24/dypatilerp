@@ -29,6 +29,7 @@ import LecturePlayerPage from './pages/student/LecturePlayerPage.jsx'
 import MediaManagerPage from './pages/admin/MediaManagerPage.jsx'
 import FormatsPage from './pages/admin/FormatsPage.jsx'
 import AssignmentsPage from './pages/admin/AssignmentsPage.jsx'
+import MilestonesPage from './pages/admin/MilestonesPage.jsx'
 import AdminSubmissionsPage from './pages/admin/SubmissionsPage.jsx'
 import AdminWizardPage from './pages/admin/AdminWizardPage.jsx'
 import StudentFormatsPage from './pages/student/FormatsPage.jsx'
@@ -149,6 +150,7 @@ export default function App() {
           <Route path="notifications" element={<AdminNotificationsPage />} />
           <Route path="formats" element={<FormatsPage />} />
           <Route path="assignments" element={<AssignmentsPage />} />
+          <Route path="milestones" element={<MilestonesPage />} />
           <Route path="lectures" element={<MediaManagerPage />} />
           {/* Video detail/player is disabled; the media library itself stays for documents. */}
           {isVideoEnabled()

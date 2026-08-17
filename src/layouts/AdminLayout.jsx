@@ -1,4 +1,4 @@
-﻿import { Activity, Bell, BookOpen, FileText, Globe, Home, IndianRupee, Layers, ListChecks, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Search, Settings, Shield, Sun, UserCog, Users, Wand2 } from 'lucide-react'
+﻿import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, ListChecks, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Search, Settings, Shield, Sun, Target, UserCog, Users, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -84,10 +84,13 @@ export default function AdminLayout() {
     {
       title: 'ACADEMIC',
       items: [
-        // Assignments (definitions) and Approvals both merged into Submissions —
-        // one entry, sliced by tab instead of by route. Assignment definitions
-        // are still reachable via the "Manage Assignments" link on that page.
-        { to: '/admin/submissions', label: 'Submissions', icon: ListChecks, perm: 'submissions' },
+        // Approvals merged into Submissions (review is one page, sliced by
+        // tab). Assignments and Milestones are definition/setup pages —
+        // distinct from reviewing submissions — so they keep their own slots,
+        // placed right below Submissions since they're closely related.
+        { to: '/admin/submissions', label: 'Submissions', icon: ListChecks,    perm: 'submissions' },
+        { to: '/admin/assignments', label: 'Assignments', icon: ClipboardCheck, perm: 'assignments' },
+        { to: '/admin/milestones',  label: 'Milestones',  icon: Target,         perm: 'targets' },
         { to: '/admin/fees',      label: 'Fees',      icon: IndianRupee, perm: 'fees' },
       ],
     },
