@@ -19,9 +19,9 @@ import { useUiStore } from '../../store/uiStore.js'
 const INFO_FIELDS = [
   { key: 'first_name',     label: 'First Name',      required: true },
   { key: 'last_name',      label: 'Last Name',       required: true },
-  { key: 'phone',          label: 'Mobile Number',   required: true },
   { key: 'father_name',    label: "Father's Name",   required: true },
   { key: 'mother_name',    label: "Mother's Name",   required: true },
+  { key: 'phone',          label: 'Mobile Number',   required: true },
   { key: 'date_of_birth',  label: 'Date of Birth',   required: true, type: 'date' },
   { key: 'blood_group',    label: 'Blood Group',     required: true, placeholder: 'e.g. O+' },
   { key: 'postal_address', label: 'Postal Address',  required: true, type: 'textarea', wide: true },
@@ -152,6 +152,12 @@ export default function StudentOnboardingPanel({ userId, editable = true, onStat
           Family, identity and contact details required for institute records.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {/* Email is the account identifier, not an onboarding field — always
+              shown so a scholar can confirm it, but never editable here. */}
+          <label className="block">
+            <span className="text-sm font-semibold text-[color:var(--text)]">Email</span>
+            <input type="text" disabled className="input mt-1.5 w-full opacity-70" value={draft.email || ''} />
+          </label>
           {INFO_FIELDS.map((f) => (
             <label key={f.key} className={f.wide ? 'block sm:col-span-2' : 'block'}>
               <span className="text-sm font-semibold text-[color:var(--text)]">

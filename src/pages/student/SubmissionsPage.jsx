@@ -13,7 +13,7 @@ export default function SubmissionsPage() {
   return (
     <div className="fade-page">
       <PageHeader title="Submissions" subtitle="Your progress reports, assignments and milestones, all in one place." />
-      {currentUser?.id && <StudentProfileView studentId={currentUser.id} isAdminView={false} defaultTab="submissions" />}
+      {currentUser?.id && <StudentProfileView studentId={currentUser.id} isAdminView={false} defaultTab="submissions" showHeader={false} />}
     </div>
   )
 }

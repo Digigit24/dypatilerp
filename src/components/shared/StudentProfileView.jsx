@@ -84,7 +84,7 @@ const BLANK_DRAWER = { open: false, section: null, item: null, draft: {}, saving
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function StudentProfileView({ studentId, isAdminView = false, defaultTab = 'profile', defaultSubTab }) {
+export default function StudentProfileView({ studentId, isAdminView = false, defaultTab = 'profile', defaultSubTab, showHeader = true }) {
   const navigate = useNavigate()
   // Translate legacy outer-tab values onto the new (outer, inner) shape so existing
   // call sites (e.g. ResearchProfilePage passing defaultTab='research') keep working.
@@ -406,7 +406,10 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
 
   return (
     <div>
-      {/* ── Profile header ── */}
+      {/* ── Profile header — skippable (showHeader=false) for pages that
+          already have their own page-level identity, e.g. the student's
+          full-page Submissions view, which starts straight at the tabs. ── */}
+      {showHeader && (
       <div className="card mb-6 overflow-hidden">
         <div className="h-24 bg-gradient-to-r from-[color:var(--accent)] to-indigo-500 opacity-80" />
         <div className="px-6 pb-6">
@@ -476,6 +479,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
           </div>
         </div>
       </div>
+      )}
 
       {/* ── Outer tabs — admin only. A student now reaches Submissions through
           its own full-page route (sidenav "Submissions"); this component is
@@ -587,7 +591,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             <SH title="Assigned Guides" />
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <GuideCard
-                type="Academic" guide={academicGuide}
+                type="Academic" label="Academic Guide" guide={academicGuide}
                 canAssign={isAdminView && isStaff && canReadUsers} options={guideOptions.academic}
                 assigning={assigningGuide === 'academic'}
                 onStartAssign={() => setAssigningGuide('academic')}
@@ -595,7 +599,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                 onPick={(id) => handleAssignGuide('academic', id)}
               />
               <GuideCard
-                type="Industry" guide={industryGuide}
+                type="Industry" label="Industry Mentor" guide={industryGuide}
                 canAssign={isAdminView && isStaff && canReadUsers} options={guideOptions.industry}
                 assigning={assigningGuide === 'industry'}
                 onStartAssign={() => setAssigningGuide('industry')}
@@ -1542,10 +1546,10 @@ function StatCard({ label, value, accent }) {
   )
 }
 
-function GuideCard({ type, guide, canAssign, options = [], assigning, onStartAssign, onCancelAssign, onPick }) {
+function GuideCard({ type, label, guide, canAssign, options = [], assigning, onStartAssign, onCancelAssign, onPick }) {
   return (
     <div className={`rounded-xl border p-4 ${guide ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]' : 'border-[color:var(--border)] bg-[color:var(--surface)]'}`}>
-      <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">{type} Guide</p>
+      <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">{label}</p>
       {guide ? (
         <>
           <p className="mt-2 font-semibold text-[color:var(--text)]">{guide.first_name} {guide.last_name}</p>
@@ -1581,7 +1585,7 @@ function GuideCard({ type, guide, canAssign, options = [], assigning, onStartAss
           </div>
         ) : (
           <button onClick={onStartAssign} className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--accent-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--accent)] transition hover:bg-[color:var(--accent)] hover:text-white">
-            Assign a {type.toLowerCase()} guide
+            Assign {type === 'Industry' ? 'an industry mentor' : 'an academic guide'}
           </button>
         )
       ) : (

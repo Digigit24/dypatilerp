@@ -109,20 +109,10 @@ export default function DashboardPage() {
           <div className="space-y-6">
             <div className="card p-6">
               <h2 className="text-xl font-semibold text-[color:var(--text)]">Assigned Guides</h2>
-              {(d.guides ?? []).length === 0
-                ? <p className="mt-3 text-sm text-[color:var(--secondary)]">No guides assigned yet.</p>
-                : (d.guides ?? []).map((g) => (
-                  <div className="mt-4 flex min-w-0 items-center gap-3" key={g.id ?? g.guide_type}>
-                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--accent-tint)] text-[color:var(--accent)]">
-                      {(g.first_name?.[0] ?? 'G')}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-[color:var(--text)]">{`${g.first_name ?? ''} ${g.last_name ?? ''}`.trim() || g.guide_type}</p>
-                      <p className="truncate text-xs text-[color:var(--secondary)]">{g.email ?? g.guide_type?.replace('_', ' ')}</p>
-                    </div>
-                  </div>
-                ))
-              }
+              <div className="mt-4 space-y-4">
+                <GuideRow label="Academic Guide" guide={(d.guides ?? []).find((g) => g.guide_type === 'academic')} />
+                <GuideRow label="Industry Mentor" guide={(d.guides ?? []).find((g) => g.guide_type === 'industry')} />
+              </div>
             </div>
           </div>
         </div>
@@ -190,6 +180,27 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function GuideRow({ label, guide }) {
+  return (
+    <div>
+      <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">{label}</p>
+      {guide ? (
+        <div className="mt-2 flex min-w-0 items-center gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--accent-tint)] text-[color:var(--accent)]">
+            {(guide.first_name?.[0] ?? 'G')}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate font-medium text-[color:var(--text)]">{`${guide.first_name ?? ''} ${guide.last_name ?? ''}`.trim()}</p>
+            <p className="truncate text-xs text-[color:var(--secondary)]">{guide.email}</p>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-1.5 text-sm text-[color:var(--secondary)]">Not assigned</p>
+      )}
     </div>
   )
 }
