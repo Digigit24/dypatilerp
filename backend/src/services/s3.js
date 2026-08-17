@@ -65,6 +65,22 @@ export const streamVideoRange = async (objectKey, range, res) => {
 };
 
 /**
+ * Stream a whole object directly into an Express response — no Range
+ * handling, unlike streamVideoRange. Used for small, publicly-servable
+ * assets (avatars) where a plain `<img src>` needs bytes back immediately.
+ */
+export const streamObject = async (objectKey, res, { contentType, cacheControl } = {}) => {
+  const command = new GetObjectCommand({ Bucket: BUCKET, Key: objectKey });
+  const response = await client().send(command);
+  res.writeHead(200, {
+    'Content-Type': contentType || response.ContentType || 'application/octet-stream',
+    'Content-Length': response.ContentLength,
+    'Cache-Control': cacheControl || 'public, max-age=300',
+  });
+  response.Body.pipe(res);
+};
+
+/**
  * Get object metadata (size, content-type) without downloading the body.
  */
 export const headObject = async (objectKey) => {

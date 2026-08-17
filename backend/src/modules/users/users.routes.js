@@ -4,15 +4,131 @@ import { requirePermission, requireRole, isOwnScope } from '../../middleware/rba
 import { randomBytes } from 'crypto';
 import { sendLoginCredentials } from '../email/email.service.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { ok, created, notFound, noContent } from '../../utils/response.js';
+import { ok, created, notFound, noContent, badRequest } from '../../utils/response.js';
 import { query } from '../../config/database.js';
 import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate.js';
 import bcrypt from 'bcryptjs';
+import { IncomingForm } from 'formidable';
+import { unlink, open } from 'fs/promises';
+import * as s3 from '../../services/s3.js';
+import * as videoSvc from '../videos/videos.service.js';
+
+/**
+ * GET /users/:id/avatar-file — deliberately mounted OUTSIDE this router (see
+ * app.js) so it's reachable without `authenticate`. An `<img src>` can't send
+ * an Authorization header, and avatar_url is stored as this plain path and
+ * read directly by dozens of existing `<img>` tags across the app — routing
+ * it through the session-token flow used for submission downloads would mean
+ * touching every one of those call sites. A profile photo is low-sensitivity;
+ * reaching it requires knowing the target user's UUID.
+ */
+export const avatarFileHandler = asyncHandler(async (req, res) => {
+  const { rows: [row] } = await query(
+    `SELECT object_key, mime_type FROM videos WHERE owner_user_id=$1 AND slot='avatar'`,
+    [req.params.id]
+  );
+  if (!row) return res.status(404).end();
+  try {
+    await s3.streamObject(row.object_key, res, { contentType: row.mime_type });
+  } catch {
+    res.status(404).end();
+  }
+});
 
 const router = Router();
 router.use(authenticate);
+
+// ─── POST /users/me/avatar ─────────────────────────────────────────────────
+// Self-only profile photo upload/replace. Mirrors the validation + verify-
+// before-write pattern used for onboarding document uploads
+// (student-profile.controller.js#uploadDocument) — extension + declared MIME
+// + real content-signature sniff, upload to Zata, HEAD-verify, THEN write the
+// DB row (never record a media row for an unverified object — CLAUDE.md §4).
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+const AVATAR_MIME_BY_EXT = { png: ['image/png'], jpg: ['image/jpeg'], jpeg: ['image/jpeg'], webp: ['image/webp'] };
+const AVATAR_EXT_FAMILY = { png: 'png', jpg: 'jpg', jpeg: 'jpg', webp: 'webp' };
+const sniffAvatarFamily = (buf) => {
+  if (buf.length >= 8 && buf[0] === 0x89 && buf.slice(1, 4).toString('latin1') === 'PNG') return 'png';
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf.length >= 12 && buf.slice(0, 4).toString('latin1') === 'RIFF' && buf.slice(8, 12).toString('latin1') === 'WEBP') return 'webp';
+  return null;
+};
+
+router.post('/me/avatar', asyncHandler(async (req, res) => {
+  if (!s3.isConfigured()) return res.status(503).json({ success: false, message: 'File storage is not configured.' });
+
+  const userId = req.user.id;
+  const { rows: [existing] } = await query(
+    `SELECT id, object_key FROM videos WHERE owner_user_id=$1 AND slot='avatar'`, [userId]
+  );
+
+  const form = new IncomingForm({ maxFileSize: AVATAR_MAX_BYTES, maxFiles: 1, keepExtensions: true });
+  let files;
+  try {
+    ({ files } = await new Promise((resolve, reject) =>
+      form.parse(req, (err, f, fi) => (err ? reject(err) : resolve({ fields: f, files: fi })))
+    ));
+  } catch (err) {
+    const tooBig = /maxFileSize|maxTotalFileSize|biggerThan/i.test(err?.message || '') || err?.code === 1009;
+    return badRequest(res, tooBig ? 'File exceeds the 5MB limit' : 'Upload failed — please try again');
+  }
+
+  const file = Array.isArray(files.file) ? files.file[0] : files.file;
+  if (!file) return badRequest(res, 'No file uploaded (field name must be "file")');
+  const cleanup = async () => { if (file?.filepath) await unlink(file.filepath).catch(() => {}); };
+
+  try {
+    const origName = file.originalFilename || 'avatar';
+    const ext = (origName.split('.').pop() || '').toLowerCase();
+    const declaredMime = file.mimetype || '';
+    const size = file.size || 0;
+
+    if (size <= 0 || size > AVATAR_MAX_BYTES) { await cleanup(); return badRequest(res, 'File exceeds the 5MB limit'); }
+    if (!AVATAR_MIME_BY_EXT[ext]) { await cleanup(); return badRequest(res, 'Only PNG, JPEG or WEBP images are allowed.'); }
+    if (!(AVATAR_MIME_BY_EXT[ext] || []).includes(declaredMime)) { await cleanup(); return badRequest(res, 'File type does not match its contents.'); }
+    const fh = await open(file.filepath, 'r');
+    const head = Buffer.alloc(12);
+    try { await fh.read(head, 0, 12, 0); } finally { await fh.close(); }
+    if (sniffAvatarFamily(head) !== AVATAR_EXT_FAMILY[ext]) { await cleanup(); return badRequest(res, 'File content does not match its type'); }
+
+    const safe = origName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
+    const objectKey = `avatars/${userId}/${Date.now()}-${safe}`;
+
+    await s3.uploadFile(objectKey, file.filepath, declaredMime, size);
+    try { await s3.headObject(objectKey); }
+    catch (e) {
+      return res.status(502).json({ success: false, message: 'Upload could not be verified in storage — please retry.', detail: e.message });
+    }
+
+    let media;
+    try {
+      media = await videoSvc.upsertOwnerSlotVideo({
+        title: origName.replace(/\.[^.]+$/, ''),
+        description: 'Profile photo',
+        object_key: objectKey, file_size: size, mime_type: declaredMime,
+        owner_user_id: userId, slot: 'avatar',
+      }, userId);
+    } catch (dbErr) {
+      try { await s3.deleteObject(objectKey); } catch { /* ignore */ }
+      throw dbErr;
+    }
+
+    if (existing?.object_key && existing.object_key !== objectKey) {
+      try { await s3.deleteObject(existing.object_key); } catch { /* ignore */ }
+    }
+
+    const avatarUrl = `${req.protocol}://${req.get('host')}/api/users/${userId}/avatar-file`;
+    const { rows: [user] } = await query(
+      `UPDATE users SET avatar_url=$1, updated_at=NOW() WHERE id=$2 RETURNING id, avatar_url`,
+      [avatarUrl, userId]
+    );
+    ok(res, { avatar_url: user.avatar_url, media_id: media.id }, 'Profile photo updated');
+  } finally {
+    await cleanup();
+  }
+}));
 
 const createUserSchema = z.object({
   email: z.string().email(),

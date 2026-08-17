@@ -13,7 +13,7 @@ import { auditTrail } from './middleware/auditTrail.js';
 // Routes
 import authRoutes from './modules/auth/auth.routes.js';
 import testAuthRoutes from './modules/tests/test-auth.routes.js';
-import userRoutes from './modules/users/users.routes.js';
+import userRoutes, { avatarFileHandler } from './modules/users/users.routes.js';
 import roleRoutes from './modules/roles/roles.routes.js';
 import courseRoutes from './modules/courses/courses.routes.js';
 import batchRoutes from './modules/batches/batches.routes.js';
@@ -114,6 +114,9 @@ app.get('/api-docs.json', (req, res) => res.json(swaggerSpec));
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/test-auth', testAuthRoutes);
+// Public — no `authenticate` — so a plain <img src> can load it. Must be
+// registered before the authenticated /api/users router below.
+app.get('/api/users/:id/avatar-file', avatarFileHandler);
 app.use('/api/users', userRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/courses', courseRoutes);
