@@ -66,6 +66,13 @@ export default function SubmissionPreviewPage() {
   const nextId = siblingIds && siblingIdx >= 0 && siblingIdx < siblingIds.length - 1 ? siblingIds[siblingIdx + 1] : null
   const goTo = (targetId) => targetId && navigate(`/admin/submissions/${targetId}/preview`, { state: location.state })
 
+  // Thread siblings — other submission rows bundled into the same progress
+  // report cycle / assignment / milestone (see SubmissionsPage's threadKeyFor).
+  // Passed as full row objects so switching between them needs no refetch
+  // for the list-level fields; approvals/remarks for the newly-active one
+  // still load fresh via the normal `load()` effect below.
+  const threadItems = location.state?.groupMap?.[id] || null
+
   const load = () => {
     setSubmission(null)
     setApprovals([])
@@ -205,6 +212,17 @@ export default function SubmissionPreviewPage() {
       <div className="grid flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[1fr_380px]">
         {/* ── Document viewer ── */}
         <div className="flex flex-col overflow-hidden bg-[color:var(--surface)]">
+          {threadItems && threadItems.length > 1 && (
+            <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2">
+              <span className="mr-1 shrink-0 text-[10px] font-bold uppercase tracking-wide text-[color:var(--muted)]">Thread</span>
+              {threadItems.map((it, i) => (
+                <button key={it.id} onClick={() => goTo(it.id)}
+                  className={`shrink-0 truncate rounded-full px-3 py-1.5 text-xs font-semibold max-w-[220px] ${it.id === id ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--surface)] text-[color:var(--secondary)]'}`}>
+                  Part {i + 1} · {formatDate(it.submitted_at || it.created_at)}
+                </button>
+              ))}
+            </div>
+          )}
           {files.length > 1 && (
             <div className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2">
               {files.map((f, i) => (

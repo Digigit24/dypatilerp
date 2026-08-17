@@ -13,12 +13,13 @@
  * drawer — the list of currently-visible submission ids is passed via
  * navigation state so the preview page can offer prev/next.
  */
-import { ListChecks, Loader2, RotateCcw, Search, Settings } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, ListChecks, Loader2, RotateCcw, Search, Settings, User, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getAssignments } from '../../api/services/assignmentService.js'
 import { getBatches } from '../../api/services/batchService.js'
 import { getSubmissions } from '../../api/services/submissionService.js'
+import { getStudents } from '../../api/services/studentService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
@@ -26,7 +27,10 @@ import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
 import { formatDate } from '../../lib/formatters.js'
 import { useCourseStore } from '../../store/courseStore.js'
 
-const STATUS_OPTIONS = [
+// Assignments have no approval chain — only draft/submitted are meaningful
+// states, so the other tabs' statuses (approved/rejected/etc) would just be
+// confusing dead options there.
+const STATUS_OPTIONS_FULL = [
   { value: '', label: 'All statuses' },
   { value: 'draft', label: 'Draft' },
   { value: 'submitted', label: 'Submitted' },
@@ -35,6 +39,11 @@ const STATUS_OPTIONS = [
   { value: 'needs_revision', label: 'Needs revision' },
   { value: 'rejected', label: 'Rejected' },
 ]
+const STATUS_OPTIONS_ASSIGNMENT = [
+  { value: '', label: 'All statuses' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'submitted', label: 'Submitted' },
+]
 
 const TABS = [
   { key: 'all',             label: 'All',              type: null },
@@ -42,6 +51,20 @@ const TABS = [
   { key: 'assignment',      label: 'Assignments',       type: 'assignment' },
   { key: 'target',          label: 'Milestones',        type: 'target' },
 ]
+
+// Groups multiple submission rows belonging to the same "thread" — e.g. a
+// student's admin-uploaded and self-submitted copies of the same progress
+// report cycle, or repeat attempts at the same assignment/milestone — into
+// one bundled card instead of separate list rows. Not applied to the "All"
+// tab, where rows of different kinds shouldn't merge.
+const threadKeyFor = (tab, s) => {
+  if (tab === 'progress_report') return `${s.student_user_id}:${s.cycle_id || `solo:${s.id}`}`
+  if (tab === 'assignment') return `${s.student_user_id}:${s.assignment_id || `solo:${s.id}`}`
+  if (tab === 'target') return `${s.student_user_id}:${s.target_id || `solo:${s.id}`}`
+  return s.id
+}
+
+const fullName = (s) => `${s?.first_name || ''} ${s?.last_name || ''}`.trim()
 
 const PAGE_SIZE = 50
 
@@ -59,7 +82,13 @@ export default function SubmissionsPage() {
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [loadingMore, setLoadingMore] = useState(false)
+  const [scholars, setScholars] = useState(null)
+  const [scholarFilter, setScholarFilter] = useState('')
   const debounceRef = useRef(null)
+
+  useEffect(() => {
+    getStudents({ limit: 1000 }).then((r) => setScholars(r.data || [])).catch(() => setScholars([]))
+  }, [])
 
   // Debounce free-text search so it doesn't fire a request per keystroke
   useEffect(() => {
@@ -75,6 +104,15 @@ export default function SubmissionsPage() {
   }, [currentCourse?.id])
 
   const activeType = TABS.find((t) => t.key === tab)?.type
+  const statusOptions = tab === 'assignment' ? STATUS_OPTIONS_ASSIGNMENT : STATUS_OPTIONS_FULL
+
+  // Assignments tab has no approval states — drop a stale approved/rejected/etc
+  // filter left over from another tab instead of silently returning nothing.
+  useEffect(() => {
+    if (tab === 'assignment' && statusFilter && !STATUS_OPTIONS_ASSIGNMENT.some((o) => o.value === statusFilter)) {
+      setStatusFilter('')
+    }
+  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildFilters = (extra = {}) => {
     const f = { limit: PAGE_SIZE, offset: 0, ...extra }
@@ -82,6 +120,7 @@ export default function SubmissionsPage() {
     if (batchFilter) f.batch_id = batchFilter
     if (assignmentFilter) f.assignment_id = assignmentFilter
     if (statusFilter) f.status = statusFilter
+    if (scholarFilter) f.student_user_id = scholarFilter
     if (search) f.search = search
     return f
   }
@@ -91,7 +130,7 @@ export default function SubmissionsPage() {
     getSubmissions(buildFilters()).then((r) => { setItems(r.data || []); setTotal(r.total ?? (r.data || []).length) })
   }
 
-  useEffect(() => { load() }, [currentCourse?.id, tab, batchFilter, assignmentFilter, statusFilter, search]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [currentCourse?.id, tab, batchFilter, assignmentFilter, statusFilter, scholarFilter, search]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = () => {
     if (!items || loadingMore || items.length >= total) return
@@ -102,12 +141,33 @@ export default function SubmissionsPage() {
   }
 
   const resetFilters = () => {
-    setBatchFilter(''); setAssignmentFilter(''); setStatusFilter(''); setSearchInput(''); setSearch('')
+    setBatchFilter(''); setAssignmentFilter(''); setStatusFilter(''); setScholarFilter(''); setSearchInput(''); setSearch('')
   }
-  const filtersActive = batchFilter || assignmentFilter || statusFilter || search
+  const filtersActive = batchFilter || assignmentFilter || statusFilter || scholarFilter || search
 
-  const openPreview = (s) => {
-    navigate(`/admin/submissions/${s.id}/preview`, { state: { submissionIds: (items || []).map((x) => x.id) } })
+  // Bundle same-thread submissions (see threadKeyFor) into one row per thread.
+  // The "All" tab stays flat — mixing kinds under one thread key isn't meaningful.
+  const groups = useMemo(() => {
+    const list = items || []
+    if (tab === 'all') return list.map((s) => ({ key: s.id, submissions: [s] }))
+    const byKey = new Map()
+    for (const s of list) {
+      const key = threadKeyFor(tab, s)
+      if (!byKey.has(key)) byKey.set(key, [])
+      byKey.get(key).push(s)
+    }
+    return [...byKey.values()].map((submissions) => ({
+      key: submissions[0].id,
+      submissions: submissions.slice().sort((a, b) => new Date(a.created_at || a.submitted_at || 0) - new Date(b.created_at || b.submitted_at || 0)),
+    }))
+  }, [items, tab])
+
+  const openPreview = (group) => {
+    const repIds = groups.map((g) => g.submissions[g.submissions.length - 1].id)
+    const groupMap = {}
+    for (const g of groups) for (const sub of g.submissions) groupMap[sub.id] = g.submissions
+    const latest = group.submissions[group.submissions.length - 1]
+    navigate(`/admin/submissions/${latest.id}/preview`, { state: { submissionIds: repIds, groupMap } })
   }
 
   if (!currentCourse?.id) {
@@ -125,9 +185,12 @@ export default function SubmissionsPage() {
         title="Submissions"
         subtitle="Every progress report, assignment and milestone submission across your students, in one place."
         action={
-          <Link to="/admin/assignments" className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--surface)]">
-            <Settings size={15} /> Manage Assignments
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <ScholarSelect scholars={scholars} value={scholarFilter} onChange={setScholarFilter} />
+            <Link to="/admin/assignments" className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--surface)]">
+              <Settings size={15} /> Manage Assignments
+            </Link>
+          </div>
         }
       />
 
@@ -168,7 +231,7 @@ export default function SubmissionsPage() {
           </select>
         )}
         <select className="input flex-1 min-w-[130px] max-w-[180px] py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          {statusOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
         {filtersActive && (
           <button onClick={resetFilters} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[color:var(--surface)] px-3 text-xs font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)]">
@@ -200,28 +263,41 @@ export default function SubmissionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((s) => (
-                  <tr key={s.id} className="cursor-pointer border-b border-[color:var(--border)] last:border-0 hover:bg-[color:var(--surface)]" onClick={() => openPreview(s)}>
-                    <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
-                      <Link to={`/admin/students/${s.student_user_id}`} className="font-semibold text-[color:var(--text)] hover:text-[color:var(--accent)]">
-                        {s.first_name} {s.last_name}
-                      </Link>
-                      <p className="text-xs text-[color:var(--secondary)]">{s.email}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-[color:var(--text)]">{s.title}</p>
-                      <p className="text-xs capitalize text-[color:var(--muted)]">{s.submission_type?.replaceAll('_', ' ')}</p>
-                    </td>
-                    <td className="px-4 py-3 text-[color:var(--secondary)]">{s.batch_name || '—'}</td>
-                    <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                    <td className="px-4 py-3 text-[color:var(--secondary)]">{formatDate(s.submitted_at)}</td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      {Array.isArray(s.file_urls) && s.file_urls[0]
-                        ? <SubmissionFileLink file={s.file_urls[0]} label={s.file_urls.length > 1 ? `Open (+${s.file_urls.length - 1})` : 'Open'} />
-                        : <span className="text-xs text-[color:var(--muted)]">No file</span>}
-                    </td>
-                  </tr>
-                ))}
+                {groups.map((g) => {
+                  const s = g.submissions[g.submissions.length - 1] // latest = the row's headline data
+                  const fileCount = g.submissions.reduce((n, sub) => n + (Array.isArray(sub.file_urls) ? sub.file_urls.length : 0), 0)
+                  const firstFile = g.submissions.map((sub) => sub.file_urls?.[0]).find(Boolean)
+                  const bundled = g.submissions.length > 1
+                  return (
+                    <tr key={g.key} className="cursor-pointer border-b border-[color:var(--border)] last:border-0 hover:bg-[color:var(--surface)]" onClick={() => openPreview(g)}>
+                      <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+                        <Link to={`/admin/students/${s.student_user_id}`} className="font-semibold text-[color:var(--text)] hover:text-[color:var(--accent)]">
+                          {s.first_name} {s.last_name}
+                        </Link>
+                        <p className="text-xs text-[color:var(--secondary)]">{s.email}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-[color:var(--text)]">
+                          {s.title}
+                          {bundled && (
+                            <span className="ml-2 rounded-full bg-[color:var(--accent-tint)] px-2 py-0.5 text-[10px] font-bold text-[color:var(--accent)]">
+                              {g.submissions.length} parts
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs capitalize text-[color:var(--muted)]">{s.submission_type?.replaceAll('_', ' ')}</p>
+                      </td>
+                      <td className="px-4 py-3 text-[color:var(--secondary)]">{s.batch_name || '—'}</td>
+                      <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                      <td className="px-4 py-3 text-[color:var(--secondary)]">{formatDate(s.submitted_at)}</td>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        {firstFile
+                          ? <SubmissionFileLink file={firstFile} label={fileCount > 1 ? `Open (+${fileCount - 1})` : 'Open'} />
+                          : <span className="text-xs text-[color:var(--muted)]">No file</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -233,6 +309,104 @@ export default function SubmissionsPage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Big top-right scholar picker with inline search — filters the whole page to one scholar's submissions. */
+function ScholarSelect({ scholars, value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const boxRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onDocClick = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [open])
+
+  const selected = (scholars || []).find((s) => s.user_id === value) || null
+  const query = q.trim().toLowerCase()
+  const filtered = useMemo(() => {
+    const list = scholars || []
+    if (!query) return list.slice(0, 60)
+    return list.filter((s) =>
+      fullName(s).toLowerCase().includes(query)
+      || (s.email || '').toLowerCase().includes(query)
+      || (s.enrollment_number || '').toLowerCase().includes(query)
+    ).slice(0, 60)
+  }, [scholars, query])
+
+  return (
+    <div className="relative" ref={boxRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-11 min-w-[220px] items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 text-sm font-semibold text-[color:var(--text)] hover:bg-[color:var(--surface)]"
+      >
+        <User size={15} className="shrink-0 text-[color:var(--accent)]" />
+        <span className="min-w-0 flex-1 truncate text-left">
+          {selected ? fullName(selected) : 'All scholars'}
+        </span>
+        {selected ? (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); onChange(''); setOpen(false) }}
+            className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[color:var(--muted)] hover:bg-[color:var(--border)]"
+          >
+            <X size={12} />
+          </span>
+        ) : (
+          <ChevronDown size={15} className="shrink-0 text-[color:var(--muted)]" />
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-20 mt-2 w-[320px] rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-2 shadow-hover">
+          <label className="admin-search soft-panel flex h-10 items-center gap-2 rounded-lg px-3">
+            <Search size={14} className="text-[color:var(--muted)]" />
+            <input
+              autoFocus
+              className="w-full bg-transparent text-sm outline-none placeholder:text-[color:var(--muted)]"
+              placeholder="Search by name, email or enrollment no…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </label>
+          <div className="mt-2 max-h-72 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => { onChange(''); setOpen(false); setQ('') }}
+              className={`flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-semibold hover:bg-[color:var(--surface)] ${!value ? 'text-[color:var(--accent)]' : 'text-[color:var(--text)]'}`}
+            >
+              All scholars
+            </button>
+            {scholars === null ? (
+              <p className="p-4 text-center text-sm text-[color:var(--secondary)]">Loading scholars…</p>
+            ) : filtered.length === 0 ? (
+              <p className="p-4 text-center text-sm text-[color:var(--secondary)]">No scholars match &quot;{q}&quot;</p>
+            ) : (
+              filtered.map((s) => (
+                <button
+                  key={s.user_id}
+                  type="button"
+                  onClick={() => { onChange(s.user_id); setOpen(false); setQ('') }}
+                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm hover:bg-[color:var(--surface)] ${value === s.user_id ? 'bg-[color:var(--accent-tint)]' : ''}`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold text-[color:var(--text)]">{fullName(s)}</span>
+                    <span className="block truncate text-xs text-[color:var(--secondary)]">
+                      {s.email}{s.batch_name ? ` · ${s.batch_name}` : ''}
+                    </span>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>
