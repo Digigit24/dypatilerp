@@ -630,6 +630,15 @@ const run = async () => {
     `);
     console.log('✓  uq_videos_owner_slot created — one current file per profile document slot');
 
+    // 26d. `videos.course_id` was NOT NULL from the original schema (every row
+    // used to be a course-scoped lecture/media file). Profile documents belong
+    // to a bare user, not a course, so a profile-document row needs course_id
+    // to be NULL. Relaxing a NOT NULL constraint drops no data and loses no
+    // rows — every existing row already has a non-null course_id — so this is
+    // safe under the additive-only rule.
+    await client.query(`ALTER TABLE videos ALTER COLUMN course_id DROP NOT NULL`);
+    console.log('✓  videos.course_id relaxed to nullable — required for profile-scoped documents');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

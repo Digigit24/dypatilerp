@@ -7,6 +7,7 @@ import { query } from '../../config/database.js';
 import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate.js';
+import * as profileCtrl from './student-profile.controller.js';
 
 const router = Router();
 router.use(authenticate);
@@ -331,5 +332,62 @@ router.post('/:id/guides', requirePermission('students', 'update'), validate(ass
   );
   created(res, guide, 'Guide assigned');
 }));
+
+// ─── V4 onboarding — personal-info fields + profile-scoped documents ─────────
+// Own-scope (students) can only touch their own profile — enforced inside the
+// controller (assertOwnerOrBroaderScope), same pattern as GET /students/:id
+// above. Uses the `students` permission module — students already hold
+// students:read/students:update at 'own' scope (see db/seed.js).
+
+/**
+ * @swagger
+ * /students/{userId}/profile-details:
+ *   get:
+ *     tags: [Students]
+ *     summary: Get onboarding personal-info fields (student_profile_details + users basics)
+ *   put:
+ *     tags: [Students]
+ *     summary: Upsert onboarding personal-info fields
+ */
+const profileDetailsSchema = z.object({
+  first_name: z.string().min(1).max(255).optional(),
+  last_name: z.string().min(1).max(255).optional(),
+  phone: z.string().max(32).optional(),
+  father_name: z.string().max(255).optional(),
+  mother_name: z.string().max(255).optional(),
+  date_of_birth: z.string().optional(), // ISO date string, e.g. "1998-04-12"
+  postal_address: z.string().optional(),
+  blood_group: z.string().max(8).optional(),
+});
+
+router.get('/:userId/profile-details', requirePermission('students', 'read'), profileCtrl.getProfileDetails);
+router.put('/:userId/profile-details', requirePermission('students', 'update'), validate(profileDetailsSchema), profileCtrl.putProfileDetails);
+
+/**
+ * @swagger
+ * /students/{userId}/documents:
+ *   get:
+ *     tags: [Students]
+ *     summary: State of all 11 onboarding document/upload slots
+ */
+router.get('/:userId/documents', requirePermission('students', 'read'), profileCtrl.listDocuments);
+
+/**
+ * @swagger
+ * /students/{userId}/documents/{slot}:
+ *   post:
+ *     tags: [Students]
+ *     summary: Upload (or replace) the file for one onboarding document slot
+ */
+router.post('/:userId/documents/:slot', requirePermission('students', 'update'), profileCtrl.uploadDocument);
+
+/**
+ * @swagger
+ * /students/{userId}/onboarding-status:
+ *   get:
+ *     tags: [Students]
+ *     summary: Onboarding completeness (drives the login gate) — stamps onboarding_completed_at server-side when complete
+ */
+router.get('/:userId/onboarding-status', requirePermission('students', 'read'), profileCtrl.getOnboardingStatus);
 
 export default router;

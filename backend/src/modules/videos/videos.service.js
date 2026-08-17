@@ -66,10 +66,10 @@ export const getVideoById = async (id) => {
 
 export const createVideo = async (payload, uploadedBy) => {
   const { rows } = await query(
-    `INSERT INTO videos (course_id, batch_id, title, description, duration_sec, object_key, file_size, thumbnail_key, sort_order, uploaded_by, is_published, media_type, mime_type, folder_id, visibility, assignment_id, submission_id, upload_status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+    `INSERT INTO videos (course_id, batch_id, title, description, duration_sec, object_key, file_size, thumbnail_key, sort_order, uploaded_by, is_published, media_type, mime_type, folder_id, visibility, assignment_id, submission_id, upload_status, owner_user_id, slot)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
     [
-      payload.course_id, payload.batch_id || null, payload.title,
+      payload.course_id || null, payload.batch_id || null, payload.title,
       payload.description || null, payload.duration_sec || 0,
       payload.object_key, payload.file_size || 0,
       payload.thumbnail_key || null, payload.sort_order || 0,
@@ -80,6 +80,33 @@ export const createVideo = async (payload, uploadedBy) => {
       payload.assignment_id || null,
       payload.submission_id || null,
       payload.upload_status || 'ready',
+      payload.owner_user_id || null,
+      payload.slot || null,
+    ]
+  );
+  return rows[0];
+};
+
+/**
+ * Insert-or-replace the current file for a (owner_user_id, slot) pair — used
+ * by profile-scoped documents (CV, identity docs, ...), where a slot only
+ * ever holds one current file. Matches the `uq_videos_owner_slot` partial
+ * unique index exactly so the ON CONFLICT target resolves.
+ */
+export const upsertOwnerSlotVideo = async (payload, uploadedBy) => {
+  const { rows } = await query(
+    `INSERT INTO videos (course_id, title, description, object_key, file_size, mime_type, media_type, uploaded_by, is_published, visibility, upload_status, owner_user_id, slot, verified_at)
+     VALUES (NULL,$1,$2,$3,$4,$5,'document',$6,false,'private','ready',$7,$8,NOW())
+     ON CONFLICT (owner_user_id, slot) WHERE owner_user_id IS NOT NULL AND slot IS NOT NULL
+     DO UPDATE SET
+       title=EXCLUDED.title, description=EXCLUDED.description, object_key=EXCLUDED.object_key,
+       file_size=EXCLUDED.file_size, mime_type=EXCLUDED.mime_type, uploaded_by=EXCLUDED.uploaded_by,
+       upload_status='ready', verified_at=NOW(), updated_at=NOW()
+     RETURNING *`,
+    [
+      payload.title, payload.description || null, payload.object_key,
+      payload.file_size || 0, payload.mime_type || null, uploadedBy,
+      payload.owner_user_id, payload.slot,
     ]
   );
   return rows[0];
