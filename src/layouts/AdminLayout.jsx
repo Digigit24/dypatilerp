@@ -1,4 +1,4 @@
-﻿import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, ListChecks, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Search, Settings, Shield, Sun, Target, UserCog, Users, Wand2 } from 'lucide-react'
+﻿import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, ListChecks, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Settings, Shield, Sun, Target, UserCog, Users, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -123,6 +123,31 @@ export default function AdminLayout() {
     .map((g) => ({ ...g, items: g.items.filter((it) => !it.perm || can(it.perm, 'read')) }))
     .filter((g) => g.items.length > 0)
 
+  // Role-optimized ordering — same groups/permissions as above, just reshuffled
+  // so each role's most-used work leads instead of a fixed admin-first order.
+  // A role not listed here keeps the natural group/item order untouched.
+  const ROLE_SECTION_ORDER = {
+    guide:  ['ACADEMIC', labels.studentPlural.toUpperCase(), 'TOOLS'],
+    mentor: ['ACADEMIC', labels.studentPlural.toUpperCase(), 'TOOLS'],
+  }
+  const ROLE_ITEM_PRIORITY = {
+    guide:  ['/admin/submissions', '/admin/milestones', '/admin/students'],
+    mentor: ['/admin/submissions', '/admin/milestones', '/admin/students'],
+  }
+  const byPriority = (order) => (a, b) => {
+    const ai = order.indexOf(a); const bi = order.indexOf(b)
+    return (ai === -1 ? order.length : ai) - (bi === -1 ? order.length : bi)
+  }
+  const sectionOrder = ROLE_SECTION_ORDER[role]
+  const itemOrder = ROLE_ITEM_PRIORITY[role]
+  const orderedSections = (sectionOrder
+    ? [...sections].sort((a, b) => byPriority(sectionOrder)(a.title, b.title))
+    : sections
+  ).map((g) => (itemOrder
+    ? { ...g, items: [...g.items].sort((a, b) => byPriority(itemOrder)(a.to, b.to)) }
+    : g
+  ))
+
   // Neutral loading / controlled retry state for the nav — never a fallback that
   // exposes restricted items.
   const permNotice = !permsLoaded ? (
@@ -146,7 +171,7 @@ export default function AdminLayout() {
     <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
       {mobileOpen && <button className="sidebar-backdrop" aria-label="Close sidebar" onClick={() => setMobileOpen(false)} />}
       <Sidebar
-        sections={[{ title: 'HOME', items: [{ to: '/', label: 'Landing Page', icon: Globe }, { to: '/admin', label: 'Dashboard', icon: Home }] }, ...sections]}
+        sections={[{ title: 'HOME', items: [{ to: '/', label: 'Landing Page', icon: Globe }, { to: '/admin', label: 'Dashboard', icon: Home }] }, ...orderedSections]}
         role={roleLabel(role)}
         notice={permNotice}
         collapsed={collapsed}
@@ -175,10 +200,6 @@ export default function AdminLayout() {
           <button className="sidebar-toggle desktop-sidebar-trigger" aria-label="Collapse sidebar" onClick={() => setCollapsed((v) => !v)}>
             {collapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
           </button>
-          <label className="admin-search soft-panel flex h-9 items-center gap-2 rounded-lg px-3">
-            <Search size={18} className="text-[color:var(--muted)]" />
-            <input className="w-full bg-transparent text-sm outline-none placeholder:text-[color:var(--muted)]" placeholder="Search anything..." />
-          </label>
           <CourseSwitcher />
           <button className="theme-icon-button shrink-0" aria-label="Toggle dark mode" onClick={toggleTheme}>
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}

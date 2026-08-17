@@ -10,7 +10,7 @@ export default function ProfilePage() {
   const currentUser = useAuthStore((s) => s.currentUser)
   return (
     <div className="fade-page">
-      <PageHeader title="My Profile" subtitle="Manage your academic profile, certificates, and research record." />
+      <PageHeader title="Profile" subtitle="Manage your academic profile, certificates, and research record." />
       <ChangePasswordCard />
       {currentUser?.id && <StudentProfileView studentId={currentUser.id} isAdminView={false} />}
     </div>
