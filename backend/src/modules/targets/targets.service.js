@@ -181,6 +181,14 @@ export const deleteTarget = async (id) => {
  * semester" against "of those, how many have MY submission approved" —
  * not a per-scholar target count.
  */
+/**
+ * Overall completion = approved / total across EVERY published target
+ * (targets have no draft/publish flag — every row that exists is live) in
+ * the scholar's batch, not just the current semester. `by_semester` breaks
+ * the same thing down per semester for the roll-up card. The previous
+ * version only ever looked at the current semester and called it "overall"
+ * — this is the fix for that.
+ */
 export const getProgressSummary = async (studentUserId) => {
   const { rows: [active] } = await query(
     `SELECT batch_id, current_semester FROM batch_enrollments
@@ -194,12 +202,14 @@ export const getProgressSummary = async (studentUserId) => {
     [studentUserId]
   )).rows[0];
 
+  const empty = { total: 0, approved: 0, awaiting_review: 0, not_started: 0, percent: 0 };
   if (!enrollment) {
-    return { batch_id: null, semester: null, total: 0, approved: 0, awaiting_review: 0, not_started: 0, percent: 0 };
+    return { batch_id: null, semester: null, ...empty, overall: empty, by_semester: [] };
   }
 
-  const { rows: [row] } = await query(
-    `SELECT COUNT(*)::int                                                              AS total,
+  const { rows } = await query(
+    `SELECT t.semester,
+            COUNT(*)::int                                                              AS total,
             COUNT(*) FILTER (WHERE s.status = 'approved')::int                         AS approved,
             COUNT(*) FILTER (WHERE s.id IS NOT NULL AND s.status <> 'approved')::int    AS awaiting_review,
             COUNT(*) FILTER (WHERE s.id IS NULL)::int                                  AS not_started
@@ -209,17 +219,34 @@ export const getProgressSummary = async (studentUserId) => {
        WHERE target_id = t.id AND student_user_id = $1 AND status <> 'draft' AND merged_into_id IS NULL
        ORDER BY created_at DESC LIMIT 1
      ) s ON TRUE
-     WHERE t.batch_id = $2 AND t.semester = $3`,
-    [studentUserId, enrollment.batch_id, enrollment.current_semester]
+     WHERE t.batch_id = $2
+     GROUP BY t.semester
+     ORDER BY t.semester`,
+    [studentUserId, enrollment.batch_id]
   );
+
+  const by_semester = rows.map((r) => ({
+    semester: r.semester,
+    total: r.total,
+    approved: r.approved,
+    awaiting_review: r.awaiting_review,
+    not_started: r.not_started,
+    percent: r.total ? Math.round((r.approved / r.total) * 100) : 0,
+  }));
+
+  const overall = by_semester.reduce((acc, s) => ({
+    total: acc.total + s.total,
+    approved: acc.approved + s.approved,
+    awaiting_review: acc.awaiting_review + s.awaiting_review,
+    not_started: acc.not_started + s.not_started,
+  }), { total: 0, approved: 0, awaiting_review: 0, not_started: 0 });
+  overall.percent = overall.total ? Math.round((overall.approved / overall.total) * 100) : 0;
 
   return {
     batch_id: enrollment.batch_id,
     semester: enrollment.current_semester,
-    total: row.total,
-    approved: row.approved,
-    awaiting_review: row.awaiting_review,
-    not_started: row.not_started,
-    percent: row.total ? Math.round((row.approved / row.total) * 100) : 0,
+    ...overall,   // flat fields kept for back-compat with any other caller
+    overall,
+    by_semester,
   };
 };

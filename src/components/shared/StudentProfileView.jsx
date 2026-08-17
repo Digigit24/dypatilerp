@@ -1351,17 +1351,14 @@ function AssignmentSubmitPanel({ assignment, onDone, addToast }) {
 // a target explicitly allows several supporting files per the spec.
 function TargetSubmitPanel({ target, onDone, addToast }) {
   const [note,       setNote]       = useState('')
-  const [files,      setFiles]      = useState([])
+  const [file,       setFile]       = useState(null) // one file per milestone submission, by design
   const [submitting, setSubmitting] = useState(false)
 
   const title = target.name || target.module_name || `Milestone ${target.id}`
 
-  const addFiles = (fileList) => setFiles((prev) => [...prev, ...Array.from(fileList)])
-  const removeFile = (i) => setFiles((prev) => prev.filter((_, j) => j !== i))
-
   const submit = async () => {
-    if (files.length === 0) {
-      addToast({ type: 'error', title: 'Add at least one file.' })
+    if (!file) {
+      addToast({ type: 'error', title: 'Add a file.' })
       return
     }
     setSubmitting(true)
@@ -1378,11 +1375,7 @@ function TargetSubmitPanel({ target, onDone, addToast }) {
       })
       const submissionId = createdRes.data?.id
       if (!submissionId) throw new Error('Could not create the submission')
-      // Sequential, not parallel — the backend streams each file through our
-      // own API to storage; keeping this simple and predictable to debug.
-      for (const file of files) {
-        await uploadSubmissionAttachment(submissionId, file)
-      }
+      await uploadSubmissionAttachment(submissionId, file)
       await submitForReview(submissionId)
       addToast({ type: 'success', title: `Added "${title}" for review.` })
       onDone()
@@ -1401,20 +1394,17 @@ function TargetSubmitPanel({ target, onDone, addToast }) {
       </label>
 
       <div className="mt-3">
-        <span className="text-xs font-semibold text-[color:var(--secondary)]">Files</span>
-        <label className="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[color:var(--border)] bg-[color:var(--card)] px-4 py-6 text-center text-xs font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]">
-          <UploadCloud size={16} /> Click to add files — multiple allowed
-          <input type="file" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
-        </label>
-        {files.length > 0 && (
-          <div className="mt-2 space-y-1.5">
-            {files.map((f, i) => (
-              <div key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 rounded-lg bg-[color:var(--card)] px-3 py-2 text-xs">
-                <span className="truncate text-[color:var(--text)]">{f.name} <span className="text-[color:var(--muted)]">({(f.size / 1024 / 1024).toFixed(2)} MB)</span></span>
-                <button onClick={() => removeFile(i)} className="shrink-0 text-[color:var(--muted)] hover:text-red-500"><X size={14} /></button>
-              </div>
-            ))}
+        <span className="text-xs font-semibold text-[color:var(--secondary)]">File <span className="font-normal text-[color:var(--muted)]">(one file per milestone)</span></span>
+        {file ? (
+          <div className="mt-1 flex items-center justify-between gap-2 rounded-lg bg-[color:var(--card)] px-3 py-2 text-xs">
+            <span className="truncate text-[color:var(--text)]">{file.name} <span className="text-[color:var(--muted)]">({(file.size / 1024 / 1024).toFixed(2)} MB)</span></span>
+            <button onClick={() => setFile(null)} className="shrink-0 text-[color:var(--muted)] hover:text-red-500"><X size={14} /></button>
           </div>
+        ) : (
+          <label className="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[color:var(--border)] bg-[color:var(--card)] px-4 py-6 text-center text-xs font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]">
+            <UploadCloud size={16} /> Click to add a file
+            <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setFile(f) }} />
+          </label>
         )}
       </div>
 

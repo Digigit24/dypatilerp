@@ -87,7 +87,8 @@ export default function OnBehalfSubmissionDrawer({ kind, studentUserId = null, o
     ).slice(0, 60)
   }, [roster, q])
 
-  const addFiles = (fileList) => setFiles((prev) => [...prev, ...Array.from(fileList)])
+  // Milestones take exactly one file per submission; assignments allow several.
+  const addFiles = (fileList) => setFiles((prev) => (kind === 'target' ? Array.from(fileList).slice(0, 1) : [...prev, ...Array.from(fileList)]))
   const removeFile = (i) => setFiles((prev) => prev.filter((_, j) => j !== i))
   const fileError = useMemo(() => {
     for (const f of files) {
@@ -249,12 +250,15 @@ export default function OnBehalfSubmissionDrawer({ kind, studentUserId = null, o
           {/* Files */}
           <div>
             <span className="text-sm font-semibold text-[color:var(--text)]">
-              Files<span className="ml-1 text-red-500">*</span> <span className="font-normal text-[color:var(--muted)]">(multiple allowed, max 25MB each)</span>
+              {kind === 'target' ? 'File' : 'Files'}<span className="ml-1 text-red-500">*</span>{' '}
+              <span className="font-normal text-[color:var(--muted)]">{kind === 'target' ? '(one file, max 25MB)' : '(multiple allowed, max 25MB each)'}</span>
             </span>
-            <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-6 text-center text-xs font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]">
-              <UploadCloud size={16} /> Click to add files
-              <input type="file" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
-            </label>
+            {!(kind === 'target' && files.length > 0) && (
+              <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-6 text-center text-xs font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]">
+                <UploadCloud size={16} /> {kind === 'target' ? 'Click to add a file' : 'Click to add files'}
+                <input type="file" multiple={kind !== 'target'} className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
+              </label>
+            )}
             {files.length > 0 && (
               <div className="mt-2 space-y-1.5">
                 {files.map((f, i) => (
