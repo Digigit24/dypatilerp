@@ -639,6 +639,20 @@ const run = async () => {
     await client.query(`ALTER TABLE videos ALTER COLUMN course_id DROP NOT NULL`);
     console.log('✓  videos.course_id relaxed to nullable — required for profile-scoped documents');
 
+    // 28. TARGETS BECOME BATCH-SCOPED DEFINITIONS (like assignments), not
+    // per-scholar rows. `bulk-create` previously inserted one row per
+    // (target × every enrolled scholar) -- 6 targets across 30 scholars wrote
+    // 180 rows. That's wrong: a target is a definition a coordinator creates
+    // once per batch+semester, and scholars submit against it (via
+    // submissions.target_id), exactly like assignments already work.
+    // student_user_id relaxed to nullable (additive — no column dropped);
+    // new rows going forward simply never set it. Completion is derived
+    // entirely from submissions from here on, so targets.status /
+    // completion_percentage / completed_at / approved_at / approved_by stop
+    // being written to (left in place, unused, for the same reason).
+    await client.query(`ALTER TABLE targets ALTER COLUMN student_user_id DROP NOT NULL`);
+    console.log('✓  targets.student_user_id relaxed to nullable — targets are batch-scoped definitions now');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);
