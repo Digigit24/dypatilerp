@@ -142,7 +142,11 @@ export const uploadDocument = asyncHandler(async (req, res) => {
     }
 
     const safe = origName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
-    const objectKey = `profiles/${userId}/${slot}-${Date.now()}-${safe}`;
+    // Structured per-student root: students/{userId}/documents/{slot}-...,
+    // matching the students/{userId}/avatar/ path used for the profile photo
+    // (backend/src/modules/users/users.routes.js) — every file a scholar owns
+    // now lives under one predictable folder.
+    const objectKey = `students/${userId}/documents/${slot}-${Date.now()}-${safe}`;
 
     // Upload, then VERIFY before writing anything to the database.
     await s3.uploadFile(objectKey, file.filepath, declaredMime, size);

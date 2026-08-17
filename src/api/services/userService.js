@@ -82,6 +82,15 @@ export const changeMyPassword = async (current_password, new_password) => {
   return { data: res.data }
 }
 
+/** Self-service profile photo upload/replace — multipart, field "file". */
+export const uploadMyAvatar = async (file) => {
+  if (USE_MOCK) return ok({ avatar_url: null })
+  const form = new FormData()
+  form.append('file', file)
+  const { data: res } = await http.post('/users/me/avatar', form)
+  return { data: res.data, message: res.message }
+}
+
 /** Admin: bulk rotate + email credentials */
 export const bulkSendCredentials = async (user_ids) => {
   const { data: res } = await http.post('/users/bulk-send-credentials', { user_ids })
