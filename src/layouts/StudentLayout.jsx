@@ -1,4 +1,4 @@
-import { Bell, BookOpen, ClipboardList, FileDown, FileText, FlaskConical, Home, IndianRupee, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PlayCircle, Settings, UserCircle } from 'lucide-react'
+import { Bell, FileDown, FileText, Home, LogOut, Menu, PanelLeftClose, PanelLeftOpen, PlayCircle, Settings, UserCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -37,16 +37,17 @@ export default function StudentLayout() {
     title: 'STUDENT',
     items: [
       { to: '/student/dashboard', label: 'Dashboard', icon: Home },
-      { to: '/student/assignments', label: 'Assignments', icon: ClipboardList },
-      { to: '/student/submissions', label: 'My Submissions', icon: FileText },
+      // Submissions replaces the old Assignments / My Submissions / Progress Reports nav
+      // items — StudentProfileView now hosts Progress Reports, Assignments and Milestones
+      // as inner subtabs of its Submissions outer tab.
+      { to: '/student/profile#submissions', label: 'Submissions', icon: FileText },
       { to: '/student/formats', label: 'Formats', icon: FileDown },
-      { to: '/student/progress', label: 'Progress Reports', icon: BookOpen },
-      { to: '/student/fees', label: 'Fees', icon: IndianRupee },
-      { to: '/student/profile',           label: 'My Profile',       icon: UserCircle },
-      { to: '/student/profile/research',  label: 'Research Profile', icon: FlaskConical },
+      // Fees and Research Profile are folded into My Profile as subtabs (student-side only).
+      // Their legacy top-level routes still resolve for deep links.
+      { to: '/student/profile', label: 'My Profile', icon: UserCircle },
       // Lectures hidden while the video feature is disabled — see CLAUDE.md
       ...(isVideoEnabled() ? [{ to: '/student/lectures', label: 'Lectures', icon: PlayCircle }] : []),
-      { to: '/student/notifications',     label: 'Notifications',    icon: Bell },
+      { to: '/student/notifications', label: 'Notifications', icon: Bell },
     ],
   }]
 
