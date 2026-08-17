@@ -22,6 +22,7 @@ import {
 import { assignGuide, getStudentById, updateStudent } from '../../api/services/studentService.js'
 import { getUsers, updateUser, uploadMyAvatar } from '../../api/services/userService.js'
 import { getApprovalsBySubmission } from '../../api/services/approvalService.js'
+import { getProfileDetails as getStudentProfileDetails, saveProfileDetails } from '../../api/services/studentProfileService.js'
 import DatePicker from './DatePicker.jsx'
 import Select from './Select.jsx'
 import StudentOnboardingPanel from './StudentOnboardingPanel.jsx'
@@ -156,6 +157,9 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const canReadUsers = usePermStore((s) => s.can('users', 'read'))
   const [personalEditing, setPersonalEditing] = useState(false)
   const [personalDraft,   setPersonalDraft]   = useState({})
+  const [title,           setTitle]           = useState('')
+  const [titleEditing,    setTitleEditing]    = useState(false)
+  const [titleDraft,      setTitleDraft]      = useState('')
   const [guideOptions,    setGuideOptions]    = useState({ academic: [], industry: [] })
   const [assigningGuide,  setAssigningGuide]  = useState(null) // 'academic' | 'industry' | null
   useScrollLock(drawer.open || reportUploadOpen)
@@ -200,6 +204,10 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
     getProfile(studentId)
       .then((r) => setResearch(r.data))
       .catch(() => setResearch(null))
+
+    getStudentProfileDetails(studentId)
+      .then((r) => setTitle(r.data?.title || ''))
+      .catch(() => setTitle(''))
 
     // Assignment-type submissions — the new "Assignments" subtab source.
     loadAssignments()
@@ -386,6 +394,18 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
       setUser((u) => ({ ...u, phone: personalDraft.phone }))
       setPersonalEditing(false)
       addToast({ type: 'success', title: 'Contact details updated.' })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Could not save', message: err.response?.data?.message })
+    }
+  }
+
+  // ── Research title save ─────────────────────────────────────────────────────
+  const saveTitle = async () => {
+    try {
+      const res = await saveProfileDetails(studentId, { title: titleDraft })
+      setTitle(res.data?.title ?? titleDraft)
+      setTitleEditing(false)
+      addToast({ type: 'success', title: 'Title updated.' })
     } catch (err) {
       addToast({ type: 'error', title: 'Could not save', message: err.response?.data?.message })
     }
@@ -668,6 +688,37 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             </div>
             {personalEditing && (
               <p className="mt-3 text-xs text-[color:var(--muted)]">Batch, semester and enrollment date change through their own workflows (e.g. advancing a semester) — not editable here.</p>
+            )}
+          </div>
+
+          {/* Title — working title of the scholar's research/thesis for their
+              enrolled course. Capped at 200 words client- and server-side.
+              Deliberately not part of onboarding completeness. */}
+          <div className="card p-6">
+            <SH title={`Title of ${student.course_name || 'Course'}`}
+              editing={titleEditing}
+              onEdit={canEditProfile ? () => { setTitleDraft(title || ''); setTitleEditing(true) } : undefined}
+              onSave={saveTitle}
+              onCancel={() => setTitleEditing(false)}
+            />
+            {titleEditing ? (
+              <div className="mt-4">
+                <textarea
+                  className="textarea mt-1.5 h-28 w-full"
+                  placeholder="Working title of your research/thesis…"
+                  value={titleDraft}
+                  onChange={(e) => {
+                    const words = e.target.value.trim().split(/\s+/).filter(Boolean)
+                    if (words.length > 200) return
+                    setTitleDraft(e.target.value)
+                  }}
+                />
+                <p className="mt-1 text-right text-xs text-[color:var(--muted)]">
+                  {titleDraft.trim() ? titleDraft.trim().split(/\s+/).filter(Boolean).length : 0} / 200 words
+                </p>
+              </div>
+            ) : (
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-[color:var(--secondary)]">{title || 'No title added yet.'}</p>
             )}
           </div>
 

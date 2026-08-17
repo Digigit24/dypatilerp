@@ -39,6 +39,10 @@ export const getProfileDetails = async (userId) => {
     date_of_birth: details?.date_of_birth ?? null,
     postal_address: details?.postal_address ?? null,
     blood_group: details?.blood_group ?? null,
+    // Working title of the scholar's research/thesis for their enrolled
+    // course — deliberately NOT in PROFILE_DETAIL_FIELDS/INFO_FIELDS, so it
+    // never gates onboarding completeness like the fields above do.
+    title: details?.title ?? null,
     onboarding_completed_at: details?.onboarding_completed_at ?? null,
     onboarding_skip: details?.onboarding_skip ?? false,
   };
@@ -67,17 +71,24 @@ export const updateBasicUserFields = async (userId, { first_name, middle_name, l
   await query(`UPDATE users SET ${fields.join(',')}, updated_at=NOW() WHERE id=$${params.length}`, params);
 };
 
+// Genuinely partial: only columns present in `body` are written. The full
+// onboarding form sends every field together (unaffected), but a narrower
+// caller — e.g. the Title card, which saves only { title } — must not blank
+// out father_name/mother_name/etc. by omission.
+const PROFILE_DETAIL_COLUMNS = ['father_name', 'mother_name', 'date_of_birth', 'postal_address', 'blood_group', 'title'];
+
 export const upsertProfileDetails = async (userId, body = {}) => {
-  const v = (k) => (body[k] !== undefined ? body[k] || null : null);
-  await query(
-    `INSERT INTO student_profile_details (user_id, father_name, mother_name, date_of_birth, postal_address, blood_group)
-     VALUES ($1,$2,$3,$4,$5,$6)
-     ON CONFLICT (user_id) DO UPDATE SET
-       father_name=EXCLUDED.father_name, mother_name=EXCLUDED.mother_name,
-       date_of_birth=EXCLUDED.date_of_birth, postal_address=EXCLUDED.postal_address,
-       blood_group=EXCLUDED.blood_group, updated_at=NOW()`,
-    [userId, v('father_name'), v('mother_name'), v('date_of_birth'), v('postal_address'), v('blood_group')]
-  );
+  const present = PROFILE_DETAIL_COLUMNS.filter((c) => body[c] !== undefined);
+  if (present.length) {
+    const setFrag = present.map((c) => `${c}=EXCLUDED.${c}`).join(', ');
+    const placeholders = present.map((_, i) => `$${i + 2}`).join(', ');
+    await query(
+      `INSERT INTO student_profile_details (user_id, ${present.join(', ')})
+       VALUES ($1, ${placeholders})
+       ON CONFLICT (user_id) DO UPDATE SET ${setFrag}, updated_at=NOW()`,
+      [userId, ...present.map((c) => body[c] || null)]
+    );
+  }
   return getProfileDetails(userId);
 };
 

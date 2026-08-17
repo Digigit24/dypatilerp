@@ -364,6 +364,12 @@ const profileDetailsSchema = z.object({
   date_of_birth: z.string().optional(), // ISO date string, e.g. "1998-04-12"
   postal_address: z.string().optional(),
   blood_group: z.string().max(8).optional(),
+  // Working title of the scholar's research/thesis. 200-word cap enforced
+  // both here (defense in depth) and client-side (live counter/block).
+  title: z.string().max(3000).optional().nullable()
+    .refine((v) => !v || v.trim().split(/\s+/).filter(Boolean).length <= 200, {
+      message: 'Title must be 200 words or fewer',
+    }),
 });
 
 router.get('/:userId/profile-details', requirePermission('students', 'read'), profileCtrl.getProfileDetails);

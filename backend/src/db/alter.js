@@ -686,6 +686,16 @@ const run = async () => {
     `);
     console.log('✓  users.middle_name column added (or already exists)');
 
+    // 32. Working title of the scholar's research/thesis for their enrolled
+    // course. Nullable, 200-word cap enforced at the application layer (Zod
+    // + client-side counter) — not a DB constraint. Deliberately kept out of
+    // the onboarding-completeness gate (INFO_FIELDS in student-profile.service.js).
+    await client.query(`
+      ALTER TABLE student_profile_details
+        ADD COLUMN IF NOT EXISTS title TEXT
+    `);
+    console.log('✓  student_profile_details.title column added (or already exists)');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);
