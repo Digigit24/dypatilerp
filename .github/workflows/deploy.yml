@@ -36,6 +36,7 @@ jobs:
               ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
               "set -e && \
                cd /home/divineblisspuna/public_html/app.dyperf.com/dypatilerp && \
+               git reset --hard HEAD && \
                git pull origin main && \
                npm install && \
                VITE_API_URL=https://app.dyperf.com/api npm run build && \
