@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useOnboardingStore } from './onboardingStore.js'
 
 const loadUser = () => {
   try { return JSON.parse(localStorage.getItem('auth_user') || 'null') }
@@ -14,6 +15,9 @@ export const useAuthStore = create((set) => ({
     localStorage.setItem('refresh_token', refreshToken)
     localStorage.setItem('auth_user', JSON.stringify(user))
     set({ currentUser: user, role: user?.roles?.[0] || null })
+    // A same-tab login as a different student must not reuse the previous
+    // student's cached onboarding-completeness check.
+    useOnboardingStore.getState().reset()
   },
 
   clearAuth: () => {
@@ -21,6 +25,7 @@ export const useAuthStore = create((set) => ({
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('auth_user')
     set({ currentUser: null, role: null })
+    useOnboardingStore.getState().reset()
   },
 
   // kept for DevRoleSwitcher compatibility during transition

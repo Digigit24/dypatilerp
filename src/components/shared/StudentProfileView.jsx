@@ -11,7 +11,7 @@
 import {
   Award, BookOpen, Camera, ChevronDown, Clock,
   DollarSign, ExternalLink, FileText, Globe, GraduationCap,
-  Link2, Pencil, Plus, Save, Shield, Upload, UploadCloud, User, X,
+  Link2, Pencil, Plus, Save, Shield, UploadCloud, User, X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -23,6 +23,7 @@ import {
 import { getStudentById, updateStudent } from '../../api/services/studentService.js'
 import { getProgressReportsByStudent, getSubmissionsByStudent } from '../../api/services/submissionService.js'
 import { getProgressReportByStudent } from '../../api/services/progressReportService.js'
+import StudentOnboardingPanel from './StudentOnboardingPanel.jsx'
 import UploadProgressReportDrawer from '../admin/UploadProgressReportDrawer.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
@@ -32,14 +33,6 @@ import SkeletonCard from './SkeletonCard.jsx'
 import StatusBadge from './StatusBadge.jsx'
 import SubmissionFileLink from './SubmissionFileLink.jsx'
 import SubmissionRemarks from './SubmissionRemarks.jsx'
-
-const CERT_TYPES = [
-  { key: 'phd_certificate',   label: 'PhD Certificate',       desc: 'Doctoral degree certificate from your institution' },
-  { key: 'id_proof',          label: 'Government ID',         desc: 'Aadhaar, Passport, or PAN card' },
-  { key: 'publications_proof',label: 'Publication Proof',     desc: 'Journal acceptance letters or published copies' },
-  { key: 'recommendation',    label: 'Recommendation Letter', desc: 'From PhD supervisor or head of institution' },
-  { key: 'other',             label: 'Other Documents',       desc: 'Any additional supporting documents' },
-]
 
 const RESEARCH_SECTIONS = [
   { key: 'research_papers',     label: 'Research Papers',        icon: FileText   },
@@ -101,7 +94,6 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [bioDraft,        setBioDraft]        = useState({})
   const [academicEditing, setAcademicEditing] = useState(false)
   const [academicDraft,   setAcademicDraft]   = useState({})
-  const [certs,           setCerts]           = useState({ phd_certificate: false, id_proof: false, publications_proof: false, recommendation: false, other: false })
   const [drawer,          setDrawer]          = useState(BLANK_DRAWER)
   const addToast = useUiStore((s) => s.addToast)
   // Only institute staff file a report on a scholar's behalf.
@@ -481,29 +473,11 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             ) : <p className="mt-3 text-sm text-[color:var(--secondary)]">No research profile data yet.</p>}
           </div>
 
-          {/* Certificates */}
-          <div className="card p-6">
-            <SH title="Certificates & Documents" />
-            <p className="mt-1 text-sm text-[color:var(--secondary)]">Upload supporting documents for verification. Accepted: PDF, JPG, PNG (max 10 MB).</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {CERT_TYPES.map(({ key, label, desc }) => (
-                <div key={key} className={`flex items-start gap-3 rounded-xl border p-4 transition ${certs[key] ? 'border-emerald-200 bg-emerald-50' : 'border-[color:var(--border)] bg-[color:var(--surface)]'}`}>
-                  <span className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg ${certs[key] ? 'bg-emerald-100 text-emerald-600' : 'bg-[color:var(--card)] text-[color:var(--muted)]'}`}>
-                    {certs[key] ? <FileText size={16} /> : <Upload size={16} />}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-[color:var(--text)]">{label}</p>
-                    <p className="mt-0.5 text-xs text-[color:var(--secondary)]">{certs[key] ? 'Uploaded · Pending verification' : desc}</p>
-                    {!isAdminView && (
-                      <button className={`mt-2 text-xs font-semibold ${certs[key] ? 'text-red-500' : 'text-[color:var(--accent)]'}`} onClick={() => setCerts((p) => ({ ...p, [key]: !p[key] }))}>
-                        {certs[key] ? 'Remove' : '+ Upload file'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Onboarding details — personal-info fields + document uploads.
+              Real API wiring against /students/:userId/profile-details and
+              /students/:userId/documents/:slot (replaces the old CERT_TYPES
+              block, which only toggled local state and never called an API). */}
+          <StudentOnboardingPanel userId={studentId} editable={!isAdminView} />
         </div>
       )}
 

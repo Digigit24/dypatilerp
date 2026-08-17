@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { applyThemeConfig } from './api/services/themeService.js'
 import ToastHost from './components/shared/ToastHost.jsx'
 import ProtectedRoute from './components/shared/ProtectedRoute.jsx'
+import OnboardingGate from './components/shared/OnboardingGate.jsx'
 import AdminLayout from './layouts/AdminLayout.jsx'
 import PublicLayout from './layouts/PublicLayout.jsx'
 import StudentLayout from './layouts/StudentLayout.jsx'
@@ -43,6 +44,7 @@ import TestInstructionsPage from './pages/public/TestInstructionsPage.jsx'
 import TestPage from './pages/public/TestPage.jsx'
 import ApplicantTestResultsPage from './pages/admin/ApplicantTestResultsPage.jsx'
 import DashboardPage from './pages/student/DashboardPage.jsx'
+import OnboardingPage from './pages/student/OnboardingPage.jsx'
 import StudentFeesPage from './pages/student/FeesPage.jsx'
 import NotificationsPage from './pages/student/NotificationsPage.jsx'
 import ProfilePage from './pages/student/ProfilePage.jsx'
@@ -83,31 +85,37 @@ export default function App() {
         <Route path="/onboard" element={<OnboardPage />} />
         <Route path="/p/:slug" element={<PublicProfilePage />} />
 
-        {/* Student routes */}
+        {/* Student routes — OnboardingGate sits between the role check and every
+            page: it blocks direct URL hits to any /student/* route (not just
+            hidden nav links) until onboarding is complete. See its file for
+            why /onboarding is deliberately outside the <StudentLayout> group. */}
         <Route
           path="/student"
           element={
             <ProtectedRoute allowedRoles={['student']}>
-              <StudentLayout />
+              <OnboardingGate />
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/student/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="submit" element={<SubmitPage />} />
-          <Route path="submissions" element={<SubmissionsPage />} />
-          <Route path="progress" element={<ProgressPage />} />
-          <Route path="fees" element={<StudentFeesPage />} />
-          <Route path="profile" element={<ProfilePage />} />
-          <Route path="profile/research" element={<ResearchProfilePage />} />
-          <Route path="notifications" element={<NotificationsPage />} />
-          <Route path="formats" element={<StudentFormatsPage />} />
-          <Route path="assignments" element={<StudentAssignmentsPage />} />
-          {/* Lectures/video disabled — see CLAUDE.md. Deep links redirect home. */}
-          {isVideoEnabled() ? <>
-            <Route path="lectures" element={<LecturesGalleryPage />} />
-            <Route path="lectures/:id" element={<LecturePlayerPage />} />
-          </> : <Route path="lectures/*" element={<Navigate to="/student/dashboard" replace />} />}
+          <Route path="onboarding" element={<OnboardingPage />} />
+          <Route element={<StudentLayout />}>
+            <Route index element={<Navigate to="/student/dashboard" replace />} />
+            <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="submit" element={<SubmitPage />} />
+            <Route path="submissions" element={<SubmissionsPage />} />
+            <Route path="progress" element={<ProgressPage />} />
+            <Route path="fees" element={<StudentFeesPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="profile/research" element={<ResearchProfilePage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="formats" element={<StudentFormatsPage />} />
+            <Route path="assignments" element={<StudentAssignmentsPage />} />
+            {/* Lectures/video disabled — see CLAUDE.md. Deep links redirect home. */}
+            {isVideoEnabled() ? <>
+              <Route path="lectures" element={<LecturesGalleryPage />} />
+              <Route path="lectures/:id" element={<LecturePlayerPage />} />
+            </> : <Route path="lectures/*" element={<Navigate to="/student/dashboard" replace />} />}
+          </Route>
         </Route>
 
         {/* Admin routes */}
