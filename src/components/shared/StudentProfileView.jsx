@@ -20,7 +20,7 @@ import {
   updateProfile, updateResearchItem,
 } from '../../api/services/researchProfileService.js'
 import { assignGuide, getStudentById, updateStudent } from '../../api/services/studentService.js'
-import { getUsers, updateUser } from '../../api/services/userService.js'
+import { getUsers, updateUser, uploadMyAvatar } from '../../api/services/userService.js'
 import DatePicker from './DatePicker.jsx'
 import Select from './Select.jsx'
 import StudentOnboardingPanel from './StudentOnboardingPanel.jsx'
@@ -135,6 +135,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [academicEditing, setAcademicEditing] = useState(false)
   const [academicDraft,   setAcademicDraft]   = useState({})
   const [drawer,          setDrawer]          = useState(BLANK_DRAWER)
+  const [avatarUploading, setAvatarUploading] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
   // Only institute staff file a report on a scholar's behalf.
   const isStaff = usePermStore((s) => s.hasRole('admin') || s.hasRole('coordinator'))
@@ -290,6 +291,37 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // Full-page preview (with feedback panel) instead of a sidedrawer.
   const openSub = (sub) => navigate(`/${isAdminView ? 'admin' : 'student'}/submissions/${sub.id}/preview`)
 
+  // ── Profile photo upload/replace (student's own view only) ──────────────────
+  const AVATAR_MAX_BYTES = 5 * 1024 * 1024
+  const AVATAR_EXTS = ['png', 'jpg', 'jpeg', 'webp']
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    const ext = (file.name.split('.').pop() || '').toLowerCase()
+    if (!AVATAR_EXTS.includes(ext)) {
+      addToast({ type: 'error', title: 'Only PNG, JPEG or WEBP images are allowed.' })
+      return
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      addToast({ type: 'error', title: 'Image is larger than the 5MB limit.' })
+      return
+    }
+    setAvatarUploading(true)
+    try {
+      const res = await uploadMyAvatar(file)
+      // Cache-bust locally — the stored URL is stable across re-uploads (same
+      // path always serves whatever is current), so the browser needs a hint
+      // to refetch instead of showing the cached previous photo.
+      setUser((u) => ({ ...u, avatar_url: `${res.data.avatar_url}?v=${Date.now()}` }))
+      addToast({ type: 'success', title: 'Profile photo updated.' })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Could not upload photo', message: err.response?.data?.message })
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
   // ── Bio save ────────────────────────────────────────────────────────────────
   const saveBio = async () => {
     const updated = await updateStudent(studentId, { profile: { ...student.profile, bio: bioDraft.bio, linkedin_url: bioDraft.linkedin_url } })
@@ -428,9 +460,21 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                 {initials}
               </div>
               {!isAdminView && (
-                <button className="absolute bottom-1 right-1 grid h-7 w-7 place-items-center rounded-full bg-[color:var(--card)] shadow" title="Change photo">
-                  <Camera size={13} className="text-[color:var(--accent)]" />
-                </button>
+                <label
+                  className="absolute bottom-1 right-1 grid h-7 w-7 cursor-pointer place-items-center rounded-full bg-[color:var(--card)] shadow"
+                  title="Change photo"
+                >
+                  {avatarUploading
+                    ? <Loader2 size={13} className="animate-spin text-[color:var(--accent)]" />
+                    : <Camera size={13} className="text-[color:var(--accent)]" />}
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/png,image/jpeg,image/webp"
+                    disabled={avatarUploading}
+                    onChange={handleAvatarChange}
+                  />
+                </label>
               )}
             </div>
 
