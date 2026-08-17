@@ -450,8 +450,10 @@ const EXTS_BY_KIND = {
   target:     ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx', 'png', 'jpg', 'jpeg', 'webp', 'zip'],
 };
 
-// Named slots for a progress report.
-const SLOT_EXTS = { report: ['pdf'], presentation: ['ppt', 'pptx'] };
+// Named slots for a progress report — either slot takes either file type
+// (a scholar's report or presentation can each be a PDF or a PPT/PPTX).
+const PROGRESS_REPORT_EXTS = ['pdf', 'ppt', 'pptx'];
+const SLOT_EXTS = { report: PROGRESS_REPORT_EXTS, presentation: PROGRESS_REPORT_EXTS };
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;    // per file
 const MAX_TOTAL_BYTES = 200 * 1024 * 1024;  // per submission

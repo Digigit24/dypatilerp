@@ -43,8 +43,10 @@ export const createSubmissionOnBehalfSchema = z.object({
   submission_type: z.enum(['progress_report', 'assignment', 'target']).default('progress_report'),
   target_id: z.string().uuid().optional(),
   semester: z.number().int().min(1).default(1),
-}).refine((b) => !!(b.assignment_id || b.target_id || (b.batch_id && b.title)), {
-  message: 'Either assignment_id, target_id, or batch_id and title, is required',
+}).refine((b) => !!(b.assignment_id || b.target_id || b.batch_id), {
+  // Progress reports no longer need a caller-supplied title — the service
+  // defaults it to "Progress Report — Semester N", same as self-submit.
+  message: 'Either assignment_id, target_id, or batch_id, is required',
 });
 
 // A single free-form remark on a submission's feedback thread. `author_role`

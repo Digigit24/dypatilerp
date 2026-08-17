@@ -1,18 +1,17 @@
 /**
  * UploadProgressReportDrawer — the single upload surface for progress reports.
  *
- * Used from three places, all sharing this one component so the flow and the
- * validation never drift apart:
- *   • Admin → Progress Reports page  (no student preselected → search & pick)
- *   • Admin → Scholar detail page header
- *   • Scholar detail page → Progress Reports tab
+ * Used from the Progress Reports subtab's "Report N" chip selector, both from
+ * the admin's Scholar Detail page and (indirectly, via the same shared
+ * component) anywhere else that renders it. The semester is whichever chip
+ * is currently selected in the parent — this drawer no longer has its own
+ * period picker, so it can never disagree with the tab it was opened from.
  *
- * Opens in the same side-drawer chrome as the assignment upload drawer. The
- * report is owned by the scholar, the acting admin/coordinator is recorded as
- * creator, the file is streamed to object storage by our own API (no browser →
- * storage hop) and the report is then submitted into the batch's normal
- * approval chain. Any remark typed here is posted to the report's feedback
- * thread, which is independent of that chain.
+ * Same two named slots as the student's own self-submit card (Report PDF/PPT
+ * + Presentation PDF/PPT — either slot takes either file type), so an
+ * admin-filed report always lands in the exact same shape a self-submit
+ * would, on the exact same cycle thread (createSubmissionOnBehalf resolves/
+ * reuses that cycle's existing submission rather than creating a duplicate).
  */
 import { FileText, Loader2, Search, UploadCloud, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -24,10 +23,14 @@ import { useUiStore } from '../../store/uiStore.js'
 
 const MAX_BYTES = 25 * 1024 * 1024
 const ALLOWED_EXT = ['pdf', 'ppt', 'pptx']
+const SLOTS = [
+  { slot: 'report', label: 'Progress Report' },
+  { slot: 'presentation', label: 'Presentation' },
+]
 
 const fullName = (s) => `${s?.first_name || ''} ${s?.last_name || ''}`.trim()
 
-export default function UploadProgressReportDrawer({ studentUserId = null, onClose, onUploaded }) {
+export default function UploadProgressReportDrawer({ studentUserId = null, semester, onClose, onUploaded }) {
   const addToast = useUiStore((s) => s.addToast)
   const locked = Boolean(studentUserId)
 
@@ -35,9 +38,7 @@ export default function UploadProgressReportDrawer({ studentUserId = null, onClo
   const [lockedStudent, setLockedStudent] = useState(null)
   const [selectedId, setSelectedId] = useState(studentUserId || '')
   const [search, setSearch] = useState('')
-  const [title, setTitle] = useState('')
-  const [period, setPeriod] = useState(1)
-  const [files, setFiles] = useState([])
+  const [files, setFiles] = useState({ report: null, presentation: null })
   const [remark, setRemark] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -73,38 +74,42 @@ export default function UploadProgressReportDrawer({ studentUserId = null, onClo
     ).slice(0, 60)
   }, [roster, q])
 
+  const setSlotFile = (slot, file) => setFiles((prev) => ({ ...prev, [slot]: file }))
+
   // ── File validation mirrors the server's rules so the user finds out here ──
   const fileError = useMemo(() => {
-    for (const f of files) {
+    for (const { slot, label } of SLOTS) {
+      const f = files[slot]
+      if (!f) continue
       const ext = (f.name.split('.').pop() || '').toLowerCase()
-      if (!ALLOWED_EXT.includes(ext)) return `"${f.name}" is not a PDF, PPT or PPTX file.`
-      if (f.size > MAX_BYTES) return `"${f.name}" is larger than the 25MB limit.`
-      if (f.size <= 0) return `"${f.name}" is empty.`
+      if (!ALLOWED_EXT.includes(ext)) return `${label}: "${f.name}" is not a PDF, PPT or PPTX file.`
+      if (f.size > MAX_BYTES) return `${label}: "${f.name}" is larger than the 25MB limit.`
+      if (f.size <= 0) return `${label}: "${f.name}" is empty.`
     }
     return null
   }, [files])
 
   const noBatch = Boolean(selected) && !selected.batch_id
-  const canSubmit = Boolean(selected) && !noBatch && title.trim().length >= 2 && files.length > 0 && !fileError && !busy
+  const bothSlotsFilled = SLOTS.every(({ slot }) => files[slot])
+  const canSubmit = Boolean(selected) && !noBatch && Boolean(semester) && bothSlotsFilled && !fileError && !busy
 
   const submit = async () => {
     if (!canSubmit) return
     setBusy(true)
     try {
-      // 1. Draft owned by the scholar; the acting staff member is the creator.
+      // 1. Resolve (or reuse) the submission tied to this scholar's Semester-N
+      //    cycle — never a second row for a cycle that already has one.
       const createdRes = await createSubmissionOnBehalf({
         student_user_id: selected.user_id,
         batch_id: selected.batch_id,
-        title: title.trim(),
         submission_type: 'progress_report',
-        semester: Number(period) || 1,
+        semester,
       })
       const submissionId = createdRes.data?.id
       if (!submissionId) throw new Error('Could not create the report')
 
-      // 2. Stream each file through our API to object storage. Sequential on
-      //    purpose — each call appends to the same submission's file list.
-      for (const f of files) await uploadSubmissionAttachment(submissionId, f)
+      // 2. Both named slots — sequential on purpose, each replaces its own slot.
+      for (const { slot } of SLOTS) await uploadSubmissionAttachment(submissionId, files[slot], slot)
 
       // 3. Optional remark → the report's feedback thread (not the approval chain).
       const note = remark.trim()
@@ -138,7 +143,7 @@ export default function UploadProgressReportDrawer({ studentUserId = null, onClo
         {/* ── Header ── */}
         <div className="shrink-0 flex items-center justify-between border-b border-[color:var(--border)] p-5 sm:p-7">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Progress Report</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Progress Report {semester}</p>
             <h2 className="mt-1 truncate text-xl font-semibold text-[color:var(--text)]">Upload Report</h2>
             <p className="mt-0.5 text-sm text-[color:var(--secondary)]">
               Owned by the scholar and routed through the batch&apos;s approval workflow.
@@ -230,56 +235,44 @@ export default function UploadProgressReportDrawer({ studentUserId = null, onClo
             )}
           </div>
 
-          {/* Title */}
-          <label className="block">
-            <span className="text-sm font-semibold text-[color:var(--text)]">
-              Report title<span className="ml-1 text-red-500">*</span>
-            </span>
-            <input
-              className="input mt-2 w-full"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. First Progress Report"
-            />
-          </label>
-
-          {/* Period */}
-          <label className="block">
-            <span className="text-sm font-semibold text-[color:var(--text)]">Report period</span>
-            <select className="input mt-2 w-full" value={period} onChange={(e) => setPeriod(Number(e.target.value))}>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                <option key={n} value={n}>Report {n}</option>
-              ))}
-            </select>
-          </label>
-
-          {/* Files */}
-          <label className="block">
-            <span className="text-sm font-semibold text-[color:var(--text)]">
-              Document<span className="ml-1 text-red-500">*</span>{' '}
-              <span className="font-normal text-[color:var(--muted)]">(PDF, PPT or PPTX — max 25MB each)</span>
-            </span>
-            <div className="mt-2 flex items-center gap-2">
-              <FileText size={16} className="shrink-0 text-[color:var(--accent)]" />
-              <input
-                className="block w-full text-sm text-[color:var(--secondary)] file:mr-3 file:rounded-xl file:border-0 file:bg-[color:var(--accent-tint)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-[color:var(--accent)]"
-                type="file"
-                multiple
-                accept=".pdf,.ppt,.pptx"
-                onChange={(e) => setFiles(Array.from(e.target.files || []))}
-              />
-            </div>
-            {files.length > 0 && (
-              <ul className="mt-2 space-y-1">
-                {files.map((f) => (
-                  <li key={f.name} className="text-xs text-[color:var(--secondary)]">
-                    {f.name} · {(f.size / 1024 / 1024).toFixed(2)} MB
-                  </li>
-                ))}
-              </ul>
-            )}
-            {fileError && <p className="mt-2 text-xs font-semibold text-red-600">{fileError}</p>}
-          </label>
+          {/* Files — two named slots, either PDF or PPT/PPTX in either one */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {SLOTS.map(({ slot, label }) => {
+              const f = files[slot]
+              return (
+                <label key={slot} className="block">
+                  <span className="text-sm font-semibold text-[color:var(--text)]">
+                    {label}<span className="ml-1 text-red-500">*</span>
+                  </span>
+                  <div className="mt-2 rounded-xl border border-dashed border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+                    {f ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex min-w-0 items-center gap-1.5 truncate text-xs text-[color:var(--text)]">
+                          <FileText size={13} className="shrink-0 text-[color:var(--accent)]" />
+                          {f.name}
+                        </span>
+                        <button type="button" onClick={() => setSlotFile(slot, null)} className="shrink-0 text-[color:var(--muted)] hover:text-red-500">
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="flex cursor-pointer items-center justify-center gap-1.5 text-center text-xs font-semibold text-[color:var(--secondary)] hover:text-[color:var(--accent)]">
+                        <UploadCloud size={14} /> Click to add
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept=".pdf,.ppt,.pptx"
+                          onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) setSlotFile(slot, file) }}
+                        />
+                      </span>
+                    )}
+                  </div>
+                </label>
+              )
+            })}
+          </div>
+          <p className="text-xs text-[color:var(--muted)]">PDF, PPT or PPTX — either file type in either slot, max 25MB each.</p>
+          {fileError && <p className="text-xs font-semibold text-red-600">{fileError}</p>}
 
           {/* Remark */}
           <label className="block">

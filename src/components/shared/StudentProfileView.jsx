@@ -27,7 +27,7 @@ import Select from './Select.jsx'
 import StudentOnboardingPanel from './StudentOnboardingPanel.jsx'
 import { getFeesByStudent } from '../../api/services/feeService.js'
 import {
-  createSubmission, getProgressReportsByStudent, getSubmissionRemarks, getSubmissions,
+  createSubmission, getSubmissionRemarks, getSubmissions,
   submitForReview, uploadSubmissionAttachment,
 } from '../../api/services/submissionService.js'
 import { getMyCycle } from '../../api/services/progressCycleService.js'
@@ -120,13 +120,6 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [assignmentFeedbackLoading, setAssignmentFeedbackLoading] = useState(true)
   // Fees list, lazily loaded only when the student opens the Fees subtab.
   const [fees,            setFees]            = useState(null)
-  // Uploaded progress-report DOCUMENTS (submissions of type 'progress_report').
-  // Distinct from the targets list above.
-  const [reportDocs,      setReportDocs]      = useState([])
-  // Most recent reviewer feedback event per report id — { at, kind, text, stage } — so
-  // the list itself shows what the coordinator/admin said, not just a status badge.
-  const [reportFeedback,  setReportFeedback]  = useState({})
-  const [reportFeedbackLoading, setReportFeedbackLoading] = useState(true)
   const [reportUploadOpen,setReportUploadOpen]= useState(false)
   const [openTargetId,    setOpenTargetId]    = useState(null)  // which milestone's submit panel is expanded
   const [openAssignmentId,setOpenAssignmentId]= useState(null)  // which assignment's submit panel is expanded
@@ -136,9 +129,13 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // view keeps reading the generic `assignments` list (filtered submissions)
   // below instead — it needs every scholar's submissions, not just "mine".
   const [myAssignments,   setMyAssignments]   = useState([])
-  // Current-semester progress-report window (student self-submit only —
-  // admin view keeps its existing "Upload Report" on-behalf flow instead).
+  // The currently-selected "Report N" chip's cycle+submission — Report N
+  // always maps to Semester N. Shared by admin and student views alike; one
+  // card replaces what used to be a "current" card plus a flat past-reports
+  // list, which is exactly what let two disconnected submissions for the
+  // same semester render as if they were unrelated.
   const [cycle,           setCycle]           = useState(null)
+  const [selectedReportSemester, setSelectedReportSemester] = useState(null)
   const [notFound,        setNotFound]        = useState(false)
   const [tab,             setTab]             = useState(_normalizeTab.outer)
   // Inner subtab — only meaningful when outer tab is 'profile' or 'submissions'.
@@ -178,7 +175,6 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
     setNotFound(false)
     setStudent(null)
     setUser(null)
-    setReportDocs([])
 
     getStudentById(studentId)
       .then((r) => {
@@ -211,8 +207,8 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
       .then((r) => setProgressSummary(r.data || null))
       .catch(() => setProgressSummary(null))
 
-    loadReportDocs()
-    if (!isAdminView) { loadCycle(); loadMyAssignments() }
+    loadCycle()
+    if (!isAdminView) loadMyAssignments()
   }, [studentId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lazy-load fees only when the student opens the Fees subtab inside My Profile. The
@@ -227,32 +223,19 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
     return () => { cancelled = true }
   }, [tab, subTab, studentId, fees])
 
-  // Extracted so the upload drawer can refresh the list without a full reload.
-  function loadReportDocs() {
+  // The selected "Report N" chip's window — omit `semester` for "whichever
+  // cycle they're currently in" (used on first load, and to resolve which
+  // chip should be selected initially). Re-fetched after every slot upload/
+  // submit so can_submit and the attached files always reflect server truth.
+  function loadCycle(semester = null) {
     if (!studentId) return
-    setReportFeedbackLoading(true)
-    getProgressReportsByStudent(studentId)
-      .then(async (r) => {
-        const docs = r.data || []
-        setReportDocs(docs)
-        // Naturally bounded (one report per semester) — safe to fetch approval
-        // and remarks history for every row, not just a top-N slice.
-        const [approvalLists, remarkLists] = await Promise.all([
-          Promise.all(docs.map((d) => getApprovalsBySubmission(d.id).then((res) => res.data || []).catch(() => []))),
-          Promise.all(docs.map((d) => getSubmissionRemarks(d.id).then((res) => res.data || []).catch(() => []))),
-        ])
-        const map = {}
-        docs.forEach((d, i) => { const ev = latestFeedbackEvent(approvalLists[i], remarkLists[i]); if (ev) map[d.id] = ev })
-        setReportFeedback(map)
-        setReportFeedbackLoading(false)
+    getMyCycle(semester, isAdminView ? studentId : null)
+      .then((r) => {
+        const c = r.data || null
+        setCycle(c)
+        if (c) setSelectedReportSemester(c.semester)
       })
-      .catch(() => { setReportDocs([]); setReportFeedbackLoading(false) })
-  }
-
-  // Current-semester window — re-fetched after every slot upload / submit so
-  // can_submit and the attached files always reflect the server's truth.
-  function loadCycle() {
-    getMyCycle().then((r) => setCycle(r.data || null)).catch(() => setCycle(null))
+      .catch(() => setCycle(null))
   }
 
   // My batch's published assignments + my_submission_status (student self-view only).
@@ -459,7 +442,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // Profile row is collapsed into two outer tabs: My Profile (with inner subtabs
   // Profile / Fees [student only] / Research Profile) and Submissions (with inner
   // subtabs Progress Reports / Assignments / Milestones).
-  const subsCount = reportDocs.length + assignments.length + targets.length
+  const subsCount = assignments.length + targets.length
   const TABS = [
     { key: 'profile',     label: 'My Profile' },
     { key: 'submissions', label: `Submissions${subsCount ? ` (${subsCount})` : ''}` },
@@ -576,7 +559,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
       {tab === 'submissions' && (
         <div className="mb-5 flex flex-wrap gap-2 border-b border-[color:var(--border)] pb-3">
           {[
-            { key: 'reports',     label: `Progress Reports${reportDocs.length  ? ` (${reportDocs.length})`  : ''}` },
+            { key: 'reports',     label: 'Progress Reports' },
             { key: 'assignments', label: `Assignments${assignments.length    ? ` (${assignments.length})`    : ''}` },
             { key: 'milestones',  label: `Milestones${targets.length         ? ` (${targets.length})`         : ''}` },
           ].map(({ key, label }) => (
@@ -751,95 +734,68 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         </div>
       )}
 
-            {/* ══ Submissions > Progress Reports subtab ═════════════════════════════════ */}
+            {/* ══ Submissions > Progress Reports subtab ═════════════════════════════════
+                Report N always maps to Semester N. One chip per semester the scholar's
+                COURSE spans (derived from course duration ÷ 6 months); chips beyond the
+                batch's current semester are disabled until the batch actually advances
+                that far — a scholar/admin can always look back at earlier reports once
+                unlocked, never ahead of where the batch really is. ═══════════════════ */}
       {tab === 'submissions' && subTab === 'reports' && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-[color:var(--text)]">
-                {isAdminView ? 'Uploaded progress reports' : 'Your progress reports'}
-              </p>
-              <p className="mt-0.5 text-sm text-[color:var(--secondary)]">
-                {isAdminView
-                  ? 'Documents filed for this scholar, with their review status and feedback thread.'
-                  : 'One report per semester — pick up where you left off, or start the current one.'}
-              </p>
-            </div>
-            {canUploadReport && (
-              <button
-                className="btn-primary inline-flex items-center gap-2"
-                onClick={() => setReportUploadOpen(true)}
-              >
-                <UploadCloud size={15} /> Upload Report
-              </button>
-            )}
+          <div>
+            <p className="text-sm font-semibold text-[color:var(--text)]">
+              {isAdminView ? 'Progress reports' : 'Your progress reports'}
+            </p>
+            <p className="mt-0.5 text-sm text-[color:var(--secondary)]">
+              One report per semester — pick a report below to view its status, feedback and files.
+            </p>
           </div>
 
-          {/* Student self-submit: the current semester's window, always up top. */}
-          {!isAdminView && cycle && (
-            <ProgressCycleCard cycle={cycle} onChange={() => { loadCycle(); loadReportDocs() }} addToast={addToast} />
-          )}
-
-          {/* Past semesters only, when a live cycle is shown above (avoid showing
-              the current semester twice). Admin view is unfiltered, unchanged. */}
-          {(() => {
-            const list = (!isAdminView && cycle)
-              ? reportDocs.filter((r) => (r.semester || 1) < cycle.semester)
-              : reportDocs
-            if (list.length === 0 && (isAdminView || !cycle)) {
-              return (
-                <div className="card p-10 text-center">
-                  <FileText className="mx-auto text-[color:var(--muted)]" size={32} />
-                  <p className="mt-3 font-semibold text-[color:var(--text)]">No progress reports yet</p>
-                  <p className="mt-1 text-sm text-[color:var(--secondary)]">
-                    {canUploadReport
-                      ? 'Upload a report to file it under this scholar and send it for review.'
-                      : 'Reports appear here once they are uploaded.'}
-                  </p>
-                </div>
-              )
-            }
-            if (list.length === 0) return null
-            return (
-            <div className="space-y-3">
-              {list.map((r) => {
-                const files = Array.isArray(r.file_urls) ? r.file_urls : []
-                const feedback = reportFeedback[r.id]
+          {cycle && (
+            <div className="flex flex-wrap gap-2">
+              {Array.from({ length: cycle.total_semesters || 1 }, (_, i) => i + 1).map((n) => {
+                const enabled = n <= (cycle.current_semester || 1)
+                const active = n === selectedReportSemester
                 return (
-                  <div
-                    key={r.id}
-                    role="button"
-                    tabIndex={0}
-                    className="flex w-full cursor-pointer items-start justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 text-left transition hover:border-[color:var(--accent)] hover:shadow-sm"
-                    onClick={() => openSub(r)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') openSub(r) }}
+                  <button
+                    key={n}
+                    type="button"
+                    disabled={!enabled}
+                    onClick={() => loadCycle(n)}
+                    title={enabled ? undefined : `Opens once this batch reaches Semester ${n}`}
+                    className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                      active
+                        ? 'bg-[color:var(--accent)] text-white'
+                        : enabled
+                          ? 'bg-[color:var(--surface)] text-[color:var(--secondary)] hover:text-[color:var(--text)]'
+                          : 'cursor-not-allowed bg-[color:var(--surface)] text-[color:var(--muted)] opacity-50'
+                    }`}
                   >
-                    <div className="min-w-0">
-                      <p className="line-clamp-2 font-semibold text-[color:var(--text)]">{r.title}</p>
-                      <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--secondary)]">
-                        <span>Report {r.semester || 1}</span>
-                        <span>{files.length} file{files.length === 1 ? '' : 's'}</span>
-                        {r.remarks_count > 0 && <span>{r.remarks_count} feedback item{r.remarks_count === 1 ? '' : 's'}</span>}
-                        <span>{formatDate(r.submitted_at || r.created_at)}</span>
-                      </p>
-                      <FeedbackSnippet feedback={feedback} loading={reportFeedbackLoading} className="mt-2" />
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <StatusBadge status={r.status} />
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); openSub(r) }}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-[color:var(--surface)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)]"
-                      >
-                        View
-                      </button>
-                    </div>
-                  </div>
+                    Report {n}
+                  </button>
                 )
               })}
             </div>
-            )
-          })()}
+          )}
+
+          {!cycle ? (
+            <div className="card p-10 text-center">
+              <FileText className="mx-auto text-[color:var(--muted)]" size={32} />
+              <p className="mt-3 font-semibold text-[color:var(--text)]">No progress-report window yet</p>
+              <p className="mt-1 text-sm text-[color:var(--secondary)]">
+                {isAdminView ? 'This scholar has no active batch enrollment.' : "You don't have an active batch enrollment yet."}
+              </p>
+            </div>
+          ) : (
+            <ProgressCycleCard
+              cycle={cycle}
+              isAdminView={isAdminView}
+              canUpload={canUploadReport}
+              onChange={() => loadCycle(selectedReportSemester)}
+              onUploadOnBehalf={() => setReportUploadOpen(true)}
+              addToast={addToast}
+            />
+          )}
         </div>
       )}
 
@@ -1264,12 +1220,14 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         </div>
       )}
 
-      {/* ── Upload progress report (admin / coordinator) ── */}
+      {/* ── Upload progress report (admin / coordinator) — semester is whichever
+          "Report N" chip is currently selected, not chosen in the drawer. ── */}
       {reportUploadOpen && (
         <UploadProgressReportDrawer
           studentUserId={studentId}
+          semester={selectedReportSemester}
           onClose={() => setReportUploadOpen(false)}
-          onUploaded={loadReportDocs}
+          onUploaded={() => loadCycle(selectedReportSemester)}
         />
       )}
 
@@ -1466,13 +1424,17 @@ function TargetSubmitPanel({ target, onDone, addToast }) {
   )
 }
 
-function ProgressCycleCard({ cycle, onChange, addToast }) {
+function ProgressCycleCard({ cycle, isAdminView, canUpload, onChange, onUploadOnBehalf, addToast }) {
   const navigate = useNavigate()
   const [busySlot,   setBusySlot]   = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [feedback,   setFeedback]   = useState(null)
   const [feedbackLoading, setFeedbackLoading] = useState(Boolean(cycle.submission_id))
-  const editable = !cycle.submission_status || ['draft', 'needs_revision'].includes(cycle.submission_status)
+  // Admin never edits inline here — they use the "Upload on behalf" drawer,
+  // same as Assignments/Milestones, so the same upload path is always used
+  // regardless of who's filing the report.
+  const editable = !isAdminView && (!cycle.submission_status || ['draft', 'needs_revision'].includes(cycle.submission_status))
+  const isCurrent = cycle.semester === cycle.current_semester
 
   useEffect(() => {
     if (!cycle.submission_id) { setFeedback(null); setFeedbackLoading(false); return }
@@ -1531,12 +1493,23 @@ function ProgressCycleCard({ cycle, onChange, addToast }) {
       <div className="safe-row items-start">
         <div>
           <span className="inline-flex items-center rounded-full bg-[color:var(--accent-tint)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[color:var(--accent)]">
-            Current — Semester {cycle.semester}
+            {isCurrent ? 'Current' : 'Past'} — Semester {cycle.semester}
           </span>
           <h3 className="mt-2 text-base font-semibold text-[color:var(--text)]">Progress Report {cycle.semester}</h3>
           {cycle.due_date && <p className="mt-1 text-xs text-[color:var(--secondary)]">Due {formatDate(cycle.due_date)}</p>}
         </div>
-        <StatusBadge status={cycle.submission_status || 'not_started'} />
+        <div className="flex shrink-0 items-center gap-2">
+          <StatusBadge status={cycle.submission_status || 'not_started'} />
+          {isAdminView && canUpload && (
+            <button
+              type="button"
+              onClick={onUploadOnBehalf}
+              className="btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
+            >
+              <UploadCloud size={13} /> {cycle.submission_id ? 'Replace' : 'Upload on behalf'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -1549,7 +1522,7 @@ function ProgressCycleCard({ cycle, onChange, addToast }) {
                 {cycle.submission_id ? (
                   <button
                     type="button"
-                    onClick={() => navigate(`/student/submissions/${cycle.submission_id}/preview`)}
+                    onClick={() => navigate(`/${isAdminView ? 'admin' : 'student'}/submissions/${cycle.submission_id}/preview`)}
                     className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[color:var(--accent-tint)] px-3 text-xs font-semibold text-[color:var(--accent)]"
                   >
                     View

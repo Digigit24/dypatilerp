@@ -24,12 +24,19 @@ router.get('/', requirePermission('progress_reports', 'read'), asyncHandler(asyn
 }));
 
 /**
- * GET /progress-reports/cycles/mine — the scholar's current window, with both
- * slots resolved and a can_submit flag so the UI never has to work it out.
+ * GET /progress-reports/cycles/mine[?semester=N][?student_user_id=]
+ * Own-scope callers (students) always resolve their own record — student_user_id
+ * is ignored for them. Staff may pass student_user_id to view a scholar's report
+ * on their behalf. Omit semester for "whichever cycle they're currently in";
+ * pass it to view/manage a specific Report N regardless of where they are now.
  */
 router.get('/mine', requirePermission('progress_reports', 'read'), asyncHandler(async (req, res) => {
-  const cycle = await svc.getMyCycle(req.user.id);
-  if (!cycle) return ok(res, null, 'No open progress-report window for your current semester.');
+  const targetUserId = isOwnScope(req) ? req.user.id : (req.query.student_user_id || req.user.id);
+  const semester = req.query.semester ? Number(req.query.semester) : null;
+  const cycle = semester
+    ? await svc.getCycleForStudent(targetUserId, semester)
+    : await svc.getMyCycle(targetUserId);
+  if (!cycle) return ok(res, null, 'No open progress-report window for this semester.');
   ok(res, cycle);
 }));
 

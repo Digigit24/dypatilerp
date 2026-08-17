@@ -10,12 +10,18 @@
  */
 import { query } from '../../config/database.js';
 
+// Either slot accepts either file type — a scholar's report or presentation
+// can each be a PDF or a PPT/PPTX (mirrored in videos.controller.js's
+// SLOT_EXTS, which is what actually enforces this on upload).
+const PROGRESS_REPORT_EXTS = ['pdf', 'ppt', 'pptx'];
+const PROGRESS_REPORT_MIMES = [
+  'application/pdf',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+];
 export const SLOTS = {
-  report:       { label: 'Progress Report', exts: ['pdf'],         mimes: ['application/pdf'] },
-  presentation: { label: 'Presentation',    exts: ['ppt', 'pptx'], mimes: [
-    'application/vnd.ms-powerpoint',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  ] },
+  report:       { label: 'Progress Report', exts: PROGRESS_REPORT_EXTS, mimes: PROGRESS_REPORT_MIMES },
+  presentation: { label: 'Presentation',    exts: PROGRESS_REPORT_EXTS, mimes: PROGRESS_REPORT_MIMES },
 };
 export const REQUIRED_SLOTS = ['report', 'presentation'];
 
@@ -54,29 +60,46 @@ export const getCycleById = async (id) => {
 };
 
 /**
- * The cycle a given scholar should be submitting into right now, plus their
- * submission if they have started one.
+ * The cycle for one scholar + explicit semester (e.g. "Report 3" regardless
+ * of where they currently are), plus their submission if they have one.
+ *
+ * A cycle can end up with more than one submissions row for the same
+ * (cycle, student) — an admin on-behalf upload and a student self-submit
+ * both landing separately, or a submit failing partway leaving an empty
+ * draft behind (uq_sub_cycle is intentionally not enforced yet — see
+ * CLAUDE.md §7). Resolving via a LATERAL pick instead of a plain JOIN means
+ * that case always deterministically prefers the actually-submitted row
+ * (over an empty/abandoned draft) and then the most recent, rather than
+ * silently returning whichever row Postgres happened to scan first.
  */
-export const getMyCycle = async (studentUserId) => {
+export const getCycleForStudent = async (studentUserId, semester) => {
   const { rows } = await query(
-    `SELECT c.*, b.name AS batch_name,
+    `SELECT c.*, b.name AS batch_name, b.course_id, co.duration_months,
+            be.current_semester,
             s.id AS submission_id, s.status AS submission_status,
             s.file_urls, s.submitted_at, s.title AS submission_title
      FROM batch_enrollments be
      JOIN batches b ON b.id = be.batch_id
-     JOIN progress_report_cycles c
-       ON c.batch_id = be.batch_id AND c.semester = be.current_semester
-     LEFT JOIN submissions s
-       ON s.cycle_id = c.id AND s.student_user_id = be.user_id AND s.merged_into_id IS NULL
+     JOIN courses co ON co.id = b.course_id
+     JOIN progress_report_cycles c ON c.batch_id = be.batch_id AND c.semester = $2
+     LEFT JOIN LATERAL (
+       SELECT * FROM submissions
+       WHERE cycle_id = c.id AND student_user_id = be.user_id AND merged_into_id IS NULL
+       ORDER BY (status <> 'draft') DESC, created_at DESC
+       LIMIT 1
+     ) s ON TRUE
      WHERE be.user_id = $1 AND be.status = 'active'
-     ORDER BY c.semester DESC LIMIT 1`,
-    [studentUserId]
+     LIMIT 1`,
+    [studentUserId, semester]
   );
   const cycle = rows[0];
   if (!cycle) return null;
   const files = Array.isArray(cycle.file_urls) ? cycle.file_urls : [];
   return {
     ...cycle,
+    // A 24-month course = 4 six-monthly cycles; scales the same way for any
+    // other course length instead of hardcoding "8 reports" for everyone.
+    total_semesters: Math.max(1, Math.ceil((cycle.duration_months || 24) / 6)),
     slots: REQUIRED_SLOTS.map((slot) => ({
       slot,
       label: SLOTS[slot].label,
@@ -85,6 +108,16 @@ export const getMyCycle = async (studentUserId) => {
     })),
     can_submit: REQUIRED_SLOTS.every((slot) => files.some((f) => f.slot === slot)),
   };
+};
+
+/** The cycle a given scholar should be submitting into right now (their current semester). */
+export const getMyCycle = async (studentUserId) => {
+  const { rows: [enrollment] } = await query(
+    `SELECT current_semester FROM batch_enrollments WHERE user_id=$1 AND status='active' ORDER BY enrolled_at DESC LIMIT 1`,
+    [studentUserId]
+  );
+  if (!enrollment) return null;
+  return getCycleForStudent(studentUserId, enrollment.current_semester);
 };
 
 /** Idempotent: one cycle per (batch, semester). */

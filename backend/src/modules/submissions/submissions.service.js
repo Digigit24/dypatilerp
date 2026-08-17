@@ -166,8 +166,24 @@ export const createSubmissionOnBehalf = async (payload, adminUserId) => {
     // student-self-submitted reports for the same semester show up as two
     // disconnected submissions instead of one threaded report).
     submission_type = 'progress_report';
+    // Same title convention the self-submit flow uses (title is NOT NULL and
+    // this drawer no longer collects a custom one — the period IS the title).
+    title = title || `Progress Report — Semester ${semester || 1}`;
     const cycle = await ensureCycle(batch_id, semester || 1, adminUserId);
     cycle_id = cycle?.id || null;
+
+    // Reuse whatever the scholar already has on this cycle instead of
+    // inserting a second row every time an admin opens the upload drawer —
+    // this is the other half of the same duplicate-report bug: prefer a
+    // real (non-draft) submission, else the most recent draft.
+    if (cycle_id) {
+      const { rows: [existing] } = await query(
+        `SELECT * FROM submissions WHERE cycle_id=$1 AND student_user_id=$2 AND merged_into_id IS NULL
+         ORDER BY (status <> 'draft') DESC, created_at DESC LIMIT 1`,
+        [cycle_id, payload.student_user_id]
+      );
+      if (existing) return existing;
+    }
   }
 
   const enrolled = await isStudentEnrolledInBatch(payload.student_user_id, batch_id);
