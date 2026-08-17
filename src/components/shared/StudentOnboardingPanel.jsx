@@ -8,10 +8,10 @@
  * `editable` mirrors the `!isAdminView` split used everywhere else in
  * StudentProfileView — admins see the same data read-only.
  */
-import { FileText, Upload } from 'lucide-react'
+import { FileText, ShieldOff, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
-  getDocuments, getOnboardingStatus, getProfileDetails, saveProfileDetails, uploadDocument,
+  getDocuments, getOnboardingStatus, getProfileDetails, saveProfileDetails, setOnboardingSkip, uploadDocument,
 } from '../../api/services/studentProfileService.js'
 import { useUiStore } from '../../store/uiStore.js'
 
@@ -50,6 +50,8 @@ export default function StudentOnboardingPanel({ userId, editable = true, onStat
   const [documents, setDocuments] = useState([])
   const [saving, setSaving]     = useState(false)
   const [uploadingSlot, setUploadingSlot] = useState(null)
+  const [status, setStatus]     = useState(null)
+  const [skipBusy, setSkipBusy] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
 
   const loadDetails = () => {
@@ -62,10 +64,28 @@ export default function StudentOnboardingPanel({ userId, editable = true, onStat
   }
   const refreshStatus = () => {
     if (!userId) return
-    getOnboardingStatus(userId).then((r) => onStatusChange?.(r.data)).catch(() => {})
+    getOnboardingStatus(userId).then((r) => { setStatus(r.data); onStatusChange?.(r.data) }).catch(() => {})
   }
 
   useEffect(() => { loadDetails(); loadDocuments(); refreshStatus() }, [userId])
+
+  // Admin-only — lets this one scholar into the app without finishing
+  // onboarding. `editable` is false exactly when an admin/coordinator is
+  // viewing someone else's profile (see the `!isAdminView` split at the
+  // StudentProfileView call site), which is the only case this applies.
+  const toggleSkip = async () => {
+    setSkipBusy(true)
+    try {
+      const res = await setOnboardingSkip(userId, !status?.onboarding_skip)
+      setStatus(res.data.onboarding)
+      onStatusChange?.(res.data.onboarding)
+      addToast({ type: 'success', title: res.data.onboarding?.onboarding_skip ? 'Onboarding skip enabled for this scholar.' : 'Onboarding skip disabled.' })
+    } catch (e) {
+      addToast({ type: 'error', title: e?.response?.data?.message || 'Could not update onboarding skip.' })
+    } finally {
+      setSkipBusy(false)
+    }
+  }
 
   const saveDetails = async () => {
     setSaving(true)
@@ -99,6 +119,32 @@ export default function StudentOnboardingPanel({ userId, editable = true, onStat
 
   return (
     <div className="space-y-5">
+      {!editable && (
+        <div className="card flex flex-wrap items-center justify-between gap-3 p-5">
+          <div className="flex items-center gap-3">
+            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${status?.onboarding_skip ? 'bg-amber-100 text-amber-600' : 'bg-[color:var(--surface)] text-[color:var(--secondary)]'}`}>
+              <ShieldOff size={17} />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-[color:var(--text)]">Allow user to skip onboarding</p>
+              <p className="mt-0.5 text-xs text-[color:var(--secondary)]">
+                Lets this scholar use the app before their onboarding is complete. Turning it back off re-locks them unless they finish for real.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!!status?.onboarding_skip}
+            disabled={skipBusy || !status}
+            onClick={toggleSkip}
+            className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-50 ${status?.onboarding_skip ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}
+          >
+            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${status?.onboarding_skip ? 'left-6' : 'left-1'}`} />
+          </button>
+        </div>
+      )}
+
       <div className="card p-6">
         <h2 className="text-lg font-semibold text-[color:var(--text)]">Onboarding Details</h2>
         <p className="mt-1 text-sm text-[color:var(--secondary)]">

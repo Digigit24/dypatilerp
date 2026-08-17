@@ -12,7 +12,7 @@
  */
 import {
   ArrowDown, ArrowUp, Bell, CalendarClock, CheckCircle2, ClipboardCheck, Clock, GitBranch, GraduationCap,
-  KeyRound, Layers, Loader2, Mail, MailCheck, Network, Plus, RefreshCw, Save, Shield, Target, Trash2, Users, Wand2, XCircle, Zap,
+  KeyRound, Layers, Loader2, Mail, MailCheck, Network, Plus, RefreshCw, Save, Shield, ShieldOff, Target, Trash2, Users, Wand2, XCircle, Zap,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { getCourses, getCourseById, updateCourse } from '../../api/services/courseService.js'
@@ -21,6 +21,7 @@ import { getAssignments } from '../../api/services/rolesService.js'
 import { getStudents } from '../../api/services/studentService.js'
 import { bulkSendCredentials } from '../../api/services/userService.js'
 import { getNotificationQueue, runNotificationScans } from '../../api/services/notificationService.js'
+import { getSettings, saveSettings } from '../../api/services/settingsService.js'
 import ConfirmDialog from '../../components/shared/ConfirmDialog.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
@@ -36,6 +37,7 @@ const TABS = [
   { key: 'semesters',     label: 'Semesters',     icon: CalendarClock },
   { key: 'notifications', label: 'Notifications', icon: Bell },
   { key: 'credentials',   label: 'Credentials',   icon: KeyRound },
+  { key: 'onboarding',    label: 'Onboarding',    icon: ShieldOff },
   { key: 'courses',       label: 'Courses',       icon: GraduationCap },
 ]
 
@@ -64,7 +66,7 @@ export default function AdminWizardPage() {
       />
 
       {/* ── Course selector (independent of the app header) ── */}
-      {tab !== 'courses' && (
+      {tab !== 'courses' && tab !== 'onboarding' && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">
             <Wand2 size={12} /> Course
@@ -96,6 +98,7 @@ export default function AdminWizardPage() {
       {tab === 'semesters' && (course ? <SemestersTab course={course} key={course.id} /> : <NoCourse />)}
       {tab === 'notifications' && (course ? <NotificationsTab course={course} key={course.id} /> : <NoCourse />)}
       {tab === 'credentials' && (course ? <CredentialsTab course={course} key={`cred-${course.id}`} /> : <NoCourse />)}
+      {tab === 'onboarding' && <OnboardingSettingsTab />}
       {tab === 'courses' && <CoursesPage embedded />}
     </div>
   )
@@ -209,6 +212,65 @@ function PersonNode({ a, full = false }) {
     <div className={`rounded-xl border px-3 py-1.5 text-center ${ROLE_TONES[a.role_name] || 'border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--secondary)]'} ${full ? 'w-full' : ''}`}>
       <p className="truncate text-[11px] font-bold">{a.first_name} {a.last_name}</p>
       <p className="truncate text-[9.5px] font-semibold opacity-75">{a.role_display}</p>
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// Onboarding — global skip toggle (app_settings key 'onboarding')
+// ════════════════════════════════════════════════════════════════════════════════
+// Course-independent — applies across every course/batch. Per-scholar skip
+// lives on the scholar's own profile page (StudentOnboardingPanel); this is
+// the blanket override for everyone at once.
+function OnboardingSettingsTab() {
+  const addToast = useUiStore((s) => s.addToast)
+  const [skipAll, setSkipAll] = useState(null)   // null = loading
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    getSettings('onboarding').then((r) => setSkipAll(!!r.data?.skip_all)).catch(() => setSkipAll(false))
+  }, [])
+
+  const toggle = async () => {
+    const next = !skipAll
+    setBusy(true)
+    try {
+      await saveSettings('onboarding', { skip_all: next })
+      setSkipAll(next)
+      addToast({ type: 'success', title: next ? 'Onboarding skip enabled for everyone.' : 'Onboarding skip disabled.' })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Save failed', message: err.response?.data?.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (skipAll === null) return <SkeletonCard rows={2} />
+
+  return (
+    <div className="card flex flex-wrap items-center justify-between gap-3 p-6">
+      <div className="flex items-center gap-3">
+        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${skipAll ? 'bg-amber-100 text-amber-600' : 'bg-[color:var(--surface)] text-[color:var(--secondary)]'}`}>
+          <ShieldOff size={19} />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-[color:var(--text)]">Allow all users to skip onboarding</p>
+          <p className="mt-0.5 max-w-md text-xs text-[color:var(--secondary)]">
+            Global override — every scholar gets full app access regardless of onboarding status while this is on.
+            For a single scholar, use the toggle on their profile page instead.
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={skipAll}
+        disabled={busy}
+        onClick={toggle}
+        className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-50 ${skipAll ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}
+      >
+        <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${skipAll ? 'left-6' : 'left-1'}`} />
+      </button>
     </div>
   )
 }

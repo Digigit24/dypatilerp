@@ -39,6 +39,13 @@ export const getOnboardingStatus = async (userId) => {
   return ok(res.data)
 }
 
+/** Admin toggle — lets this one scholar into the app without finishing onboarding. */
+export const setOnboardingSkip = async (userId, skip) => {
+  if (USE_MOCK) return ok({ onboarding_skip: skip, onboarding: { ...MOCK_STATUS, onboarding_skip: skip } })
+  const { data: res } = await http.patch(`/students/${userId}/onboarding-skip`, { skip })
+  return ok(res.data)
+}
+
 /** Uploads (or replaces) the file for one onboarding document slot. Multipart, field "file". */
 export const uploadDocument = async (userId, slot, file) => {
   if (USE_MOCK) return ok({ media_id: `mid_${Date.now()}`, slot, filename: file.name, onboarding: MOCK_STATUS })
