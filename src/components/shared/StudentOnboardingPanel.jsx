@@ -5,14 +5,15 @@
  *  1. The dedicated onboarding gate flow (pages/student/OnboardingPage.jsx)
  *  2. The "Profile" tab in StudentProfileView.jsx (both admin and student view)
  *
- * `editable` mirrors the `!isAdminView` split used everywhere else in
- * StudentProfileView — admins see the same data read-only.
+ * `editable` is true for the scholar's own view, and for admin/coordinator
+ * staff viewing a scholar (they hold students:update); false otherwise.
  */
 import { FileText, ShieldOff, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   getDocuments, getOnboardingStatus, getProfileDetails, saveProfileDetails, setOnboardingSkip, uploadDocument,
 } from '../../api/services/studentProfileService.js'
+import DatePicker from './DatePicker.jsx'
 import { useUiStore } from '../../store/uiStore.js'
 
 const INFO_FIELDS = [
@@ -163,12 +164,21 @@ export default function StudentOnboardingPanel({ userId, editable = true, onStat
                     value={draft[f.key] || ''}
                     onChange={(e) => setDraft((p) => ({ ...p, [f.key]: e.target.value }))}
                   />
+                ) : f.type === 'date' ? (
+                  <DatePicker
+                    className="mt-1.5"
+                    required={f.required}
+                    name={f.key}
+                    max={new Date().toISOString().slice(0, 10)}
+                    value={String(draft[f.key] || '').slice(0, 10)}
+                    onChange={(v) => setDraft((p) => ({ ...p, [f.key]: v }))}
+                  />
                 ) : (
                   <input
-                    type={f.type === 'date' ? 'date' : 'text'}
+                    type="text"
                     className="input mt-1.5 w-full"
                     placeholder={f.placeholder}
-                    value={(f.type === 'date' ? String(draft[f.key] || '').slice(0, 10) : draft[f.key]) || ''}
+                    value={draft[f.key] || ''}
                     onChange={(e) => setDraft((p) => ({ ...p, [f.key]: e.target.value }))}
                   />
                 )

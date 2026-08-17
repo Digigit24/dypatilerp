@@ -21,6 +21,7 @@ import {
 } from '../../api/services/researchProfileService.js'
 import { assignGuide, getStudentById, updateStudent } from '../../api/services/studentService.js'
 import { getUsers, updateUser } from '../../api/services/userService.js'
+import DatePicker from './DatePicker.jsx'
 import Select from './Select.jsx'
 import StudentOnboardingPanel from './StudentOnboardingPanel.jsx'
 import { getFeesByStudent } from '../../api/services/feeService.js'
@@ -1165,9 +1166,18 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                   </span>
                   <span className="mt-1.5 block">
                     {type === 'select' ? (
-                      <select className="input w-full" {...drawerDraft(key)}>
-                        {options.map((o) => <option key={o} value={o}>{o.replaceAll('_', ' ')}</option>)}
-                      </select>
+                      <Select
+                        required={required} name={key}
+                        value={drawer.draft[key] || ''}
+                        onChange={(v) => setDrawer((p) => ({ ...p, draft: { ...p.draft, [key]: v } }))}
+                        options={options.map((o) => ({ value: o, label: o.replaceAll('_', ' ') }))}
+                      />
+                    ) : type === 'date' ? (
+                      <DatePicker
+                        required={required} name={key}
+                        value={drawer.draft[key] || ''}
+                        onChange={(v) => setDrawer((p) => ({ ...p, draft: { ...p.draft, [key]: v } }))}
+                      />
                     ) : (
                       <input className="input w-full" type={type} placeholder={placeholder} required={required} {...drawerDraft(key)} />
                     )}

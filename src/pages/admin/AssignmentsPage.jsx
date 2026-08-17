@@ -13,6 +13,7 @@ import { getBatches } from '../../api/services/batchService.js'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
 import { buildAssignmentSubmissionImportConfig } from '../../components/admin/assignmentSubmissionImportConfig.js'
 import UploadAssignmentSubmissionModal from '../../components/admin/UploadAssignmentSubmissionModal.jsx'
+import DatePicker from '../../components/shared/DatePicker.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import { useCourseStore } from '../../store/courseStore.js'
@@ -261,7 +262,7 @@ function AssignmentDrawer({ item, course, batches, defaultBatch, onClose, addToa
               </label>
               <label className="block">
                 <span className="text-sm font-semibold text-[color:var(--text)]">Due date</span>
-                <input className="input mt-1.5 w-full" type="date" value={form.due_date} onChange={(e) => setForm((p) => ({ ...p, due_date: e.target.value }))} />
+                <DatePicker className="mt-1.5" value={form.due_date} onChange={(v) => setForm((p) => ({ ...p, due_date: v }))} />
               </label>
             </div>
 

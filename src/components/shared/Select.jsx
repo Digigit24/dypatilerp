@@ -17,7 +17,7 @@
 import { Check, ChevronDown } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-export default function Select({ value, onChange, options, placeholder = 'Select…', disabled = false, className = '' }) {
+export default function Select({ value, onChange, options, placeholder = 'Select…', disabled = false, required = false, name, className = '' }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef(null)
   const listRef = useRef(null)
@@ -67,6 +67,23 @@ export default function Select({ value, onChange, options, placeholder = 'Select
 
   return (
     <div ref={rootRef} className={`relative ${className}`}>
+      {/* Invisible mirror input: keeps native HTML5 `required` form-validation
+          (and blocking on submit) working even though the visible control
+          below isn't a real <select>. Focusing it hands focus back up to the
+          visible trigger so the browser's validation tooltip still lands in
+          the right place. */}
+      {(required || name) && (
+        <input
+          tabIndex={-1}
+          aria-hidden="true"
+          required={required}
+          name={name}
+          value={value || ''}
+          onChange={() => {}}
+          onFocus={(e) => e.target.nextElementSibling?.focus?.()}
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-0 w-full opacity-0"
+        />
+      )}
       <button
         type="button"
         role="combobox"

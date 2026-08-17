@@ -5,7 +5,9 @@ import { getBatchById, getBatches, updateBatch } from '../../api/services/batchS
 import { getStudents } from '../../api/services/studentService.js'
 import { getUsers } from '../../api/services/userService.js'
 import { useLabels } from '../../store/labelStore.js'
+import DatePicker from '../../components/shared/DatePicker.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
+import Select from '../../components/shared/Select.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { formatDate } from '../../lib/formatters.js'
@@ -106,11 +108,16 @@ export default function BatchStudentsPage() {
               <Field label="Max students" type="number" value={form.max_students} onChange={(value) => setForm((f) => ({ ...f, max_students: value }))} />
               <label className="block">
                 <span className="text-sm font-semibold text-[color:var(--text)]">Status</span>
-                <select className="input mt-2 w-full" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}>
-                  <option value="upcoming">Upcoming</option>
-                  <option value="active">Active</option>
-                  <option value="completed">Completed</option>
-                </select>
+                <Select
+                  className="mt-2"
+                  value={form.status}
+                  onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+                  options={[
+                    { value: 'upcoming', label: 'Upcoming' },
+                    { value: 'active', label: 'Active' },
+                    { value: 'completed', label: 'Completed' },
+                  ]}
+                />
               </label>
             </div>
 
@@ -176,7 +183,11 @@ function Field({ label, value, onChange, type = 'text' }) {
   return (
     <label className="block">
       <span className="text-sm font-semibold text-[color:var(--text)]">{label}</span>
-      <input className="input mt-2 w-full" type={type} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />
+      {type === 'date' ? (
+        <DatePicker className="mt-2" value={value} onChange={onChange} />
+      ) : (
+        <input className="input mt-2 w-full" type={type} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />
+      )}
     </label>
   )
 }

@@ -7,7 +7,9 @@ import {
 import { getCourses } from '../../api/services/courseService.js'
 import { getUsers } from '../../api/services/userService.js'
 import ApprovalConfigurator from '../../components/shared/ApprovalConfigurator.jsx'
+import DatePicker from '../../components/shared/DatePicker.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
+import Select from '../../components/shared/Select.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { useCourseStore } from '../../store/courseStore.js'
@@ -232,27 +234,34 @@ export default function BatchesPage() {
             <form onSubmit={handleSave} className="flex flex-1 flex-col overflow-hidden">
               <div className="flex-1 overflow-auto overscroll-contain p-5 sm:p-7 space-y-4">
                 <F label="Course" required>
-                  <select className="input w-full" required {...ff('course_id')}>
-                    <option value="">Select course</option>
-                    {courses.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
-                  </select>
+                  <Select
+                    required name="course_id"
+                    value={form.course_id || ''}
+                    onChange={(v) => setForm((p) => ({ ...p, course_id: v }))}
+                    placeholder="Select course"
+                    options={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` }))}
+                  />
                 </F>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <F label="Batch Name" required><input className="input w-full" required placeholder="Batch A – 2024" {...ff('name')} /></F>
                   <F label="Batch Code" required><input className="input w-full" required placeholder="ABRF-2024-A" {...ff('code')} /></F>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <F label="Start Date" required><input className="input w-full" type="date" required {...ff('start_date')} /></F>
-                  <F label="End Date"><input className="input w-full" type="date" {...ff('end_date')} /></F>
+                  <F label="Start Date" required><DatePicker required name="start_date" value={form.start_date} onChange={(v) => setForm((p) => ({ ...p, start_date: v }))} /></F>
+                  <F label="End Date"><DatePicker value={form.end_date} onChange={(v) => setForm((p) => ({ ...p, end_date: v }))} /></F>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <F label="Max Students"><input className="input w-full" type="number" min={1} {...ff('max_students')} /></F>
                   <F label="Status">
-                    <select className="input w-full" {...ff('status')}>
-                      <option value="upcoming">Upcoming</option>
-                      <option value="active">Active</option>
-                      <option value="completed">Completed</option>
-                    </select>
+                    <Select
+                      value={form.status}
+                      onChange={(v) => setForm((p) => ({ ...p, status: v }))}
+                      options={[
+                        { value: 'upcoming', label: 'Upcoming' },
+                        { value: 'active', label: 'Active' },
+                        { value: 'completed', label: 'Completed' },
+                      ]}
+                    />
                   </F>
                 </div>
                 <F label="Description"><textarea className="input w-full resize-none" rows={3} {...ff('description')} /></F>

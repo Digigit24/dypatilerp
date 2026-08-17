@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, Filter, RefreshCw, Search, Shield } from 'lu
 import { useEffect, useState } from 'react'
 import { getAuditActions, getAuditLogs, getAuditResourceTypes } from '../../api/services/auditService.js'
 import { getUsers } from '../../api/services/userService.js'
+import DatePicker from '../../components/shared/DatePicker.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import { useUiStore } from '../../store/uiStore.js'
@@ -153,11 +154,11 @@ export default function AuditLogsPage() {
             </label>
             <label className="block">
               <span className="text-xs font-semibold text-[color:var(--muted)]">From</span>
-              <input className="input mt-1 w-full text-sm" type="date" {...ff('from')} />
+              <DatePicker className="mt-1" value={filters.from} onChange={(v) => setFilters((p) => ({ ...p, from: v }))} />
             </label>
             <label className="block">
               <span className="text-xs font-semibold text-[color:var(--muted)]">To</span>
-              <input className="input mt-1 w-full text-sm" type="date" {...ff('to')} />
+              <DatePicker className="mt-1" value={filters.to} onChange={(v) => setFilters((p) => ({ ...p, to: v }))} />
             </label>
           </div>
         )}
