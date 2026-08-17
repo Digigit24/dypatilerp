@@ -1,8 +1,9 @@
-import { ArrowLeft, KeyRound, Loader2, UploadCloud } from 'lucide-react'
+import { KeyRound, Loader2, Users2, UploadCloud } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { sendCredentials } from '../../api/services/userService.js'
 import UploadProgressReportDrawer from '../../components/admin/UploadProgressReportDrawer.jsx'
+import ScholarSwitchPanel from '../../components/shared/ScholarSwitchPanel.jsx'
 import StudentProfileView from '../../components/shared/StudentProfileView.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import { useLabels } from '../../store/labelStore.js'
@@ -22,6 +23,10 @@ export default function StudentProfilePage() {
   // Institute staff (admin or coordinator) may file a report on a scholar's behalf.
   const canUpload = usePermStore((s) => s.hasRole('admin') || s.hasRole('coordinator'))
   const [uploadOpen, setUploadOpen] = useState(false)
+  // Panel state lives here (not inside the panel) so it survives the route's
+  // :id changing — picking another scholar navigates without unmounting this
+  // page, so the panel stays open across the switch instead of re-opening.
+  const [switchOpen, setSwitchOpen] = useState(false)
 
   const handleSendCredentials = async () => {
     if (!confirm(`Send fresh login credentials by email? This replaces the ${labels.student.toLowerCase()}'s current password.`)) return
@@ -65,9 +70,9 @@ export default function StudentProfilePage() {
             </button>
             <button
               className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)]"
-              onClick={() => navigate('/admin/students')}
+              onClick={() => setSwitchOpen(true)}
             >
-              <ArrowLeft size={15} /> All {labels.studentPlural}
+              <Users2 size={15} /> Switch {labels.student}
             </button>
           </div>
         }
@@ -78,6 +83,16 @@ export default function StudentProfilePage() {
           studentUserId={id}
           onClose={() => setUploadOpen(false)}
           onUploaded={() => { setOpenedFromUpload(true); setReloadKey((k) => k + 1) }}
+        />
+      )}
+      {switchOpen && (
+        <ScholarSwitchPanel
+          currentUserId={id}
+          onClose={() => setSwitchOpen(false)}
+          onSelect={(s) => {
+            setOpenedFromUpload(false)
+            navigate(`/admin/students/${s.user_id}`, { replace: true })
+          }}
         />
       )}
     </div>
