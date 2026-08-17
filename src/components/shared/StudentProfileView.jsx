@@ -1427,9 +1427,20 @@ function TargetSubmitPanel({ target, onDone, addToast }) {
 }
 
 function ProgressCycleCard({ cycle, onChange, addToast }) {
+  const navigate = useNavigate()
   const [busySlot,   setBusySlot]   = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [feedback,   setFeedback]   = useState(null)
   const editable = !cycle.submission_status || ['draft', 'needs_revision'].includes(cycle.submission_status)
+
+  useEffect(() => {
+    if (!cycle.submission_id) { setFeedback(null); return }
+    let alive = true
+    getApprovalsBySubmission(cycle.submission_id)
+      .then((r) => { if (alive) setFeedback(latestFeedbackEvent(r.data || [])) })
+      .catch(() => { if (alive) setFeedback(null) })
+    return () => { alive = false }
+  }, [cycle.submission_id])
 
   const handleFile = async (slot, file) => {
     setBusySlot(slot)
@@ -1488,7 +1499,17 @@ function ProgressCycleCard({ cycle, onChange, addToast }) {
             {s.file ? (
               <div className="mt-2 flex items-center justify-between gap-2">
                 <span className="truncate text-sm text-[color:var(--text)]">{s.file.name}</span>
-                <SubmissionFileLink file={s.file} label="View" />
+                {cycle.submission_id ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/student/submissions/${cycle.submission_id}/preview`)}
+                    className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[color:var(--accent-tint)] px-3 text-xs font-semibold text-[color:var(--accent)]"
+                  >
+                    View
+                  </button>
+                ) : (
+                  <SubmissionFileLink file={s.file} label="View" />
+                )}
               </div>
             ) : (
               <p className="mt-2 text-xs text-[color:var(--muted)]">Not uploaded yet</p>
@@ -1509,6 +1530,16 @@ function ProgressCycleCard({ cycle, onChange, addToast }) {
           </div>
         ))}
       </div>
+
+      {feedback && (
+        <div className="mt-4 rounded-xl bg-[color:var(--surface)] p-3.5">
+          <p className={`text-[10px] font-bold uppercase tracking-wide ${feedback.kind === 'revision' ? 'text-orange-700' : 'text-[color:var(--muted)]'}`}>
+            {feedback.kind === 'revision' ? 'Revision requested' : feedback.kind === 'approved' ? 'Approved' : 'Feedback'}
+            {feedback.stage ? ` · ${feedback.stage.replaceAll('_', ' ')}` : ''}
+          </p>
+          {feedback.text && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-[color:var(--text)]">{feedback.text}</p>}
+        </div>
+      )}
 
       {editable && (
         <button
