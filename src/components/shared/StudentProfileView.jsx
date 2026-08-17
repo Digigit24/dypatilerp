@@ -977,7 +977,6 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             <div className="space-y-3">
               {targets.map((t) => {
                 const state = targetState(t)
-                const pct = t.my_submission_status === 'approved' ? 100 : t.my_submission_id ? 50 : 0
                 const dueLabel = `Semester ${t.semester || 1}`
                 // A scholar can (re)submit while there's nothing yet, or a
                 // reviewer sent it back — never once it's in review/approved.
@@ -1004,13 +1003,6 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                         )}
                       </div>
                     </div>
-                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--border)]">
-                      <div
-                        className={`h-full rounded-full ${state === 'approved' ? 'bg-emerald-500' : state === 'awaiting_review' || state === 'draft' ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--muted)]'}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <p className="mt-1.5 text-right text-xs font-semibold text-[color:var(--secondary)]">{pct}%</p>
 
                     {isOpen && (
                       <TargetSubmitPanel
