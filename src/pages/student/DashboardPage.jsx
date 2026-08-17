@@ -5,7 +5,7 @@ import http from '../../api/http.js'
 import { USE_MOCK } from '../../api/config.js'
 import { getApprovalsBySubmission } from '../../api/services/approvalService.js'
 import { getNotifications, markAllAsRead } from '../../api/services/notificationService.js'
-import { getSubmissionsByStudent } from '../../api/services/submissionService.js'
+import { getSubmissionRemarks, getSubmissionsByStudent } from '../../api/services/submissionService.js'
 import { getStudentById } from '../../api/services/studentService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
@@ -40,11 +40,12 @@ export default function DashboardPage() {
           // submissions (progress reports + milestones carry a chain;
           // assignments have none and simply won't produce an event).
           const recent = submissionsList.slice(0, FEEDBACK_LOOKBACK)
-          const approvalLists = await Promise.all(
-            recent.map((s) => getApprovalsBySubmission(s.id).then((r) => r.data || []).catch(() => []))
-          )
+          const [approvalLists, remarkLists] = await Promise.all([
+            Promise.all(recent.map((s) => getApprovalsBySubmission(s.id).then((r) => r.data || []).catch(() => []))),
+            Promise.all(recent.map((s) => getSubmissionRemarks(s.id).then((r) => r.data || []).catch(() => []))),
+          ])
           const feedbackItems = recent
-            .map((s, i) => { const ev = latestFeedbackEvent(approvalLists[i]); return ev && { submission: s, ...ev } })
+            .map((s, i) => { const ev = latestFeedbackEvent(approvalLists[i], remarkLists[i]); return ev && { submission: s, ...ev } })
             .filter(Boolean)
             .sort((a, b) => new Date(b.at) - new Date(a.at))
             .slice(0, 5)
@@ -143,7 +144,7 @@ export default function DashboardPage() {
                             : <span className="shrink-0 rounded-full bg-[color:var(--accent-tint)] px-2 py-0.5 text-[10px] font-bold text-[color:var(--accent)]">Feedback</span>}
                       </div>
                       <p className="mt-1 text-[11px] font-medium capitalize text-[color:var(--muted)]">
-                        {f.submission.submission_type?.replaceAll('_', ' ')}{f.stage ? ` · ${f.stage.replaceAll('_', ' ')}` : ''} · {timeAgo(f.at)}
+                        {f.submission.submission_type?.replaceAll('_', ' ')}{f.stage ? ` · ${f.stage.replaceAll('_', ' ')}` : ''}{f.author ? ` · ${f.author}` : ''} · {timeAgo(f.at)}
                       </p>
                       {f.text ? (
                         <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-xs leading-5 text-[color:var(--secondary)]">{f.text}</p>

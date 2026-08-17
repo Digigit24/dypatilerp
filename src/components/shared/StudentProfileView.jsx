@@ -27,7 +27,7 @@ import Select from './Select.jsx'
 import StudentOnboardingPanel from './StudentOnboardingPanel.jsx'
 import { getFeesByStudent } from '../../api/services/feeService.js'
 import {
-  createSubmission, getProgressReportsByStudent, getSubmissions,
+  createSubmission, getProgressReportsByStudent, getSubmissionRemarks, getSubmissions,
   submitForReview, uploadSubmissionAttachment,
 } from '../../api/services/submissionService.js'
 import { getMyCycle } from '../../api/services/progressCycleService.js'
@@ -225,12 +225,13 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         const docs = r.data || []
         setReportDocs(docs)
         // Naturally bounded (one report per semester) — safe to fetch approval
-        // history for every row, not just a top-N slice.
-        const lists = await Promise.all(
-          docs.map((d) => getApprovalsBySubmission(d.id).then((res) => res.data || []).catch(() => []))
-        )
+        // and remarks history for every row, not just a top-N slice.
+        const [approvalLists, remarkLists] = await Promise.all([
+          Promise.all(docs.map((d) => getApprovalsBySubmission(d.id).then((res) => res.data || []).catch(() => []))),
+          Promise.all(docs.map((d) => getSubmissionRemarks(d.id).then((res) => res.data || []).catch(() => []))),
+        ])
         const map = {}
-        docs.forEach((d, i) => { const ev = latestFeedbackEvent(lists[i]); if (ev) map[d.id] = ev })
+        docs.forEach((d, i) => { const ev = latestFeedbackEvent(approvalLists[i], remarkLists[i]); if (ev) map[d.id] = ev })
         setReportFeedback(map)
       })
       .catch(() => setReportDocs([]))
@@ -778,8 +779,9 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                       {feedback && (
                         <div className="mt-2 rounded-lg bg-[color:var(--surface)] p-2.5">
                           <p className={`text-[10px] font-bold uppercase tracking-wide ${feedback.kind === 'revision' ? 'text-orange-700' : 'text-[color:var(--muted)]'}`}>
-                            {feedback.kind === 'revision' ? 'Revision requested' : feedback.kind === 'approved' ? 'Approved' : 'Feedback'}
+                            {feedback.kind === 'revision' ? 'Revision requested' : feedback.kind === 'approved' ? 'Approved' : feedback.kind === 'remark' ? 'Remark' : 'Feedback'}
                             {feedback.stage ? ` · ${feedback.stage.replaceAll('_', ' ')}` : ''}
+                            {feedback.author ? ` · ${feedback.author}` : ''}
                           </p>
                           {feedback.text && <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs leading-5 text-[color:var(--text)]">{feedback.text}</p>}
                         </div>
@@ -1426,9 +1428,10 @@ function ProgressCycleCard({ cycle, onChange, addToast }) {
   useEffect(() => {
     if (!cycle.submission_id) { setFeedback(null); return }
     let alive = true
-    getApprovalsBySubmission(cycle.submission_id)
-      .then((r) => { if (alive) setFeedback(latestFeedbackEvent(r.data || [])) })
-      .catch(() => { if (alive) setFeedback(null) })
+    Promise.all([
+      getApprovalsBySubmission(cycle.submission_id).then((r) => r.data || []).catch(() => []),
+      getSubmissionRemarks(cycle.submission_id).then((r) => r.data || []).catch(() => []),
+    ]).then(([approvals, remarks]) => { if (alive) setFeedback(latestFeedbackEvent(approvals, remarks)) })
     return () => { alive = false }
   }, [cycle.submission_id])
 
