@@ -1,7 +1,6 @@
 import { query } from '../../config/database.js';
 import { writeAuditLog } from '../../utils/auditLog.js';
 import { notifyStageOpened, notifySubmissionOutcome } from '../notifications/notify.service.js';
-import { applyTargetDecision } from '../targets/targets.service.js';
 
 export const listPendingForUser = async (userId, roles) => {
   // Dynamic workflow: match by direct reviewer assignment OR by open role slot
@@ -85,14 +84,10 @@ export const takeAction = async (approvalId, action, reviewerId, comments, actor
     setImmediate(() => notifySubmissionOutcome(approval.submission_id, 'needs_revision', { approverName, comments }).catch(() => {}));
   }
 
-  // A target carries a single approval, so this decision IS the target's
-  // outcome. Completion is derived here — never typed in by a coordinator.
-  const { rows: [subRow] } = await query(
-    'SELECT target_id FROM submissions WHERE id=$1', [approval.submission_id]
-  );
-  if (subRow?.target_id) {
-    await applyTargetDecision(subRow.target_id, newStatus === 'approved', reviewerId).catch(() => {});
-  }
+  // A target carries a single approval, so this decision IS the scholar's
+  // outcome for it — but targets are shared batch definitions now (many
+  // scholars submit against the same one), so completion lives entirely on
+  // `submissions.status` (set above), never written back onto the target row.
 
   writeAuditLog({
     userId: reviewerId, action: `APPROVAL_${action.toUpperCase()}`,

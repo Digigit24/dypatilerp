@@ -35,16 +35,16 @@ export const createTarget = async (payload) => {
 }
 
 /**
- * Create ONE set of targets across a whole batch — the action that replaces
- * creating them scholar by scholar.
+ * Create a SET of target definitions for one batch+semester in one call —
+ * one row per target NAME, not one per scholar. Scholars submit against the
+ * shared definition (submissions.target_id), exactly like assignments.
  *
  *   bulkCreateTargets({
  *     batch_id, semester: 1,
- *     targets: [{ name: 'Literature Review', description, due_date }, ...],
+ *     targets: [{ name: 'Literature Review', description }, ...],
  *   })
  *
- * Omit `student_user_ids` to apply to every actively-enrolled scholar.
- * Idempotent: re-running the same set skips scholars who already have it.
+ * Idempotent: re-running the same set skips names that already exist.
  */
 export const bulkCreateTargets = async (payload) => {
   const { data } = await http.post('/targets/bulk', payload)
@@ -75,11 +75,16 @@ export const submitForTarget = async ({ target_id, batch_id, semester, title, co
   return { data: submitRes.data }
 }
 
-/** UI status for one target row. */
+/**
+ * UI status for one target row, from a scholar's own point of view — reads
+ * `my_submission_*` (the shape GET /targets?mine=1 or ?student_user_id=
+ * returns), never `t.status` (vestigial on the target row itself now that
+ * targets are shared batch definitions, not per-scholar rows).
+ */
 export const targetState = (t) => {
-  if (t.status === 'completed') return 'approved'
-  if (t.submission_id && t.submission_status === 'needs_revision') return 'needs_revision'
-  if (t.submission_id && t.submission_status !== 'draft') return 'awaiting_review'
-  if (t.submission_id) return 'draft'
+  if (t.my_submission_status === 'approved') return 'approved'
+  if (t.my_submission_status === 'needs_revision') return 'needs_revision'
+  if (t.my_submission_id && t.my_submission_status !== 'draft') return 'awaiting_review'
+  if (t.my_submission_id) return 'draft'
   return 'not_started'
 }

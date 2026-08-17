@@ -2,7 +2,6 @@ import { query, getClient } from '../../config/database.js';
 import { notifyStageOpened } from '../notifications/notify.service.js';
 import { env } from '../../config/env.js';
 import { readWorkflow, stagesFor, kindOf } from './workflow.js';
-import { markTargetSubmitted } from '../targets/targets.service.js';
 import { checkSlots } from '../progress-reports/cycles.service.js';
 
 export const listSubmissions = async ({ batch_id, assignment_id, student_user_id, status, submission_type, search, allowed_batch_ids, limit, offset }) => {
@@ -348,7 +347,6 @@ export const submitForReview = async (id, ownerId, submittedByUserId = null) => 
 
     // 4. No approval required — submitting IS the terminal state.
     if (!stages.length) {
-      if (sub.target_id) await markTargetSubmitted(sub.target_id).catch(() => {});
       await client.query('COMMIT');
       return sub;
     }
@@ -397,8 +395,6 @@ export const submitForReview = async (id, ownerId, submittedByUserId = null) => 
       );
       if (firstReviewerId === null && st === stages[0]) firstReviewerId = resolvedReviewerId;
     }
-
-    if (sub.target_id) await markTargetSubmitted(sub.target_id).catch(() => {});
 
     await client.query('COMMIT');
 

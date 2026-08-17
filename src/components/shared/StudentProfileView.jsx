@@ -773,8 +773,8 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             <div className="space-y-3">
               {targets.map((t) => {
                 const state = targetState(t)
-                const pct = t.status === 'completed' ? 100 : t.submission_id ? 50 : 0
-                const dueLabel = t.due_date ? `Due ${formatDate(t.due_date)}` : `Semester ${t.semester || 1}`
+                const pct = t.my_submission_status === 'approved' ? 100 : t.my_submission_id ? 50 : 0
+                const dueLabel = `Semester ${t.semester || 1}`
                 return (
                   <div key={t.id} className="card p-5">
                     <div className="safe-row items-start">

@@ -253,12 +253,17 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
                AND s2.submission_type = 'assignment')::int
               AS assignments_count,
             (SELECT json_build_object(
-               'completed', COUNT(*) FILTER (WHERE t2.status = 'completed'),
+               'completed', COUNT(*) FILTER (WHERE ms.status = 'approved'),
                'total', COUNT(*)
              )
              FROM targets t2
-             WHERE t2.student_user_id = be.user_id AND t2.batch_id = be.batch_id
-               AND t2.semester = be.current_semester)
+             LEFT JOIN LATERAL (
+               SELECT status FROM submissions
+               WHERE target_id = t2.id AND student_user_id = be.user_id
+                 AND status <> 'draft' AND merged_into_id IS NULL
+               ORDER BY created_at DESC LIMIT 1
+             ) ms ON TRUE
+             WHERE t2.batch_id = be.batch_id AND t2.semester = be.current_semester)
               AS milestones_count,
             (spd.onboarding_completed_at IS NOT NULL) AS onboarding_completed
      FROM batch_enrollments be
