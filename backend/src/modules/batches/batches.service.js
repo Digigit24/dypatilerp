@@ -1,4 +1,5 @@
 import { query } from '../../config/database.js';
+import { upgradeConfig } from '../submissions/workflow.js';
 
 export const listBatches = async ({ course_id, status, limit, offset }) => {
   const conditions = [];
@@ -64,10 +65,21 @@ export const updateBatch = async (id, payload) => {
   return rows[0] || null;
 };
 
-export const updateApprovalConfig = async (id, stages) => {
+/**
+ * Saves into the v2 per-kind approval_config shape, merging onto whatever's
+ * already there — passing `stages` must never clobber a previously-saved
+ * `target_approver` and vice versa (each is optional; only the ones
+ * provided are updated). See workflow.js for the v1→v2 upgrade rules.
+ */
+export const updateApprovalConfig = async (id, { stages, target_approver } = {}) => {
+  const { rows: [existing] } = await query('SELECT approval_config FROM batches WHERE id=$1', [id]);
+  if (!existing) return null;
+  const cfg = upgradeConfig(existing.approval_config);
+  if (stages !== undefined) cfg.progress_report = { mode: 'chain', stages };
+  if (target_approver !== undefined) cfg.target = { mode: 'single', approver: target_approver };
   const { rows } = await query(
     `UPDATE batches SET approval_config=$1::jsonb, updated_at=NOW() WHERE id=$2 RETURNING id, approval_config`,
-    [JSON.stringify({ stages }), id]
+    [JSON.stringify(cfg), id]
   );
   return rows[0] || null;
 };

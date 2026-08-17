@@ -45,9 +45,17 @@ export const getBatchStats = async (batchId) => {
   return ok(res.data)
 }
 
+/** Saves the progress-report chain. Never touches the batch's target_approver. */
 export const updateApprovalConfig = async (batchId, stages) => {
   if (USE_MOCK) { return ok({ stages }) }
   const { data: res } = await http.put(`/batches/${batchId}/approval-config`, { stages })
+  return ok(res.data)
+}
+
+/** Saves the milestone's single approver. Never touches the progress-report chain. */
+export const updateTargetApprover = async (batchId, approver) => {
+  if (USE_MOCK) { return ok({ approver }) }
+  const { data: res } = await http.put(`/batches/${batchId}/approval-config`, { target_approver: approver })
   return ok(res.data)
 }
 

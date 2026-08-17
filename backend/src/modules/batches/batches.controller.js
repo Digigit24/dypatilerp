@@ -44,12 +44,20 @@ export const stats = asyncHandler(async (req, res) => {
   ok(res, data);
 });
 
+/**
+ * Body: { stages? } — the progress-report chain, and/or { target_approver? }
+ * — the milestone's single approver. Either or both; each is saved without
+ * disturbing the other (see svc.updateApprovalConfig).
+ */
 export const updateApprovalConfig = asyncHandler(async (req, res) => {
-  const { stages } = req.body;
-  if (!Array.isArray(stages)) {
+  const { stages, target_approver } = req.body;
+  if (stages !== undefined && !Array.isArray(stages)) {
     return res.status(400).json({ success: false, message: 'stages must be an array' });
   }
-  const batch = await svc.updateApprovalConfig(req.params.id, stages);
+  if (target_approver !== undefined && (typeof target_approver !== 'object' || target_approver === null)) {
+    return res.status(400).json({ success: false, message: 'target_approver must be an object' });
+  }
+  const batch = await svc.updateApprovalConfig(req.params.id, { stages, target_approver });
   if (!batch) return notFound(res, 'Batch not found');
   ok(res, batch, 'Approval workflow saved');
 });

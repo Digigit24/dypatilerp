@@ -12,11 +12,11 @@
  */
 import {
   ArrowDown, ArrowUp, Bell, CalendarClock, CheckCircle2, ClipboardCheck, Clock, GitBranch, GraduationCap,
-  KeyRound, Layers, Loader2, Mail, MailCheck, Network, Plus, RefreshCw, Save, Shield, Trash2, Users, Wand2, XCircle, Zap,
+  KeyRound, Layers, Loader2, Mail, MailCheck, Network, Plus, RefreshCw, Save, Shield, Target, Trash2, Users, Wand2, XCircle, Zap,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { getCourses, getCourseById, updateCourse } from '../../api/services/courseService.js'
-import { advanceSemester, getBatches, getBatchStudents, updateApprovalConfig } from '../../api/services/batchService.js'
+import { advanceSemester, getBatches, getBatchStudents, updateApprovalConfig, updateTargetApprover } from '../../api/services/batchService.js'
 import { getAssignments } from '../../api/services/rolesService.js'
 import { getStudents } from '../../api/services/studentService.js'
 import { bulkSendCredentials } from '../../api/services/userService.js'
@@ -222,15 +222,25 @@ const STAGE_PRESETS = [
   { name: 'industry_mentor', label: 'Industry Mentor', type: 'student_guide', guide_type: 'industry' },
 ]
 
+const APPROVER_ROLES = [
+  { value: 'coordinator',     label: 'Coordinator' },
+  { value: 'academic_guide',  label: 'Academic Guide' },
+  { value: 'industry_mentor', label: 'Industry Mentor' },
+  { value: 'admin',           label: 'Admin' },
+]
+
 function WorkflowsTab({ course }) {
   const addToast = useUiStore((s) => s.addToast)
   const [batches, setBatches] = useState(null)
   const [edits, setEdits] = useState({})   // batchId -> stages[]
   const [savingId, setSavingId] = useState(null)
+  const [approverEdits, setApproverEdits] = useState({})   // batchId -> role
+  const [approverSavingId, setApproverSavingId] = useState(null)
 
   useEffect(() => {
     setBatches(null)
     setEdits({})
+    setApproverEdits({})
     getBatches({ course_id: course.id }).then((r) => setBatches(r.data || []))
   }, [course.id])
 
@@ -239,6 +249,9 @@ function WorkflowsTab({ course }) {
 
   const stagesOf = (b) => edits[b.id] ?? (b.approval_config?.stages || [])
   const setStages = (b, stages) => setEdits((p) => ({ ...p, [b.id]: stages }))
+  // Milestones default to coordinator — same default the backend falls back
+  // to (workflow.js DEFAULT_TARGET_APPROVER) when a batch hasn't set one.
+  const approverOf = (b) => approverEdits[b.id] ?? (b.approval_config?.target?.approver?.role || 'coordinator')
 
   const save = async (b) => {
     setSavingId(b.id)
@@ -246,11 +259,27 @@ function WorkflowsTab({ course }) {
       const ordered = stagesOf(b).map((s, i) => ({ ...s, order_index: i + 1 }))
       await updateApprovalConfig(b.id, ordered)
       addToast({ type: 'success', title: `Workflow saved for ${b.name}.` })
-      setBatches((xs) => xs.map((x) => x.id === b.id ? { ...x, approval_config: { stages: ordered } } : x))
+      setBatches((xs) => xs.map((x) => x.id === b.id
+        ? { ...x, approval_config: { ...x.approval_config, stages: ordered } } : x))
       setEdits((p) => { const n = { ...p }; delete n[b.id]; return n })
     } catch (err) {
       addToast({ type: 'error', title: 'Save failed', message: err.response?.data?.message })
     } finally { setSavingId(null) }
+  }
+
+  const saveApprover = async (b) => {
+    const role = approverOf(b)
+    setApproverSavingId(b.id)
+    try {
+      const approver = { name: 'target_review', label: 'Target Review', type: 'role', role, order_index: 1 }
+      await updateTargetApprover(b.id, approver)
+      addToast({ type: 'success', title: `Milestone approver set to ${APPROVER_ROLES.find((r) => r.value === role)?.label} for ${b.name}.` })
+      setBatches((xs) => xs.map((x) => x.id === b.id
+        ? { ...x, approval_config: { ...x.approval_config, target: { mode: 'single', approver } } } : x))
+      setApproverEdits((p) => { const n = { ...p }; delete n[b.id]; return n })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Save failed', message: err.response?.data?.message })
+    } finally { setApproverSavingId(null) }
   }
 
   return (
@@ -318,6 +347,33 @@ function WorkflowsTab({ course }) {
                 className="inline-flex items-center gap-1 rounded-xl border border-dashed border-[color:var(--border)] px-2.5 py-1.5 text-[11px] font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]">
                 <Shield size={11} /> Custom role…
               </button>
+            </div>
+
+            {/* Milestone approver — a target has exactly ONE approver, unlike
+                the progress-report chain above. Independent save so setting
+                one never requires touching the other. */}
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[color:var(--card)] text-[color:var(--secondary)]"><Target size={13} /></span>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-[color:var(--text)]">Milestone approver</p>
+                  <p className="text-[10px] text-[color:var(--muted)]">Who signs off a scholar's milestone submission</p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <select
+                  className="input h-8 py-0 text-xs"
+                  value={approverOf(b)}
+                  onChange={(e) => setApproverEdits((p) => ({ ...p, [b.id]: e.target.value }))}
+                >
+                  {APPROVER_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+                {approverEdits[b.id] !== undefined && (
+                  <button className="btn-primary inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px]" disabled={approverSavingId === b.id} onClick={() => saveApprover(b)}>
+                    {approverSavingId === b.id ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )
