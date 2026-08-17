@@ -200,11 +200,15 @@ export default function AdminLayout() {
           <button className="sidebar-toggle desktop-sidebar-trigger" aria-label="Collapse sidebar" onClick={() => setCollapsed((v) => !v)}>
             {collapsed ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
           </button>
-          <CourseSwitcher />
-          <button className="theme-icon-button shrink-0" aria-label="Toggle dark mode" onClick={toggleTheme}>
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-          <NotificationBell />
+          {/* ml-auto fills the space the old topbar search box used to occupy —
+              pushes the course switcher and everything after it to the right edge. */}
+          <div className="ml-auto flex shrink-0 items-center gap-3">
+            <CourseSwitcher />
+            <button className="theme-icon-button shrink-0" aria-label="Toggle dark mode" onClick={toggleTheme}>
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <NotificationBell />
+          </div>
         </div>
         <div className="mb-4">
           <Breadcrumbs />

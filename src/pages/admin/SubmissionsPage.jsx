@@ -205,8 +205,8 @@ export default function SubmissionsPage() {
       </div>
 
       {/* Filters */}
-      <div className="toolbar">
-        <label className="admin-search soft-panel flex h-9 min-w-[220px] flex-1 items-center gap-2 rounded-lg px-3">
+      <div className="toolbar mb-5 !gap-3">
+        <label className="admin-search soft-panel flex h-10 min-w-[220px] flex-1 items-center gap-2 rounded-full px-4">
           <Search size={15} className="text-[color:var(--muted)]" />
           <input
             className="w-full bg-transparent text-sm outline-none placeholder:text-[color:var(--muted)]"
@@ -220,21 +220,21 @@ export default function SubmissionsPage() {
             `width: 100%`, so these size correctly instead of each claiming the
             full row. min/max-w keeps them from going cramped or oversized, and
             .toolbar's flex-wrap lets them drop to their own line on narrow screens. */}
-        <select className="input flex-1 min-w-[140px] max-w-[200px] py-2 text-sm" value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)}>
+        <FilterSelect className="min-w-[150px] max-w-[210px]" value={batchFilter} onChange={setBatchFilter}>
           <option value="">All batches</option>
           {batches.map((b) => <option key={b.id} value={b.id}>{b.code || b.name}</option>)}
-        </select>
+        </FilterSelect>
         {tab !== 'progress_report' && tab !== 'target' && (
-          <select className="input flex-1 min-w-[160px] max-w-[240px] py-2 text-sm" value={assignmentFilter} onChange={(e) => setAssignmentFilter(e.target.value)}>
+          <FilterSelect className="min-w-[170px] max-w-[250px]" value={assignmentFilter} onChange={setAssignmentFilter}>
             <option value="">All assignments</option>
             {assignments.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
-          </select>
+          </FilterSelect>
         )}
-        <select className="input flex-1 min-w-[130px] max-w-[180px] py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+        <FilterSelect className="min-w-[140px] max-w-[190px]" value={statusFilter} onChange={setStatusFilter}>
           {statusOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
+        </FilterSelect>
         {filtersActive && (
-          <button onClick={resetFilters} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[color:var(--surface)] px-3 text-xs font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)]">
+          <button onClick={resetFilters} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-[color:var(--surface)] px-4 text-xs font-semibold text-[color:var(--secondary)] transition hover:bg-[color:var(--border)]">
             <RotateCcw size={12} /> Reset
           </button>
         )}
@@ -316,6 +316,22 @@ export default function SubmissionsPage() {
 }
 
 /** Big top-right scholar picker with inline search — filters the whole page to one scholar's submissions. */
+/** Pill-shaped filter dropdown — native <select> underneath (keyboard/a11y for free) with a rounded-tab look and its own chevron instead of the browser's default arrow. */
+function FilterSelect({ value, onChange, className = '', children }) {
+  return (
+    <div className={`relative flex-1 shrink-0 ${className}`}>
+      <select
+        className="h-10 w-full appearance-none rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] pl-4 pr-9 text-xs font-semibold text-[color:var(--text)] transition hover:border-[color:var(--accent)] hover:bg-[color:var(--card)] focus:border-[color:var(--accent)] focus:outline-none"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {children}
+      </select>
+      <ChevronDown size={14} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[color:var(--muted)]" />
+    </div>
+  )
+}
+
 function ScholarSelect({ scholars, value, onChange }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
