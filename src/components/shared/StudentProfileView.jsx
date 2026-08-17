@@ -9,7 +9,7 @@
  * so they don't disappear from the sidenav.
  */
 import {
-  Award, BookOpen, Camera, ChevronDown, Clock,
+  Award, BookOpen, Camera, Clock,
   DollarSign, ExternalLink, FileText, Globe, GraduationCap,
   Link2, Loader2, Pencil, Plus, Save, Shield, UploadCloud, User, X,
 } from 'lucide-react'
@@ -41,7 +41,6 @@ import { usePermStore } from '../../store/permStore.js'
 import SkeletonCard from './SkeletonCard.jsx'
 import StatusBadge from './StatusBadge.jsx'
 import SubmissionFileLink from './SubmissionFileLink.jsx'
-import SubmissionRemarks from './SubmissionRemarks.jsx'
 
 const RESEARCH_SECTIONS = [
   { key: 'research_papers',     label: 'Research Papers',        icon: FileText   },
@@ -114,7 +113,6 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // Distinct from the targets list above.
   const [reportDocs,      setReportDocs]      = useState([])
   const [reportUploadOpen,setReportUploadOpen]= useState(false)
-  const [openReportId,    setOpenReportId]    = useState(null)
   const [openTargetId,    setOpenTargetId]    = useState(null)  // which milestone's submit panel is expanded
   const [openAssignmentId,setOpenAssignmentId]= useState(null)  // which assignment's submit panel is expanded
   const [assignmentUploadOpen, setAssignmentUploadOpen] = useState(false) // admin on-behalf drawer
@@ -743,52 +741,24 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             <div className="space-y-3">
               {list.map((r) => {
                 const files = Array.isArray(r.file_urls) ? r.file_urls : []
-                const expanded = openReportId === r.id
                 return (
-                  <div key={r.id} className="card overflow-hidden">
-                    <button
-                      type="button"
-                      className="flex w-full items-start justify-between gap-3 p-5 text-left"
-                      onClick={() => setOpenReportId(expanded ? null : r.id)}
-                    >
-                      <div className="min-w-0">
-                        <p className="line-clamp-2 font-semibold text-[color:var(--text)]">{r.title}</p>
-                        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--secondary)]">
-                          <span>Report {r.semester || 1}</span>
-                          <span>{files.length} file{files.length === 1 ? '' : 's'}</span>
-                          {r.remarks_count > 0 && <span>{r.remarks_count} remark{r.remarks_count === 1 ? '' : 's'}</span>}
-                          <span>{formatDate(r.submitted_at || r.created_at)}</span>
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <StatusBadge status={r.status} />
-                        <ChevronDown size={16} className={`text-[color:var(--muted)] transition ${expanded ? 'rotate-180' : ''}`} />
-                      </div>
-                    </button>
-
-                    {expanded && (
-                      <div className="space-y-5 border-t border-[color:var(--border)] p-5">
-                        {files.length === 0 ? (
-                          <p className="rounded-lg bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
-                            No file attached to this report.
-                          </p>
-                        ) : (
-                          <div className="space-y-2">
-                            {files.map((f, i) => (
-                              <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-3 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-semibold text-[color:var(--text)]">{f.name}</p>
-                                  {f.size ? <p className="text-xs text-[color:var(--muted)]">{(f.size / 1024 / 1024).toFixed(2)} MB</p> : null}
-                                </div>
-                                <SubmissionFileLink file={f} />
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <SubmissionRemarks submissionId={r.id} onCountChange={loadReportDocs} />
-                      </div>
-                    )}
-                  </div>
+                  <button
+                    key={r.id}
+                    type="button"
+                    className="flex w-full items-start justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 text-left transition hover:border-[color:var(--accent)] hover:shadow-sm"
+                    onClick={() => openSub(r)}
+                  >
+                    <div className="min-w-0">
+                      <p className="line-clamp-2 font-semibold text-[color:var(--text)]">{r.title}</p>
+                      <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--secondary)]">
+                        <span>Report {r.semester || 1}</span>
+                        <span>{files.length} file{files.length === 1 ? '' : 's'}</span>
+                        {r.remarks_count > 0 && <span>{r.remarks_count} remark{r.remarks_count === 1 ? '' : 's'}</span>}
+                        <span>{formatDate(r.submitted_at || r.created_at)}</span>
+                      </p>
+                    </div>
+                    <StatusBadge status={r.status} />
+                  </button>
                 )
               })}
             </div>
@@ -986,7 +956,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                           <button
                             onClick={() => setOpenTargetId(isOpen ? null : t.id)}
                             className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${isOpen ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--accent-tint)] text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white'}`}>
-                            {state === 'needs_revision' ? 'Resubmit' : 'Submit'}
+                            {state === 'needs_revision' ? 'Resubmit' : 'Add'}
                           </button>
                         )}
                       </div>
@@ -1343,25 +1313,28 @@ function AssignmentSubmitPanel({ assignment, onDone, addToast }) {
 // before submit — unlike the single-file assignment/progress-report forms,
 // a target explicitly allows several supporting files per the spec.
 function TargetSubmitPanel({ target, onDone, addToast }) {
-  const [title,      setTitle]      = useState(target.name || target.module_name || '')
   const [note,       setNote]       = useState('')
   const [files,      setFiles]      = useState([])
   const [submitting, setSubmitting] = useState(false)
+
+  const title = target.name || target.module_name || `Milestone ${target.id}`
 
   const addFiles = (fileList) => setFiles((prev) => [...prev, ...Array.from(fileList)])
   const removeFile = (i) => setFiles((prev) => prev.filter((_, j) => j !== i))
 
   const submit = async () => {
-    if (!title.trim() || files.length === 0) {
-      addToast({ type: 'error', title: 'Add a title and at least one file.' })
+    if (files.length === 0) {
+      addToast({ type: 'error', title: 'Add at least one file.' })
       return
     }
     setSubmitting(true)
     try {
+      // Title is the milestone's own name — set by the admin/coordinator when
+      // they defined it, not something a scholar can rename here.
       const createdRes = await createSubmission({
         batch_id: target.batch_id,
         target_id: target.id,
-        title: title.trim(),
+        title,
         submission_type: 'target',
         semester: target.semester || 1,
         content: note.trim() || undefined,
@@ -1374,7 +1347,7 @@ function TargetSubmitPanel({ target, onDone, addToast }) {
         await uploadSubmissionAttachment(submissionId, file)
       }
       await submitForReview(submissionId)
-      addToast({ type: 'success', title: `Submitted "${title.trim()}" for review.` })
+      addToast({ type: 'success', title: `Added "${title}" for review.` })
       onDone()
     } catch (err) {
       addToast({ type: 'error', title: 'Submission failed', message: err.response?.data?.message || err.message })
@@ -1386,10 +1359,6 @@ function TargetSubmitPanel({ target, onDone, addToast }) {
   return (
     <div className="mt-4 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
       <label className="block">
-        <span className="text-xs font-semibold text-[color:var(--secondary)]">Title</span>
-        <input className="input mt-1 h-9 w-full text-sm" value={title} onChange={(e) => setTitle(e.target.value)} />
-      </label>
-      <label className="mt-3 block">
         <span className="text-xs font-semibold text-[color:var(--secondary)]">Note (optional)</span>
         <textarea className="input mt-1 w-full resize-none text-sm" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Anything the reviewer should know" />
       </label>
@@ -1414,7 +1383,7 @@ function TargetSubmitPanel({ target, onDone, addToast }) {
 
       <button onClick={submit} disabled={submitting} className="btn-primary mt-4 inline-flex items-center gap-2 text-xs disabled:opacity-50">
         {submitting ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />}
-        {submitting ? 'Submitting…' : 'Submit for Review'}
+        {submitting ? 'Adding…' : 'Add'}
       </button>
     </div>
   )

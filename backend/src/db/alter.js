@@ -664,6 +664,19 @@ const run = async () => {
     `);
     console.log('✓  student_profile_details.onboarding_skip column added (or already exists)');
 
+    // 30. Feedback attachments — a reviewer (coordinator/admin/guide/mentor)
+    // can attach a document to their document-style feedback on one approval
+    // stage (approvals.feedback_html, already landed in block 25 but never
+    // had a UI or a way to attach a file). Reuses the generic `videos` table
+    // exactly like profile documents and avatars do — a nullable FK, no new
+    // table needed. Multiple files per approval row are allowed (no unique
+    // index), since a review can reasonably attach more than one document.
+    await client.query(`
+      ALTER TABLE videos
+        ADD COLUMN IF NOT EXISTS approval_id UUID REFERENCES approvals(id)
+    `);
+    console.log('✓  videos.approval_id column added (or already exists)');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

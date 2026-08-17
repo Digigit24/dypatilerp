@@ -138,6 +138,19 @@ export const createSession = asyncHandler(async (req, res) => {
       isReviewer = !!a;
     }
     if (!(isOwner || isSiteAdmin || isReviewer)) return forbidden(res);
+  } else if (video.approval_id) {
+    // Feedback document attached to one approval stage — same visibility as
+    // that stage's submission: the owning scholar, an admin/coordinator, or
+    // an assigned reviewer on that submission.
+    const { rows: [ap] } = await query(
+      `SELECT a.reviewer_user_id, a.reviewer_role, s.student_user_id
+       FROM approvals a JOIN submissions s ON s.id=a.submission_id WHERE a.id=$1`,
+      [video.approval_id]
+    );
+    const isOwner = ap && ap.student_user_id === req.user.id;
+    const isSiteAdmin = roles.includes('admin') || roles.includes('coordinator');
+    const isReviewer = ap && (ap.reviewer_user_id === req.user.id || (ap.reviewer_user_id === null && ap.reviewer_role && roles.includes(ap.reviewer_role)));
+    if (!(isOwner || isSiteAdmin || isReviewer)) return forbidden(res);
   } else if (!video.is_published && !isAdmin) {
     return notFound(res, 'Video not found or not published');
   }

@@ -58,3 +58,19 @@ export const reviewSubmission = async (approvalId, payload) => {
 
 export const suggestTitleReframe = async (approvalId, suggested_title) =>
   reviewSubmission(approvalId, { action: 'request_revision', comments: `Suggested title: ${suggested_title}`, suggested_title })
+
+/** Autosave document-style final feedback on a pending stage — does NOT approve/reject/request-revision. */
+export const submitApprovalFeedback = async (approvalId, feedback_html) => {
+  if (USE_MOCK) return ok({ id: approvalId, feedback_html })
+  const { data: res } = await http.patch(`/approvals/${approvalId}/feedback`, { feedback_html })
+  return ok(res.data)
+}
+
+/** Attach a supporting document to a pending stage's feedback. Multipart, field "file". */
+export const uploadFeedbackAttachment = async (approvalId, file) => {
+  if (USE_MOCK) return ok({ id: `media_${Date.now()}`, title: file.name })
+  const form = new FormData()
+  form.append('file', file)
+  const { data: res } = await http.post(`/approvals/${approvalId}/feedback-attachment`, form)
+  return ok(res.data)
+}

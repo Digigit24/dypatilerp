@@ -6,17 +6,20 @@
  */
 import {
   ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Download,
-  FileQuestion, Loader2, RotateCcw, XCircle,
+  FileQuestion, Loader2, MessageSquarePlus, Paperclip, RotateCcw, XCircle,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
-import { getApprovalsBySubmission, reviewSubmission } from '../../api/services/approvalService.js'
+import {
+  getApprovalsBySubmission, reviewSubmission, submitApprovalFeedback, uploadFeedbackAttachment,
+} from '../../api/services/approvalService.js'
 import { getSubmissionById } from '../../api/services/submissionService.js'
 import { getSubmissionFileUrl } from '../../api/services/videoService.js'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
+import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
 import SubmissionRemarks from '../../components/shared/SubmissionRemarks.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { formatDate } from '../../lib/formatters.js'
@@ -33,6 +36,19 @@ const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp']
 // Fall back to parsing `.name` only for legacy { name, url } descriptors that
 // predate the `type` field.
 const extOf = (file) => (file?.type || (file?.name || '').split('.').pop() || '').toLowerCase()
+
+// Resubmission never creates a new submission row — it deletes only the
+// still-PENDING approval rows and re-inserts a fresh round, while every
+// already-actioned row (approved/rejected/needs_revision, with its comments)
+// stays put. So a submission can carry several rows for the SAME stage
+// across rounds — sort by order_index first, then chronologically (oldest
+// round first) so the chain reads as a proper thread instead of round order
+// depending on whatever the DB happened to return.
+const byChainOrder = (a, b) => {
+  const byStage = (a.order_index ?? a.stage_order ?? 0) - (b.order_index ?? b.stage_order ?? 0)
+  if (byStage !== 0) return byStage
+  return new Date(a.created_at || 0) - new Date(b.created_at || 0)
+}
 
 export default function SubmissionPreviewPage() {
   const { id } = useParams()
@@ -57,6 +73,10 @@ export default function SubmissionPreviewPage() {
   const [reviseComment, setReviseComment] = useState('')
   const [approveOpen, setApproveOpen] = useState(false)
   const [approveComment, setApproveComment] = useState('')
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [feedbackDraft, setFeedbackDraft] = useState('')
+  const [feedbackSaving, setFeedbackSaving] = useState(false)
+  const [feedbackFileBusy, setFeedbackFileBusy] = useState(false)
 
   // Siblings for prev/next — passed via navigation state from whichever list
   // linked here. Opened directly (bookmark/refresh) → no state, no prev/next.
@@ -114,10 +134,8 @@ export default function SubmissionPreviewPage() {
   const isImage = IMAGE_EXT.includes(ext)
   // Progress reports and milestones carry an approval chain; assignments don't.
   const hasChain = approvals.length > 0
-  const currentStage = approvals
-    .slice()
-    .sort((a, b) => (a.order_index ?? a.stage_order ?? 0) - (b.order_index ?? b.stage_order ?? 0))
-    .find((a) => a.status === 'pending' || a.status === 'under_review')
+  const orderedApprovals = approvals.slice().sort(byChainOrder)
+  const currentStage = orderedApprovals.find((a) => a.status === 'pending' || a.status === 'under_review')
 
   const doApprove = async () => {
     if (!currentStage) return
@@ -149,6 +167,40 @@ export default function SubmissionPreviewPage() {
     } catch (err) {
       addToast({ type: 'error', title: 'Could not send revision', message: err.response?.data?.message })
     } finally { setActing(false) }
+  }
+
+  // Document-style FINAL feedback — distinct from a revision request. Saves
+  // onto the current pending stage without approving/rejecting it, so a
+  // reviewer can write it up before deciding, or just leave a closing note
+  // alongside an approval. Different from SubmissionRemarks (a free-form
+  // thread anyone with access can post to) and from the revision `comments`
+  // field (only ever written when a stage is actually sent back).
+  const doSubmitFeedback = async () => {
+    if (!currentStage || !feedbackDraft.trim()) {
+      addToast({ type: 'warning', title: 'Write some feedback first' })
+      return
+    }
+    setFeedbackSaving(true)
+    try {
+      await submitApprovalFeedback(currentStage.id, feedbackDraft.trim())
+      addToast({ type: 'success', title: 'Feedback saved' })
+      setFeedbackOpen(false); setFeedbackDraft('')
+      load()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Could not save feedback', message: err.response?.data?.message })
+    } finally { setFeedbackSaving(false) }
+  }
+
+  const doUploadFeedbackFile = async (file) => {
+    if (!currentStage || !file) return
+    setFeedbackFileBusy(true)
+    try {
+      await uploadFeedbackAttachment(currentStage.id, file)
+      addToast({ type: 'success', title: 'Feedback document uploaded' })
+      load()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Upload failed', message: err.response?.data?.message })
+    } finally { setFeedbackFileBusy(false) }
   }
 
   if (notFound) {
@@ -283,40 +335,85 @@ export default function SubmissionPreviewPage() {
               <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
                 <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">Approval chain</p>
                 <div className="mt-3 space-y-3">
-                  {approvals
-                    .slice()
-                    .sort((a, b) => (a.order_index ?? a.stage_order ?? 0) - (b.order_index ?? b.stage_order ?? 0))
-                    .map((a) => (
-                      <div key={a.id} className={`rounded-lg border p-3 ${a.id === currentStage?.id ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]' : 'border-[color:var(--border)] bg-[color:var(--card)]'}`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold capitalize text-[color:var(--text)]">{a.stage?.replaceAll('_', ' ')}</p>
-                          <StatusBadge status={a.status} />
-                        </div>
-                        {a.comments && <p className="mt-2 text-xs leading-5 text-[color:var(--secondary)]">{a.comments}</p>}
-                        {a.suggested_title && <p className="mt-2 rounded-md bg-[color:var(--surface)] p-2 text-[11px] text-[color:var(--secondary)]"><b>Suggested title:</b> {a.suggested_title}</p>}
+                  {orderedApprovals.map((a) => (
+                    <div key={a.id} className={`rounded-lg border p-3 ${a.id === currentStage?.id ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]' : 'border-[color:var(--border)] bg-[color:var(--card)]'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold capitalize text-[color:var(--text)]">{a.stage?.replaceAll('_', ' ')}</p>
+                        <StatusBadge status={a.status} />
                       </div>
-                    ))}
+                      {/* Revision-request comment — the "revision feedback" thread; each
+                          round that got sent back keeps its own row here, oldest first. */}
+                      {a.status === 'needs_revision' && a.comments && (
+                        <div className="mt-2 rounded-md bg-orange-50 p-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-orange-700">Revision requested</p>
+                          <p className="mt-1 text-xs leading-5 text-orange-900">{a.comments}</p>
+                        </div>
+                      )}
+                      {a.status !== 'needs_revision' && a.comments && (
+                        <p className="mt-2 text-xs leading-5 text-[color:var(--secondary)]">{a.comments}</p>
+                      )}
+                      {a.suggested_title && <p className="mt-2 rounded-md bg-[color:var(--surface)] p-2 text-[11px] text-[color:var(--secondary)]"><b>Suggested title:</b> {a.suggested_title}</p>}
+                      {/* Document-style final feedback — distinct from the revision
+                          comment above; written via "Submit Feedback", not tied to
+                          approve/reject/request_revision. */}
+                      {a.feedback_html && (
+                        <div className="mt-2 rounded-md bg-[color:var(--surface)] p-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-[color:var(--muted)]">Feedback</p>
+                          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-[color:var(--text)]">{a.feedback_html}</p>
+                        </div>
+                      )}
+                      {Array.isArray(a.feedback_files) && a.feedback_files.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {a.feedback_files.map((f) => (
+                            <SubmissionFileLink key={f.id} file={{ media_id: f.id, name: f.title }} label={f.title || 'Document'} />
+                          ))}
+                        </div>
+                      )}
+                      {canReview && a.id === currentStage?.id && (
+                        <label className={`mt-2 flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-[color:var(--accent)] ${feedbackFileBusy ? 'pointer-events-none opacity-50' : ''}`}>
+                          {feedbackFileBusy ? <Loader2 size={12} className="animate-spin" /> : <Paperclip size={12} />}
+                          {feedbackFileBusy ? 'Uploading…' : 'Attach a feedback document'}
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
+                            disabled={feedbackFileBusy}
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) doUploadFeedbackFile(f); e.target.value = '' }}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  ))}
                 </div>
 
                 {canReview && currentStage && (
-                  <div className="mt-4 flex gap-2">
-                    <button onClick={() => setApproveOpen(true)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
-                      <CheckCircle2 size={14} /> Approve
-                    </button>
-                    <button onClick={() => setReviseOpen(true)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-orange-50 px-3 py-2.5 text-xs font-semibold text-orange-700 hover:bg-orange-100">
-                      <RotateCcw size={14} /> Needs Revision
+                  <div className="mt-4 space-y-2">
+                    <div className="flex gap-2">
+                      <button onClick={() => setApproveOpen(true)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+                        <CheckCircle2 size={14} /> Approve
+                      </button>
+                      <button onClick={() => setReviseOpen(true)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-orange-50 px-3 py-2.5 text-xs font-semibold text-orange-700 hover:bg-orange-100">
+                        <RotateCcw size={14} /> Needs Revision
+                      </button>
+                    </div>
+                    <button onClick={() => { setFeedbackDraft(currentStage.feedback_html || ''); setFeedbackOpen(true) }} className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[color:var(--surface)] px-3 py-2.5 text-xs font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)]">
+                      <MessageSquarePlus size={14} /> {currentStage.feedback_html ? 'Edit Feedback' : 'Submit Feedback'}
                     </button>
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
-                <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">
-                  {submission.submission_type === 'assignment' ? 'Feedback (no approval step for assignments)' : 'Feedback'}
-                </p>
-                <SubmissionRemarks submissionId={submission.id} />
-              </div>
-            )}
+            ) : null}
+
+            {/* Free-form remarks thread — independent of the approval chain
+                (coordinators/guides/mentors/admins can leave a note any time
+                without approving or rejecting), so it's shown regardless of
+                whether this submission kind has a chain at all. */}
+            <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+              <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">
+                {hasChain ? 'Remarks' : submission.submission_type === 'assignment' ? 'Feedback (no approval step for assignments)' : 'Feedback'}
+              </p>
+              <SubmissionRemarks submissionId={submission.id} onCountChange={load} />
+            </div>
           </div>
         </div>
       </div>
@@ -364,6 +461,33 @@ export default function SubmissionPreviewPage() {
             <div className="safe-actions mt-5 justify-end">
               <button className="h-11 rounded-md bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setReviseOpen(false)}>Cancel</button>
               <button className="btn-primary disabled:opacity-50" onClick={doRevise} disabled={acting}>{acting ? 'Sending…' : 'Submit Revision'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Submit Feedback modal — document-style final feedback, separate
+          from the revision-request flow above. Doesn't approve/reject; just
+          saves onto the current stage (PATCH /approvals/:id/feedback). ── */}
+      {feedbackOpen && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/45 p-4 backdrop-blur-sm" onClick={() => setFeedbackOpen(false)}>
+          <div className="card w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="safe-row items-start">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Feedback</p>
+                <h2 className="mt-2 line-clamp-2 text-xl font-semibold text-[color:var(--text)]">{submission.title}</h2>
+              </div>
+              <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setFeedbackOpen(false)}><XCircle size={18} /></button>
+            </div>
+            <label className="mt-5 block">
+              <span className="text-sm font-semibold text-[color:var(--text)]">Feedback for this report</span>
+              <textarea className="textarea mt-2 h-40 w-full" value={feedbackDraft} onChange={(e) => setFeedbackDraft(e.target.value)} placeholder="Write your review of this progress report. This is separate from a revision request — it doesn't change the report's status." />
+            </label>
+            <div className="safe-actions mt-5 justify-end">
+              <button className="h-11 rounded-md bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setFeedbackOpen(false)}>Cancel</button>
+              <button className="btn-primary inline-flex items-center gap-2 disabled:opacity-50" onClick={doSubmitFeedback} disabled={feedbackSaving}>
+                {feedbackSaving ? <Loader2 size={16} className="animate-spin" /> : <MessageSquarePlus size={16} />} {feedbackSaving ? 'Saving…' : 'Save Feedback'}
+              </button>
             </div>
           </div>
         </div>

@@ -98,6 +98,16 @@ export const takeAction = async (approvalId, action, reviewerId, comments, actor
   return approval;
 };
 
+/** Record one uploaded feedback document against an approval row. Multiple allowed — supporting documents, not a single slot. */
+export const addFeedbackAttachment = async ({ approval_id, title, object_key, file_size, mime_type }, uploadedBy) => {
+  const { rows: [row] } = await query(
+    `INSERT INTO videos (title, object_key, file_size, mime_type, media_type, uploaded_by, is_published, visibility, upload_status, approval_id)
+     VALUES ($1,$2,$3,$4,'document',$5,false,'private','ready',$6) RETURNING *`,
+    [title, object_key, file_size || 0, mime_type || null, uploadedBy, approval_id]
+  );
+  return row;
+};
+
 export const listApprovals = async ({ submission_id, stage, status, course_id, batch_id, allowed_batch_ids, limit, offset }) => {
   const params = [];
   const conditions = [];
@@ -116,7 +126,12 @@ export const listApprovals = async ({ submission_id, stage, status, course_id, b
     `SELECT a.*, s.title, s.student_user_id, s.batch_id,
             stu.first_name AS student_first_name, stu.last_name AS student_last_name, stu.email AS student_email,
             b.name AS batch_name, c.name AS course_name,
-            rev.first_name AS reviewer_first_name, rev.last_name AS reviewer_last_name
+            rev.first_name AS reviewer_first_name, rev.last_name AS reviewer_last_name,
+            (SELECT json_agg(json_build_object(
+                      'id', v.id, 'title', v.title, 'mime_type', v.mime_type,
+                      'file_size', v.file_size, 'created_at', v.created_at
+                    ) ORDER BY v.created_at)
+             FROM videos v WHERE v.approval_id = a.id) AS feedback_files
      FROM approvals a
      JOIN submissions s ON s.id=a.submission_id
      JOIN batches b ON b.id=s.batch_id
