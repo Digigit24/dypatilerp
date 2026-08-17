@@ -5,10 +5,13 @@ import {
 import * as XLSX from 'xlsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createApplicant, exportApplicants, getApplicants, getApplicantStats, remindPayment, shortlistApplicant, updateApplicantDetails, updateApplicantStatus } from '../../api/services/applicantService.js'
+import {
+  createApplicant, convertToStudent as convertApplicantToStudent, exportApplicants, getApplicants, getApplicantStats,
+  getConversionSettings, remindPayment, shortlistApplicant, updateApplicantDetails, updateApplicantStatus, updateConversionSettings,
+} from '../../api/services/applicantService.js'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
 import { buildApplicantImportConfig } from '../../components/admin/applicantImportConfig.js'
-import ApplicantsKanban from '../../components/admin/ApplicantsKanban.jsx'
+import ApplicantsKanban, { ConvertModal } from '../../components/admin/ApplicantsKanban.jsx'
 import RejectModal from '../../components/admin/RejectModal.jsx'
 import { getBatches } from '../../api/services/batchService.js'
 import { getCourses } from '../../api/services/courseService.js'
@@ -20,6 +23,7 @@ import { formatDate } from '../../lib/formatters.js'
 import { rejectedFromLabel, REJECTED_FROM_ORDER } from '../../lib/rejectedStage.js'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { useLabels } from '../../store/labelStore.js'
 
 const statusTabs = ['all', 'submitted', 'shortlisted_test', 'test_pending', 'test_completed', 'shortlisted', 'payment_received', 'enrolled', 'rejected']
 
@@ -285,8 +289,30 @@ export default function ApplicantsPage() {
   const [showImport, setShowImport] = useState(false)
   const [exporting,  setExporting]  = useState(false)
   const [view,       setView]       = useState('kanban')   // 'kanban' | 'list'
+  const [sendCredsOnConvert, setSendCredsOnConvert] = useState(false) // global toggle — off by default
+  const [savingCredsToggle, setSavingCredsToggle] = useState(false)
+  const [convertTarget, setConvertTarget] = useState(null) // applicant awaiting the (real) convert modal, from the drawer
   const addToast = useUiStore((s) => s.addToast)
+  const labels = useLabels()
   useScrollLock(Boolean(selected || addOpen || showImport))
+
+  useEffect(() => {
+    getConversionSettings().then((r) => setSendCredsOnConvert(!!r.data?.send_credentials_email)).catch(() => {})
+  }, [])
+
+  const toggleSendCreds = async () => {
+    const next = !sendCredsOnConvert
+    setSendCredsOnConvert(next) // optimistic
+    setSavingCredsToggle(true)
+    try {
+      await updateConversionSettings(next)
+    } catch (err) {
+      setSendCredsOnConvert(!next) // rollback
+      addToast({ type: 'error', title: 'Could not save setting', message: err?.response?.data?.message || err.message })
+    } finally {
+      setSavingCredsToggle(false)
+    }
+  }
 
   // Refresh the backend counts (course+batch scoped) — source of truth for cards & columns.
   const refreshStats = () => { getApplicantStats().then((r) => setStatCounts(r.data)).catch(() => {}) }
@@ -553,10 +579,7 @@ export default function ApplicantsPage() {
     }
   }
 
-  const convertToStudent = (item) => {
-    addToast({ type: 'success', title: `${item.personal.full_name} converted to student. Credentials sent.` })
-    setSelected(null)
-  }
+  const openConvert = (item) => setConvertTarget(item)
 
   const openAdd = () => { setForm(makeBlankForm(currentCourse?.id || '')); setAddOpen(true) }
 
@@ -737,6 +760,22 @@ export default function ApplicantsPage() {
               Applied → Shortlist → Send Test → Submitted → Final Shortlist → Enrolled
             </p>
           )}
+          <label
+            className="flex shrink-0 items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--card)] px-3 py-1.5"
+            title="When on, converting an applicant to a scholar immediately emails them fresh login credentials"
+          >
+            <span className="text-xs font-semibold text-[color:var(--secondary)]">Email login credentials on convert</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={sendCredsOnConvert}
+              disabled={savingCredsToggle}
+              onClick={toggleSendCreds}
+              className={`relative h-5 w-9 shrink-0 rounded-full transition disabled:opacity-50 ${sendCredsOnConvert ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}
+            >
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${sendCredsOnConvert ? 'left-4' : 'left-0.5'}`} />
+            </button>
+          </label>
         </div>
       </div>
 
@@ -750,6 +789,7 @@ export default function ApplicantsPage() {
           onSelect={(a) => setSelected(a)}
           onChanged={silentRefresh}
           onOptimisticUpdate={optimisticUpdate}
+          sendCredsOnConvert={sendCredsOnConvert}
         />
       )}
 
@@ -1115,7 +1155,7 @@ export default function ApplicantsPage() {
                 <DrawerActions
                   item={selected}
                   onAct={act}
-                  onConvert={convertToStudent}
+                  onConvert={openConvert}
                   onRemindPay={remindPay}
                   busy={acting}
                 />
@@ -1133,6 +1173,30 @@ export default function ApplicantsPage() {
         onClose={() => { if (!rejecting) setRejectTarget(null) }}
         onConfirm={confirmReject}
       />
+
+      {/* ── Convert-to-student confirmation (opened from the profile drawer) ── */}
+      {convertTarget && (
+        <ConvertModal
+          applicant={convertTarget}
+          batches={batches}
+          labels={labels}
+          sendCredentials={sendCredsOnConvert}
+          onClose={() => setConvertTarget(null)}
+          onConfirm={async (batchId) => {
+            const r = await convertApplicantToStudent(convertTarget.id, batchId, { send_credentials: sendCredsOnConvert })
+            setItems((xs) => xs?.map((x) => (x.id === convertTarget.id ? { ...x, status: 'enrolled' } : x)) ?? xs)
+            setSelected((s) => (s && s.id === convertTarget.id ? { ...s, status: 'enrolled' } : s))
+            refreshStats()
+            addToast({
+              type: 'success',
+              title: r.data?.credentials_emailed
+                ? `${convertTarget.personal.full_name} converted — login credentials emailed.`
+                : `${convertTarget.personal.full_name} converted to ${labels.student.toLowerCase()}.`,
+            })
+            setConvertTarget(null)
+          }}
+        />
+      )}
 
       {/* ── Add Applicant drawer ── */}
       {addOpen && (

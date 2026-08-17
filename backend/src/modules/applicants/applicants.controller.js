@@ -83,7 +83,9 @@ export const updateStatus = asyncHandler(async (req, res) => {
 });
 
 export const convertToStudent = asyncHandler(async (req, res) => {
-  const sendCreds = req.body.send_credentials !== false; // default ON
+  // Off by default — the caller (Applicants pipeline UI) must explicitly opt
+  // in, per the global "Email login credentials on convert" toggle.
+  const sendCreds = req.body.send_credentials === true;
   const result = await svc.convertToStudent(
     req.params.id,
     { ...req.body, rotate_password: sendCreds },

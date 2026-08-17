@@ -138,3 +138,16 @@ export const bulkConvert = async (applicant_ids, batch_id) => {
   const { data: res } = await http.post('/applicants/bulk-convert', { applicant_ids, batch_id })
   return ok(res.data)
 }
+
+/** Global "email login credentials on convert" toggle — off by default. */
+export const getConversionSettings = async () => {
+  if (USE_MOCK) return ok({ send_credentials_email: false })
+  const { data: res } = await http.get('/applicants/settings')
+  return ok(res.data)
+}
+
+export const updateConversionSettings = async (send_credentials_email) => {
+  if (USE_MOCK) return ok({ send_credentials_email })
+  const { data: res } = await http.put('/applicants/settings', { send_credentials_email })
+  return ok(res.data)
+}

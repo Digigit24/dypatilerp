@@ -51,7 +51,7 @@ const timeAgo = (d) => {
   return `${Math.floor(s / 86400)}d ago`
 }
 
-export default function ApplicantsKanban({ items, courseId, batches, statusCounts, onSelect, onChanged, onOptimisticUpdate }) {
+export default function ApplicantsKanban({ items, courseId, batches, statusCounts, onSelect, onChanged, onOptimisticUpdate, sendCredsOnConvert = false }) {
   const addToast = useUiStore((s) => s.addToast)
   const labels = useLabels()
   const [busyId, setBusyId] = useState(null)
@@ -415,9 +415,10 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
           applicant={modal.applicant}
           batches={batches}
           labels={labels}
+          sendCredentials={sendCredsOnConvert}
           onClose={() => setModal(null)}
           onConfirm={async (batchId) => {
-            const r = await convertToStudent(modal.applicant.id, batchId, { send_credentials: true })
+            const r = await convertToStudent(modal.applicant.id, batchId, { send_credentials: sendCredsOnConvert })
             onOptimisticUpdate(modal.applicant.id, { status: 'enrolled' })
             addToast({
               type: 'success',
@@ -690,7 +691,7 @@ function TestPickerModal({ title, cta, icon: Icon, note, applicant, courseId, on
 }
 
 // ─── Convert modal ──────────────────────────────────────────────────────────────
-function ConvertModal({ applicant, batches, labels, onClose, onConfirm }) {
+export function ConvertModal({ applicant, batches, labels, sendCredentials = false, onClose, onConfirm }) {
   // Default to the batch the applicant applied for, falling back to the first batch
   const appliedBatch = batches.find((b) => b.id === applicant.batch_id)
   const [batchId, setBatchId] = useState(appliedBatch?.id || batches[0]?.id || '')
@@ -712,9 +713,15 @@ function ConvertModal({ applicant, batches, labels, onClose, onConfirm }) {
         <p className="mt-0.5 text-xs text-[color:var(--secondary)]">
           {applicant.personal?.full_name} will be enrolled and get a {labels.student.toLowerCase()} account.
         </p>
-        <p className="mt-3 rounded-xl border border-[color:var(--accent)] bg-[color:var(--accent-tint)] px-3 py-2.5 text-xs font-semibold text-[color:var(--accent)]">
-          📧 An email with fresh login credentials (username + password) will be sent to the {labels.student.toLowerCase()} immediately after conversion.
-        </p>
+        {sendCredentials ? (
+          <p className="mt-3 rounded-xl border border-[color:var(--accent)] bg-[color:var(--accent-tint)] px-3 py-2.5 text-xs font-semibold text-[color:var(--accent)]">
+            📧 An email with fresh login credentials (username + password) will be sent to the {labels.student.toLowerCase()} immediately after conversion.
+          </p>
+        ) : (
+          <p className="mt-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-xs font-semibold text-[color:var(--secondary)]">
+            🔕 Login credentials will <strong>not</strong> be emailed — "Email login credentials on convert" is off. Turn it on above the pipeline board, or send credentials manually later from Team &amp; Users.
+          </p>
+        )}
         <label className="mt-4 block">
           <span className="text-sm font-semibold text-[color:var(--text)]">Enroll into batch</span>
           <select className="input mt-1.5 w-full" value={batchId} onChange={(e) => setBatchId(e.target.value)}>

@@ -360,6 +360,33 @@ router.post('/:id/remind-payment', authenticate, requirePermission('applicants',
   ok(res, { applicant_id: applicantId, email: applicant.email, email_sent: true, last_payment_reminded_at: remindedAt }, 'Payment reminder sent');
 }));
 
+/**
+ * @swagger
+ * /applicants/settings:
+ *   get:
+ *     tags: [Applicants]
+ *     summary: Get the applicant-conversion settings (currently just whether Convert emails login credentials)
+ *   put:
+ *     tags: [Applicants]
+ *     summary: Update the applicant-conversion settings
+ */
+router.get('/settings', authenticate, requirePermission('applicants', 'read'), asyncHandler(async (req, res) => {
+  const { rows: [row] } = await query(`SELECT value FROM app_settings WHERE key='applicant_conversion'`);
+  // Off by default — an admin must explicitly opt in to auto-emailing credentials.
+  ok(res, { send_credentials_email: row?.value?.send_credentials_email === true });
+}));
+
+router.put('/settings', authenticate, requirePermission('applicants', 'update'), asyncHandler(async (req, res) => {
+  const send_credentials_email = req.body?.send_credentials_email === true;
+  await query(
+    `INSERT INTO app_settings (key, value, updated_at, updated_by)
+     VALUES ('applicant_conversion', $1, NOW(), $2)
+     ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW(), updated_by=EXCLUDED.updated_by`,
+    [JSON.stringify({ send_credentials_email }), req.user.id]
+  );
+  ok(res, { send_credentials_email }, 'Setting saved');
+}));
+
 router.get('/:id', authenticate, requirePermission('applicants', 'read'), ctrl.getOne);
 
 /**
