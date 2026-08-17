@@ -1,12 +1,12 @@
 /**
- * StudentProfileView — shared admin + student profile component
+ * StudentProfileView — shared admin + student profile component.
  *
- * Fixes applied:
- *  1. User data is derived from the embedded student response — no extra getUserById()
- *     call that previously broke on `r.data.user_id` being undefined.
- *  2. Proper notFound state instead of an infinite skeleton on 404.
- *  3. Full tab set: Profile | Submissions | Progress | Research Profile
- *  4. Guides + Fees Summary sections visible to admin.
+ * Outer tabs: My Profile (with inner subtabs Profile / Fees [student only] /
+ * Research Profile) and Submissions (with inner subtabs Progress Reports /
+ * Assignments / Milestones). Milestones are wired to /api/targets (the real
+ * module), not the legacy /api/progress-reports compatibility view. Research
+ * Profile and Fees remain reachable for students via the My Profile outer tab
+ * so they don't disappear from the sidenav.
  */
 import {
   Award, BookOpen, Camera, ChevronDown, Clock,
@@ -21,8 +21,9 @@ import {
   updateProfile, updateResearchItem,
 } from '../../api/services/researchProfileService.js'
 import { getStudentById, updateStudent } from '../../api/services/studentService.js'
-import { getProgressReportsByStudent, getSubmissionsByStudent } from '../../api/services/submissionService.js'
-import { getProgressReportByStudent } from '../../api/services/progressReportService.js'
+import { getFeesByStudent } from '../../api/services/feeService.js'
+import { getProgressReportsByStudent, getSubmissions, getSubmissionsByStudent } from '../../api/services/submissionService.js'
+import { getProgressSummary, getTargets, targetState } from '../../api/services/targetService.js'
 import UploadProgressReportDrawer from '../admin/UploadProgressReportDrawer.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
@@ -82,21 +83,43 @@ const BLANK_DRAWER = { open: false, section: null, item: null, draft: {}, saving
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function StudentProfileView({ studentId, isAdminView = false, defaultTab = 'profile' }) {
+export default function StudentProfileView({ studentId, isAdminView = false, defaultTab = 'profile', defaultSubTab }) {
+  // Translate legacy outer-tab values onto the new (outer, inner) shape so existing
+  // call sites (e.g. ResearchProfilePage passing defaultTab='research') keep working.
+  const _normalizeTab = (() => {
+    switch (defaultTab) {
+      case 'reports':     return { outer: 'submissions', inner: 'reports' }
+      case 'progress':    return { outer: 'submissions', inner: 'milestones' }
+      case 'research':    return { outer: 'profile',     inner: 'research' }
+      case 'fees':        return { outer: 'profile',     inner: 'fees' }
+      case 'submissions': return { outer: 'submissions', inner: defaultSubTab || 'reports' }
+      case 'profile':
+      default:            return { outer: 'profile',     inner: defaultSubTab || 'profile' }
+    }
+  })()
   const [student,         setStudent]         = useState(null)
   const [user,            setUser]            = useState(null)
   const [research,        setResearch]        = useState(null)
   const [submissions,     setSubmissions]     = useState([])
-  const [progressReports, setProgressReports] = useState([])
+  // Milestones now come from the targets module (/api/targets). Each target row may
+  // already have its latest submission joined on it (s.id, s.status, s.submitted_at).
+  const [targets,         setTargets]         = useState([])
+  const [progressSummary, setProgressSummary] = useState(null)
+  // Assignment-type submissions (filtered from the generic submissions list).
+  const [assignments,     setAssignments]     = useState([])
+  // Fees list, lazily loaded only when the student opens the Fees subtab.
+  const [fees,            setFees]            = useState(null)
   // Uploaded progress-report DOCUMENTS (submissions of type 'progress_report').
-  // Distinct from `progressReports` above, which is the milestone tracker.
+  // Distinct from the targets list above.
   const [reportDocs,      setReportDocs]      = useState([])
   const [reportUploadOpen,setReportUploadOpen]= useState(false)
   const [openReportId,    setOpenReportId]    = useState(null)
   const [selectedSub,     setSelectedSub]     = useState(null)
   const [subApprovals,    setSubApprovals]    = useState([])
   const [notFound,        setNotFound]        = useState(false)
-  const [tab,             setTab]             = useState(defaultTab)
+  const [tab,             setTab]             = useState(_normalizeTab.outer)
+  // Inner subtab — only meaningful when outer tab is 'profile' or 'submissions'.
+  const [subTab,          setSubTab]          = useState(_normalizeTab.inner)
   const [bioEditing,      setBioEditing]      = useState(false)
   const [bioDraft,        setBioDraft]        = useState({})
   const [academicEditing, setAcademicEditing] = useState(false)
@@ -146,12 +169,34 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
       .then((r) => setSubmissions(r.data || []))
       .catch(() => setSubmissions([]))
 
-    getProgressReportByStudent(studentId)
-      .then((r) => setProgressReports(r.data || []))
-      .catch(() => setProgressReports([]))
+    // Assignment-type submissions — the new "Assignments" subtab source.
+    getSubmissions({ student_user_id: studentId, submission_type: 'assignment' })
+      .then((r) => setAssignments(r.data || []))
+      .catch(() => setAssignments([]))
+
+    // Milestones now read from /api/targets (real module), not the legacy compatibility
+    // view that used to live at /api/progress-reports.
+    getTargets({ student_user_id: studentId })
+      .then((r) => setTargets(r.data || []))
+      .catch(() => setTargets([]))
+    getProgressSummary(studentId)
+      .then((r) => setProgressSummary(r.data || null))
+      .catch(() => setProgressSummary(null))
 
     loadReportDocs()
   }, [studentId])
+
+  // Lazy-load fees only when the student opens the Fees subtab inside My Profile. The
+  // dedicated /student/fees route still works for deep links and direct visits.
+  useEffect(() => {
+    if (tab !== 'profile' || subTab !== 'fees' || !studentId) return
+    if (fees !== null) return
+    let cancelled = false
+    getFeesByStudent(studentId)
+      .then((r) => { if (!cancelled) setFees(r.data || []) })
+      .catch(() => { if (!cancelled) setFees([]) })
+    return () => { cancelled = true }
+  }, [tab, subTab, studentId, fees])
 
   // Extracted so the upload drawer can refresh the list without a full reload.
   function loadReportDocs() {
@@ -177,8 +222,12 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const name     = `${user.first_name} ${user.last_name}`
   const initials = name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
 
-  // Normalise progress values — backend returns avg_pct, mock returns completion_percentage
+  // Normalise progress values. Prefer the targets-derived roll-up (authoritative) over
+  // anything embedded in the student response, which may still be the legacy average.
+  // /api/targets/progress-summary returns { by_semester: [...], overall: { percent } }.
   const completionPct = Math.round(
+    progressSummary?.overall?.percent ??
+    progressSummary?.percent ??
     student.progress_summary?.avg_pct ??
     student.progress_summary?.completion_percentage ?? 0
   )
@@ -259,19 +308,23 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const currentFields       = SECTION_FIELDS[drawer.section] || []
 
   // ── Submission stats ────────────────────────────────────────────────────────
+  // The Assignments subtab is the new home for freeform scholar submissions (was the
+  // old "Submissions" generic tab). The stats below describe THAT view.
   const subStats = {
-    total:    submissions.length,
-    approved: submissions.filter((s) => s.status === 'approved').length,
-    pending:  submissions.filter((s) => ['pending', 'under_review'].includes(s.status)).length,
-    rejected: submissions.filter((s) => s.status === 'rejected').length,
+    total:    assignments.length,
+    approved: assignments.filter((s) => s.status === 'approved').length,
+    pending:  assignments.filter((s) => ['pending', 'under_review'].includes(s.status)).length,
+    rejected: assignments.filter((s) => s.status === 'rejected').length,
   }
 
+  // Outer tabs. The old Profile | Progress Reports | Submissions | Milestones | Research
+  // Profile row is collapsed into two outer tabs: My Profile (with inner subtabs
+  // Profile / Fees [student only] / Research Profile) and Submissions (with inner
+  // subtabs Progress Reports / Assignments / Milestones).
+  const subsCount = reportDocs.length + assignments.length + targets.length
   const TABS = [
-    { key: 'profile',    label: 'Profile' },
-    { key: 'reports',    label: `Progress Reports${reportDocs.length ? ` (${reportDocs.length})` : ''}` },
-    { key: 'submissions',label: `Submissions${submissions.length ? ` (${submissions.length})` : ''}` },
-    { key: 'progress',   label: `Milestones${progressReports.length ? ` (${progressReports.length})` : ''}` },
-    { key: 'research',   label: 'Research Profile' },
+    { key: 'profile',     label: 'My Profile' },
+    { key: 'submissions', label: `Submissions${subsCount ? ` (${subsCount})` : ''}` },
   ]
 
   return (
@@ -339,7 +392,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
 
           {/* Quick stats row */}
           <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <QuickStat label="Overall Progress" value={`${completionPct}%`} sub={`${progressReports.length} reports`} />
+            <QuickStat label="Overall Progress" value={`${completionPct}%`} sub={`${targets.length} milestones`} />
             <QuickStat label="Submissions" value={subStats.total} sub={`${subStats.approved} approved`} />
             <QuickStat label="Guides Assigned" value={(student.guides || []).filter((g) => g.is_active !== false).length} sub="active guides" />
             {isAdminView && <QuickStat label="Fees Cleared" value={`${feesPct}%`} sub={totalDue > 0 ? `₹${(totalPaid/100).toLocaleString('en-IN')} / ₹${(totalDue/100).toLocaleString('en-IN')}` : 'No fee record'} />}
@@ -347,18 +400,49 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         </div>
       </div>
 
-      {/* ── Tabs ── */}
-      <div className="mb-5 flex flex-wrap gap-2">
+      {/* ── Outer tabs ── */}
+      <div className="mb-3 flex flex-wrap gap-2">
         {TABS.map(({ key, label }) => (
-          <button key={key} onClick={() => setTab(key)}
+          <button key={key} onClick={() => { setTab(key); setSubTab(key === 'profile' ? 'profile' : 'reports') }}
             className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition ${tab === key ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}>
             {label}
           </button>
         ))}
       </div>
 
-      {/* ══ Profile tab ══════════════════════════════════════════════════════ */}
+      {/* ── Inner subtabs (rendered only when an outer tab is active) ── */}
       {tab === 'profile' && (
+        <div className="mb-5 flex flex-wrap gap-2 border-b border-[color:var(--border)] pb-3">
+          {[
+            { key: 'profile',  label: 'Profile' },
+            ...(!isAdminView ? [{ key: 'fees', label: 'Fees' }] : []),
+            { key: 'research', label: 'Research Profile' },
+          ].map(({ key, label }) => (
+            <button key={key} onClick={() => setSubTab(key)}
+              className={`rounded-md px-4 py-1.5 text-xs font-semibold transition ${subTab === key ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'submissions' && (
+        <div className="mb-5 flex flex-wrap gap-2 border-b border-[color:var(--border)] pb-3">
+          {[
+            { key: 'reports',     label: `Progress Reports${reportDocs.length  ? ` (${reportDocs.length})`  : ''}` },
+            { key: 'assignments', label: `Assignments${assignments.length    ? ` (${assignments.length})`    : ''}` },
+            { key: 'milestones',  label: `Milestones${targets.length         ? ` (${targets.length})`         : ''}` },
+          ].map(({ key, label }) => (
+            <button key={key} onClick={() => setSubTab(key)}
+              className={`rounded-md px-4 py-1.5 text-xs font-semibold transition ${subTab === key ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+            {/* ══ My Profile > Profile subtab ════════════════════════════════════════ */}
+      {tab === 'profile' && subTab === 'profile' && (
         <div className="space-y-5">
           {/* Bio */}
           <div className="card p-6">
@@ -507,8 +591,8 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         </div>
       )}
 
-      {/* ══ Progress Reports tab ═════════════════════════════════════════════ */}
-      {tab === 'reports' && (
+            {/* ══ Submissions > Progress Reports subtab ═════════════════════════════════ */}
+      {tab === 'submissions' && subTab === 'reports' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -594,8 +678,8 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         </div>
       )}
 
-      {/* ══ Submissions tab ══════════════════════════════════════════════════ */}
-      {tab === 'submissions' && (
+            {/* ══ Submissions > Assignments subtab ════════════════════════════════════ */}
+      {tab === 'submissions' && subTab === 'assignments' && (
         <div className="space-y-5">
           {/* Stats */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -640,8 +724,8 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         </div>
       )}
 
-      {/* ══ Progress tab ════════════════════════════════════════════════════ */}
-      {tab === 'progress' && (
+            {/* ══ Submissions > Milestones subtab (powered by /api/targets) ════════════════ */}
+      {tab === 'submissions' && subTab === 'milestones' && (
         <div className="space-y-5">
           {/* Overall bar */}
           <div className="card p-6">
@@ -657,30 +741,55 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             </div>
           </div>
 
-          {progressReports.length === 0 ? (
+          {/* Per-semester roll-up (derived from /api/targets/progress-summary). */}
+          {progressSummary?.by_semester?.length > 0 && (
+            <div className="card p-5">
+              <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">By semester</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {progressSummary.by_semester.map((s) => (
+                  <div key={s.semester} className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">Semester {s.semester}</p>
+                    <p className="mt-1 text-xl font-bold text-[color:var(--text)]">{s.percent}<span className="text-sm font-semibold text-[color:var(--secondary)]">%</span></p>
+                    <p className="mt-0.5 text-xs text-[color:var(--secondary)]">
+                      {s.approved}/{s.total} approved{s.awaiting_review ? ' · ' + s.awaiting_review + ' awaiting review' : ''}
+                    </p>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[color:var(--border)]">
+                      <div className="h-full rounded-full bg-[color:var(--accent)]" style={{ width: `${s.percent}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {targets.length === 0 ? (
             <div className="card p-10 text-center">
               <Clock className="mx-auto text-[color:var(--muted)]" size={32} />
-              <p className="mt-3 font-semibold text-[color:var(--text)]">No progress reports yet</p>
-              <p className="mt-1 text-sm text-[color:var(--secondary)]">Progress reports will appear here as the student completes each period.</p>
+              <p className="mt-3 font-semibold text-[color:var(--text)]">No milestones yet</p>
+              <p className="mt-1 text-sm text-[color:var(--secondary)]">
+                Milestones are defined per batch and semester. They will appear here once your coordinator assigns them.
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
-              {progressReports.map((r) => {
-                const pct = Math.round(r.completion_percentage ?? r.avg_pct ?? 0)
+              {targets.map((t) => {
+                const state = targetState(t)
+                const pct = t.status === 'completed' ? 100 : t.submission_id ? 50 : 0
+                const dueLabel = t.due_date ? `Due ${formatDate(t.due_date)}` : `Semester ${t.semester || 1}`
                 return (
-                  <div key={r.id} className="card p-5">
+                  <div key={t.id} className="card p-5">
                     <div className="safe-row items-start">
-                      <div>
-                        <p className="font-semibold text-[color:var(--text)]">{r.period_label || `Period ${r.report_period || r.id}`}</p>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-[color:var(--text)]">{t.name || t.module_name || `Milestone ${t.id}`}</p>
                         <p className="mt-0.5 text-xs text-[color:var(--secondary)]">
-                          {r.total_submissions ?? 0} submissions · {r.approved_count ?? r.approved_submissions ?? 0} approved
+                          {dueLabel}{t.batch_name ? ` · ${t.batch_name}` : ''}
                         </p>
                       </div>
-                      <StatusBadge status={r.status} />
+                      <StatusBadge status={state} />
                     </div>
                     <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--border)]">
                       <div
-                        className={`h-full rounded-full ${r.status === 'overdue' ? 'bg-orange-500' : r.status === 'completed' ? 'bg-emerald-500' : 'bg-[color:var(--accent)]'}`}
+                        className={`h-full rounded-full ${state === 'approved' ? 'bg-emerald-500' : state === 'awaiting_review' || state === 'draft' ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--muted)]'}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -693,8 +802,52 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         </div>
       )}
 
-      {/* ══ Research Profile tab ═════════════════════════════════════════════ */}
-      {tab === 'research' && (
+            {/* ══ My Profile > Fees subtab (student only) ═════════════════════════════════ */}
+      {tab === 'profile' && subTab === 'fees' && (
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-[color:var(--text)]">Fees</p>
+              <p className="mt-0.5 text-sm text-[color:var(--secondary)]">
+                Installments, receipts and pending payments. For the full payment flow visit
+                <Link to="/student/fees" className="ml-1 font-semibold text-[color:var(--accent)] hover:underline">/student/fees</Link>.
+              </p>
+            </div>
+          </div>
+
+          {fees === null ? (
+            <div className="card p-10 text-center">
+              <DollarSign className="mx-auto text-[color:var(--muted)]" size={32} />
+              <p className="mt-3 text-sm text-[color:var(--secondary)]">Loading fees…</p>
+            </div>
+          ) : fees.length === 0 ? (
+            <div className="card p-10 text-center">
+              <DollarSign className="mx-auto text-[color:var(--muted)]" size={32} />
+              <p className="mt-3 font-semibold text-[color:var(--text)]">No fee records yet</p>
+              <p className="mt-1 text-sm text-[color:var(--secondary)]">Installments will appear here once finance records them.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {fees.map((fee) => (
+                <div key={fee.id} className="card p-5">
+                  <div className="safe-row items-start">
+                    <div>
+                      <p className="text-sm font-semibold text-[color:var(--text)]">{fee.fee_type}</p>
+                      <p className="mt-0.5 text-xs text-[color:var(--secondary)]">Due {formatDate(fee.due_date)} · Installment {fee.installment}</p>
+                    </div>
+                    <StatusBadge status={fee.status} />
+                  </div>
+                  <div className="mt-3 text-2xl font-bold text-[color:var(--text)]">
+                    ₹{(fee.amount / 100).toLocaleString('en-IN')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {/* ══ My Profile > Research Profile subtab ═══════════════════════════════════ */}
+      {tab === 'profile' && subTab === 'research' && (
         <div className="space-y-5">
           {research ? (
             <>
