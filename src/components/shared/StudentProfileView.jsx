@@ -23,12 +23,14 @@ import { getStudentById, updateStudent } from '../../api/services/studentService
 import StudentOnboardingPanel from './StudentOnboardingPanel.jsx'
 import { getFeesByStudent } from '../../api/services/feeService.js'
 import {
-  createSubmission, getProgressReportsByStudent, getSubmissions, getSubmissionsByStudent,
+  createSubmission, getProgressReportsByStudent, getSubmissions,
   submitForReview, uploadSubmissionAttachment,
 } from '../../api/services/submissionService.js'
 import { getMyCycle } from '../../api/services/progressCycleService.js'
+import { getMyAssignments } from '../../api/services/assignmentService.js'
 import { getProgressSummary, getTargets, targetState } from '../../api/services/targetService.js'
 import UploadProgressReportDrawer from '../admin/UploadProgressReportDrawer.jsx'
+import OnBehalfSubmissionDrawer from '../admin/OnBehalfSubmissionDrawer.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
@@ -97,7 +99,6 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [student,         setStudent]         = useState(null)
   const [user,            setUser]            = useState(null)
   const [research,        setResearch]        = useState(null)
-  const [submissions,     setSubmissions]     = useState([])
   // Milestones now come from the targets module (/api/targets). Each target row may
   // already have its latest submission joined on it (s.id, s.status, s.submitted_at).
   const [targets,         setTargets]         = useState([])
@@ -112,6 +113,13 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [reportUploadOpen,setReportUploadOpen]= useState(false)
   const [openReportId,    setOpenReportId]    = useState(null)
   const [openTargetId,    setOpenTargetId]    = useState(null)  // which milestone's submit panel is expanded
+  const [openAssignmentId,setOpenAssignmentId]= useState(null)  // which assignment's submit panel is expanded
+  const [assignmentUploadOpen, setAssignmentUploadOpen] = useState(false) // admin on-behalf drawer
+  const [milestoneUploadOpen,  setMilestoneUploadOpen]  = useState(false) // admin on-behalf drawer
+  // Student's own batch assignments + my_submission_* status (mine=1). Admin
+  // view keeps reading the generic `assignments` list (filtered submissions)
+  // below instead — it needs every scholar's submissions, not just "mine".
+  const [myAssignments,   setMyAssignments]   = useState([])
   // Current-semester progress-report window (student self-submit only —
   // admin view keeps its existing "Upload Report" on-behalf flow instead).
   const [cycle,           setCycle]           = useState(null)
@@ -136,7 +144,6 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
     setNotFound(false)
     setStudent(null)
     setUser(null)
-    setSubmissions([])
     setReportDocs([])
 
     getStudentById(studentId)
@@ -162,14 +169,8 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
       .then((r) => setResearch(r.data))
       .catch(() => setResearch(null))
 
-    getSubmissionsByStudent(studentId)
-      .then((r) => setSubmissions(r.data || []))
-      .catch(() => setSubmissions([]))
-
     // Assignment-type submissions — the new "Assignments" subtab source.
-    getSubmissions({ student_user_id: studentId, submission_type: 'assignment' })
-      .then((r) => setAssignments(r.data || []))
-      .catch(() => setAssignments([]))
+    loadAssignments()
 
     loadTargets()
     getProgressSummary(studentId)
@@ -177,7 +178,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
       .catch(() => setProgressSummary(null))
 
     loadReportDocs()
-    if (!isAdminView) loadCycle()
+    if (!isAdminView) { loadCycle(); loadMyAssignments() }
   }, [studentId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lazy-load fees only when the student opens the Fees subtab inside My Profile. The
@@ -204,6 +205,19 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // can_submit and the attached files always reflect the server's truth.
   function loadCycle() {
     getMyCycle().then((r) => setCycle(r.data || null)).catch(() => setCycle(null))
+  }
+
+  // My batch's published assignments + my_submission_status (student self-view only).
+  function loadMyAssignments() {
+    getMyAssignments().then((r) => setMyAssignments(r.data || [])).catch(() => setMyAssignments([]))
+  }
+
+  // Assignment-type submissions for this scholar — admin view's "Assignments" subtab source.
+  function loadAssignments() {
+    if (!studentId) return
+    getSubmissions({ student_user_id: studentId, submission_type: 'assignment' })
+      .then((r) => setAssignments(r.data || []))
+      .catch(() => setAssignments([]))
   }
 
   // Milestones read from /api/targets (real module), not the legacy
@@ -695,36 +709,99 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             <StatCard label="Rejected" value={subStats.rejected} accent="#ef4444" />
           </div>
 
-          {submissions.length === 0 ? (
+          {canUploadReport && (
+            <div className="flex justify-end">
+              <button className="btn-primary inline-flex items-center gap-2" onClick={() => setAssignmentUploadOpen(true)}>
+                <UploadCloud size={15} /> Upload on behalf
+              </button>
+            </div>
+          )}
+
+          {isAdminView ? (
+            assignments.length === 0 ? (
+              <div className="card p-10 text-center">
+                <FileText className="mx-auto text-[color:var(--muted)]" size={32} />
+                <p className="mt-3 font-semibold text-[color:var(--text)]">No assignment submissions yet</p>
+                <p className="mt-1 text-sm text-[color:var(--secondary)]">Submissions will appear here once the student submits, or you upload one on their behalf.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {assignments.map((sub) => (
+                  <button
+                    key={sub.id}
+                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 text-left transition hover:border-[color:var(--accent)] hover:shadow-sm"
+                    onClick={() => openSub(sub)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="line-clamp-2 font-semibold text-[color:var(--text)]">{sub.title}</p>
+                        <p className="mt-1 text-xs text-[color:var(--secondary)]">
+                          v{sub.version || 1} · {formatDate(sub.submitted_at)}
+                        </p>
+                      </div>
+                      <StatusBadge status={sub.status} />
+                    </div>
+                    {sub.file_urls?.[0]?.name && (
+                      <p className="mt-2 flex items-center gap-1.5 text-xs text-[color:var(--muted)]">
+                        <FileText size={11} /> {sub.file_urls[0].name}
+                      </p>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )
+          ) : myAssignments.length === 0 ? (
             <div className="card p-10 text-center">
               <FileText className="mx-auto text-[color:var(--muted)]" size={32} />
-              <p className="mt-3 font-semibold text-[color:var(--text)]">No submissions yet</p>
-              <p className="mt-1 text-sm text-[color:var(--secondary)]">Submissions will appear here once the student starts submitting reports.</p>
+              <p className="mt-3 font-semibold text-[color:var(--text)]">No assignments yet</p>
+              <p className="mt-1 text-sm text-[color:var(--secondary)]">Assignments are defined per batch and semester. They will appear here once your coordinator assigns them.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {submissions.map((sub) => (
-                <button
-                  key={sub.id}
-                  className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 text-left transition hover:border-[color:var(--accent)] hover:shadow-sm"
-                  onClick={() => openSub(sub)}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="line-clamp-2 font-semibold text-[color:var(--text)]">{sub.title}</p>
-                      <p className="mt-1 text-xs text-[color:var(--secondary)]">
-                        v{sub.version || 1} · {formatDate(sub.submitted_at)}
-                      </p>
+              {myAssignments.map((a) => {
+                const canSubmit = !a.my_submission_id || a.my_submission_status === 'needs_revision'
+                const isOpen = openAssignmentId === a.id
+                return (
+                  <div key={a.id} className="card p-5">
+                    <div className="safe-row items-start">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-[color:var(--text)]">{a.title}</p>
+                        <p className="mt-0.5 text-xs text-[color:var(--secondary)]">
+                          Semester {a.semester || 1}{a.is_mandatory === false ? ' · Optional' : ''}
+                        </p>
+                        {a.description && <p className="mt-1 text-xs text-[color:var(--secondary)]">{a.description}</p>}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {a.my_submission_status
+                          ? <StatusBadge status={a.my_submission_status} />
+                          : <StatusBadge status="not_started" />}
+                        {canSubmit && (
+                          <button
+                            onClick={() => setOpenAssignmentId(isOpen ? null : a.id)}
+                            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${isOpen ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--accent-tint)] text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white'}`}>
+                            {a.my_submission_status === 'needs_revision' ? 'Resubmit' : 'Submit'}
+                          </button>
+                        )}
+                        {a.my_submission_id && !canSubmit && (
+                          <button
+                            onClick={() => navigate(`/student/submissions/${a.my_submission_id}/preview`)}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-[color:var(--surface)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)]">
+                            View
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <StatusBadge status={sub.status} />
+
+                    {isOpen && (
+                      <AssignmentSubmitPanel
+                        assignment={a}
+                        onDone={() => { setOpenAssignmentId(null); loadMyAssignments() }}
+                        addToast={addToast}
+                      />
+                    )}
                   </div>
-                  {sub.file_urls?.[0]?.name && (
-                    <p className="mt-2 flex items-center gap-1.5 text-xs text-[color:var(--muted)]">
-                      <FileText size={11} /> {sub.file_urls[0].name}
-                    </p>
-                  )}
-                </button>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -733,6 +810,14 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             {/* ══ Submissions > Milestones subtab (powered by /api/targets) ════════════════ */}
       {tab === 'submissions' && subTab === 'milestones' && (
         <div className="space-y-5">
+          {canUploadReport && (
+            <div className="flex justify-end">
+              <button className="btn-primary inline-flex items-center gap-2" onClick={() => setMilestoneUploadOpen(true)}>
+                <UploadCloud size={15} /> Upload on behalf
+              </button>
+            </div>
+          )}
+
           {/* Overall bar */}
           <div className="card p-6">
             <div className="flex items-center justify-between">
@@ -1022,6 +1107,24 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
           onUploaded={loadReportDocs}
         />
       )}
+
+      {/* ── Upload assignment / milestone on behalf (admin / coordinator) ── */}
+      {assignmentUploadOpen && (
+        <OnBehalfSubmissionDrawer
+          kind="assignment"
+          studentUserId={studentId}
+          onClose={() => setAssignmentUploadOpen(false)}
+          onUploaded={loadAssignments}
+        />
+      )}
+      {milestoneUploadOpen && (
+        <OnBehalfSubmissionDrawer
+          kind="target"
+          studentUserId={studentId}
+          onClose={() => setMilestoneUploadOpen(false)}
+          onUploaded={loadTargets}
+        />
+      )}
     </div>
   )
 }
@@ -1052,6 +1155,81 @@ function SH({ title, editing, onEdit, onSave, onCancel }) {
 // Re-upload replaces a slot's file (server-side upsert). Editable while the
 // tied submission is draft/needs_revision or doesn't exist yet; read-only once
 // it's been sent for review.
+// ── Assignment submission (student self-submit) ─────────────────────────────────
+// Mirrors TargetSubmitPanel exactly, just against assignment_id instead of
+// target_id — assignments are admin-defined per batch+semester the same way
+// milestones are, so the submit flow is identical.
+function AssignmentSubmitPanel({ assignment, onDone, addToast }) {
+  const [note,       setNote]       = useState('')
+  const [files,      setFiles]      = useState([])
+  const [submitting, setSubmitting] = useState(false)
+
+  const addFiles = (fileList) => setFiles((prev) => [...prev, ...Array.from(fileList)])
+  const removeFile = (i) => setFiles((prev) => prev.filter((_, j) => j !== i))
+
+  const submit = async () => {
+    if (files.length === 0) {
+      addToast({ type: 'error', title: 'Add at least one file.' })
+      return
+    }
+    setSubmitting(true)
+    try {
+      const createdRes = await createSubmission({
+        batch_id: assignment.batch_id,
+        assignment_id: assignment.id,
+        title: assignment.title,
+        submission_type: 'assignment',
+        semester: assignment.semester || 1,
+        content: note.trim() || undefined,
+      })
+      const submissionId = createdRes.data?.id
+      if (!submissionId) throw new Error('Could not create the submission')
+      for (const file of files) {
+        await uploadSubmissionAttachment(submissionId, file)
+      }
+      await submitForReview(submissionId)
+      addToast({ type: 'success', title: `Submitted "${assignment.title}" for review.` })
+      onDone()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Submission failed', message: err.response?.data?.message || err.message })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+      <label className="block">
+        <span className="text-xs font-semibold text-[color:var(--secondary)]">Note (optional)</span>
+        <textarea className="input mt-1 w-full resize-none text-sm" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Anything the reviewer should know" />
+      </label>
+
+      <div className="mt-3">
+        <span className="text-xs font-semibold text-[color:var(--secondary)]">Files</span>
+        <label className="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[color:var(--border)] bg-[color:var(--card)] px-4 py-6 text-center text-xs font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]">
+          <UploadCloud size={16} /> Click to add files — multiple allowed
+          <input type="file" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
+        </label>
+        {files.length > 0 && (
+          <div className="mt-2 space-y-1.5">
+            {files.map((f, i) => (
+              <div key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 rounded-lg bg-[color:var(--card)] px-3 py-2 text-xs">
+                <span className="truncate text-[color:var(--text)]">{f.name} <span className="text-[color:var(--muted)]">({(f.size / 1024 / 1024).toFixed(2)} MB)</span></span>
+                <button onClick={() => removeFile(i)} className="shrink-0 text-[color:var(--muted)] hover:text-red-500"><X size={14} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button onClick={submit} disabled={submitting} className="btn-primary mt-4 inline-flex items-center gap-2 text-xs disabled:opacity-50">
+        {submitting ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />}
+        {submitting ? 'Submitting…' : 'Submit for Review'}
+      </button>
+    </div>
+  )
+}
+
 // ── Milestone submission (student self-submit) ─────────────────────────────────
 // Multiple files, added one batch at a time and listed with a remove option
 // before submit — unlike the single-file assignment/progress-report forms,
