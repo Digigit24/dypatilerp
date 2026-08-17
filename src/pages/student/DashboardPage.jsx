@@ -1,8 +1,9 @@
-import { Bell, Calendar, Clock, RotateCcw } from 'lucide-react'
+import { Bell, Calendar, Clock, MessageSquare, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import http from '../../api/http.js'
 import { USE_MOCK } from '../../api/config.js'
+import { getApprovalsBySubmission } from '../../api/services/approvalService.js'
 import { getNotifications, markAllAsRead } from '../../api/services/notificationService.js'
 import { getSubmissionsByStudent } from '../../api/services/submissionService.js'
 import { getStudentById } from '../../api/services/studentService.js'
@@ -12,6 +13,36 @@ import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { formatDate, timeAgo } from '../../lib/formatters.js'
 import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
+
+// How many of the scholar's most recent submissions to pull approval history
+// for, on the dashboard. Bounded on purpose — this is N extra requests (one
+// per submission) run in parallel, not meant to scan the whole history.
+const FEEDBACK_LOOKBACK = 6
+
+/**
+ * Reduce a submission's approval rows to the single most recent "feedback
+ * event" worth surfacing on the dashboard: a document-style feedback note,
+ * a revision request, or a plain approval — whichever happened most
+ * recently. Returns null if nothing has actually happened yet (still
+ * pending, no reviewer action taken).
+ */
+const latestFeedbackEvent = (submission, approvals) => {
+  let best = null
+  for (const a of approvals || []) {
+    const at = a.feedback_updated_at || a.action_at
+    if (!at) continue
+    if (a.feedback_html) {
+      if (!best || new Date(at) > new Date(best.at)) best = { at, kind: 'feedback', text: a.feedback_html, stage: a.stage }
+    }
+    if (a.status === 'needs_revision' && a.comments) {
+      if (!best || new Date(at) > new Date(best.at)) best = { at, kind: 'revision', text: a.comments, stage: a.stage }
+    } else if (a.status === 'approved') {
+      if (!best || new Date(at) > new Date(best.at)) best = { at, kind: 'approved', text: a.comments || null, stage: a.stage }
+    }
+  }
+  if (!best) return null
+  return { submission, ...best }
+}
 
 export default function DashboardPage() {
   const [data, setData] = useState(null)
@@ -28,7 +59,20 @@ export default function DashboardPage() {
             http.get('/dashboard/student'),
             getSubmissionsByStudent(currentUser.id),
           ])
-          setData({ dashboard: res.data, submissionsList: subs.data ?? [], isMock: false })
+          const submissionsList = subs.data ?? []
+          // Feedback digest: pull approval history for the most recent
+          // submissions (progress reports + milestones carry a chain;
+          // assignments have none and simply won't produce an event).
+          const recent = submissionsList.slice(0, FEEDBACK_LOOKBACK)
+          const approvalLists = await Promise.all(
+            recent.map((s) => getApprovalsBySubmission(s.id).then((r) => r.data || []).catch(() => []))
+          )
+          const feedbackItems = recent
+            .map((s, i) => latestFeedbackEvent(s, approvalLists[i]))
+            .filter(Boolean)
+            .sort((a, b) => new Date(b.at) - new Date(a.at))
+            .slice(0, 5)
+          setData({ dashboard: res.data, submissionsList, feedbackItems, isMock: false })
           return
         }
         const [student, submissions, notifications] = await Promise.all([
@@ -52,6 +96,7 @@ export default function DashboardPage() {
     const d = data.dashboard
     const completion = d.progress?.completion_percentage ?? 0
     const submissions = data.submissionsList ?? []
+    const feedbackItems = data.feedbackItems ?? []
     const notifications = d.unread_notifications ?? 0
 
     // "Pending" = awaiting review (submitted or under_review). needs_revision is
@@ -86,15 +131,53 @@ export default function DashboardPage() {
               {submissions.length === 0
                 ? <p className="mt-4 text-sm text-[color:var(--secondary)]">No submissions yet.</p>
                 : submissions.slice(0, 3).map((s) => (
-                  <div className="safe-row border-b border-[color:var(--border)] py-4" key={s.id}>
+                  <Link to={`/student/submissions/${s.id}/preview`} className="safe-row border-b border-[color:var(--border)] py-4 last:border-0 hover:opacity-80" key={s.id}>
                     <div>
                       <p className="line-clamp-2 font-medium text-[color:var(--text)]">{s.title}</p>
                       <p className="text-xs text-[color:var(--secondary)]">{formatDate(s.submitted_at ?? s.created_at)}</p>
                     </div>
                     <StatusBadge status={s.status} />
-                  </div>
+                  </Link>
                 ))
               }
+            </div>
+            <div className="card p-6">
+              <div className="safe-row">
+                <h2 className="text-xl font-semibold text-[color:var(--text)]">Recent Feedback</h2>
+                <MessageSquare size={17} className="text-[color:var(--accent)] opacity-60" />
+              </div>
+              {feedbackItems.length === 0 ? (
+                <p className="mt-4 text-sm text-[color:var(--secondary)]">
+                  No feedback yet — reviewer comments and decisions on your progress reports, assignments and milestones will show up here.
+                </p>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {feedbackItems.map((f) => (
+                    <Link
+                      to={`/student/submissions/${f.submission.id}/preview`}
+                      key={`${f.submission.id}-${f.at}`}
+                      className="block rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3.5 transition hover:border-[color:var(--accent)]"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="line-clamp-1 text-sm font-semibold text-[color:var(--text)]">{f.submission.title}</p>
+                        {f.kind === 'approved'
+                          ? <StatusBadge status="approved" />
+                          : f.kind === 'revision'
+                            ? <StatusBadge status="needs_revision" />
+                            : <span className="shrink-0 rounded-full bg-[color:var(--accent-tint)] px-2 py-0.5 text-[10px] font-bold text-[color:var(--accent)]">Feedback</span>}
+                      </div>
+                      <p className="mt-1 text-[11px] font-medium capitalize text-[color:var(--muted)]">
+                        {f.submission.submission_type?.replaceAll('_', ' ')}{f.stage ? ` · ${f.stage.replaceAll('_', ' ')}` : ''} · {timeAgo(f.at)}
+                      </p>
+                      {f.text ? (
+                        <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-xs leading-5 text-[color:var(--secondary)]">{f.text}</p>
+                      ) : (
+                        <p className="mt-2 text-xs text-[color:var(--secondary)]">Approved with no additional comments.</p>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="card p-6">
               <h2 className="text-xl font-semibold text-[color:var(--text)]">Quick Actions</h2>
