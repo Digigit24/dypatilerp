@@ -51,11 +51,14 @@ export const submitForReviewOnBehalf = async (id) => {
 
 // Server-proxied progress-report upload: POST the file (multipart) to our own API,
 // which streams it to storage server-side. Returns the updated submission.
-export const uploadSubmissionAttachment = async (submissionId, file) => {
+// `slot` ('report' | 'presentation') is required by the backend for
+// progress_report-kind submissions — each cycle needs exactly those two
+// named files, not two arbitrary ones.
+export const uploadSubmissionAttachment = async (submissionId, file, slot = null) => {
   if (USE_MOCK) return ok({ submission: { id: submissionId }, media_id: `mid_${Date.now()}` })
   const form = new FormData()
   form.append('file', file)
-  const { data: res } = await http.post(`/submissions/${submissionId}/attachment`, form)
+  const { data: res } = await http.post(`/submissions/${submissionId}/attachment${slot ? `?slot=${slot}` : ''}`, form)
   return ok(res.data)
 }
 

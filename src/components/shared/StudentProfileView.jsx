@@ -11,7 +11,7 @@
 import {
   Award, BookOpen, Camera, ChevronDown, Clock,
   DollarSign, ExternalLink, FileText, Globe, GraduationCap,
-  Link2, Pencil, Plus, Save, Shield, UploadCloud, User, X,
+  Link2, Loader2, Pencil, Plus, Save, Shield, UploadCloud, User, X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -22,7 +22,11 @@ import {
 import { getStudentById, updateStudent } from '../../api/services/studentService.js'
 import StudentOnboardingPanel from './StudentOnboardingPanel.jsx'
 import { getFeesByStudent } from '../../api/services/feeService.js'
-import { getProgressReportsByStudent, getSubmissions, getSubmissionsByStudent } from '../../api/services/submissionService.js'
+import {
+  createSubmission, getProgressReportsByStudent, getSubmissions, getSubmissionsByStudent,
+  submitForReview, uploadSubmissionAttachment,
+} from '../../api/services/submissionService.js'
+import { getMyCycle } from '../../api/services/progressCycleService.js'
 import { getProgressSummary, getTargets, targetState } from '../../api/services/targetService.js'
 import UploadProgressReportDrawer from '../admin/UploadProgressReportDrawer.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
@@ -107,6 +111,9 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [reportDocs,      setReportDocs]      = useState([])
   const [reportUploadOpen,setReportUploadOpen]= useState(false)
   const [openReportId,    setOpenReportId]    = useState(null)
+  // Current-semester progress-report window (student self-submit only —
+  // admin view keeps its existing "Upload Report" on-behalf flow instead).
+  const [cycle,           setCycle]           = useState(null)
   const [notFound,        setNotFound]        = useState(false)
   const [tab,             setTab]             = useState(_normalizeTab.outer)
   // Inner subtab — only meaningful when outer tab is 'profile' or 'submissions'.
@@ -173,7 +180,8 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
       .catch(() => setProgressSummary(null))
 
     loadReportDocs()
-  }, [studentId])
+    if (!isAdminView) loadCycle()
+  }, [studentId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lazy-load fees only when the student opens the Fees subtab inside My Profile. The
   // dedicated /student/fees route still works for deep links and direct visits.
@@ -193,6 +201,12 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
     getProgressReportsByStudent(studentId)
       .then((r) => setReportDocs(r.data || []))
       .catch(() => setReportDocs([]))
+  }
+
+  // Current-semester window — re-fetched after every slot upload / submit so
+  // can_submit and the attached files always reflect the server's truth.
+  function loadCycle() {
+    getMyCycle().then((r) => setCycle(r.data || null)).catch(() => setCycle(null))
   }
 
   // ── Error / loading states ──────────────────────────────────────────────────
@@ -561,9 +575,13 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-[color:var(--text)]">Uploaded progress reports</p>
+              <p className="text-sm font-semibold text-[color:var(--text)]">
+                {isAdminView ? 'Uploaded progress reports' : 'Your progress reports'}
+              </p>
               <p className="mt-0.5 text-sm text-[color:var(--secondary)]">
-                Documents filed for this scholar, with their review status and feedback thread.
+                {isAdminView
+                  ? 'Documents filed for this scholar, with their review status and feedback thread.'
+                  : 'One report per semester — pick up where you left off, or start the current one.'}
               </p>
             </div>
             {canUploadReport && (
@@ -576,19 +594,34 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             )}
           </div>
 
-          {reportDocs.length === 0 ? (
-            <div className="card p-10 text-center">
-              <FileText className="mx-auto text-[color:var(--muted)]" size={32} />
-              <p className="mt-3 font-semibold text-[color:var(--text)]">No progress reports yet</p>
-              <p className="mt-1 text-sm text-[color:var(--secondary)]">
-                {canUploadReport
-                  ? 'Upload a report to file it under this scholar and send it for review.'
-                  : 'Reports appear here once they are uploaded.'}
-              </p>
-            </div>
-          ) : (
+          {/* Student self-submit: the current semester's window, always up top. */}
+          {!isAdminView && cycle && (
+            <ProgressCycleCard cycle={cycle} onChange={() => { loadCycle(); loadReportDocs() }} addToast={addToast} />
+          )}
+
+          {/* Past semesters only, when a live cycle is shown above (avoid showing
+              the current semester twice). Admin view is unfiltered, unchanged. */}
+          {(() => {
+            const list = (!isAdminView && cycle)
+              ? reportDocs.filter((r) => (r.semester || 1) < cycle.semester)
+              : reportDocs
+            if (list.length === 0 && (isAdminView || !cycle)) {
+              return (
+                <div className="card p-10 text-center">
+                  <FileText className="mx-auto text-[color:var(--muted)]" size={32} />
+                  <p className="mt-3 font-semibold text-[color:var(--text)]">No progress reports yet</p>
+                  <p className="mt-1 text-sm text-[color:var(--secondary)]">
+                    {canUploadReport
+                      ? 'Upload a report to file it under this scholar and send it for review.'
+                      : 'Reports appear here once they are uploaded.'}
+                  </p>
+                </div>
+              )
+            }
+            if (list.length === 0) return null
+            return (
             <div className="space-y-3">
-              {reportDocs.map((r) => {
+              {list.map((r) => {
                 const files = Array.isArray(r.file_urls) ? r.file_urls : []
                 const expanded = openReportId === r.id
                 return (
@@ -639,7 +672,8 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                 )
               })}
             </div>
-          )}
+            )
+          })()}
         </div>
       )}
 
@@ -979,6 +1013,109 @@ function SH({ title, editing, onEdit, onSave, onCancel }) {
           <button onClick={onCancel} className="grid h-8 w-8 place-items-center rounded-xl bg-[color:var(--surface)] text-[color:var(--muted)]" title="Cancel"><X size={14} /></button>
           <button onClick={onSave}   className="grid h-8 w-8 place-items-center rounded-xl bg-[color:var(--accent)] text-white"             title="Save"><Save size={14} /></button>
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── Current-semester progress-report window (student self-submit) ──────────────
+// Two named slots (report + presentation), both required before Submit unlocks.
+// Re-upload replaces a slot's file (server-side upsert). Editable while the
+// tied submission is draft/needs_revision or doesn't exist yet; read-only once
+// it's been sent for review.
+function ProgressCycleCard({ cycle, onChange, addToast }) {
+  const [busySlot,   setBusySlot]   = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const editable = !cycle.submission_status || ['draft', 'needs_revision'].includes(cycle.submission_status)
+
+  const handleFile = async (slot, file) => {
+    setBusySlot(slot)
+    try {
+      let submissionId = cycle.submission_id
+      if (!submissionId) {
+        const created = await createSubmission({
+          title: `Progress Report — Semester ${cycle.semester}`,
+          submission_type: 'progress_report',
+          cycle_id: cycle.id,
+          semester: cycle.semester,
+        })
+        submissionId = created.data.id
+      }
+      await uploadSubmissionAttachment(submissionId, file, slot)
+      addToast({ type: 'success', title: `${slot === 'report' ? 'Report' : 'Presentation'} uploaded.` })
+      onChange()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Upload failed', message: err.response?.data?.message })
+    } finally {
+      setBusySlot(null)
+    }
+  }
+
+  const handleSubmit = async () => {
+    if (!cycle.submission_id || !cycle.can_submit) return
+    setSubmitting(true)
+    try {
+      await submitForReview(cycle.submission_id)
+      addToast({ type: 'success', title: 'Progress report submitted for review.' })
+      onChange()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Submit failed', message: err.response?.data?.message })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="card border-2 border-[color:var(--accent)] p-5">
+      <div className="safe-row items-start">
+        <div>
+          <span className="inline-flex items-center rounded-full bg-[color:var(--accent-tint)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[color:var(--accent)]">
+            Current — Semester {cycle.semester}
+          </span>
+          <h3 className="mt-2 text-base font-semibold text-[color:var(--text)]">Progress Report {cycle.semester}</h3>
+          {cycle.due_date && <p className="mt-1 text-xs text-[color:var(--secondary)]">Due {formatDate(cycle.due_date)}</p>}
+        </div>
+        <StatusBadge status={cycle.submission_status || 'not_started'} />
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {cycle.slots.map((s) => (
+          <div key={s.slot} className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">{s.label}</p>
+            {s.file ? (
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <span className="truncate text-sm text-[color:var(--text)]">{s.file.name}</span>
+                <SubmissionFileLink file={s.file} label="View" />
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-[color:var(--muted)]">Not uploaded yet</p>
+            )}
+            {editable && (
+              <label className={`mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--accent-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--accent)] ${busySlot === s.slot ? 'opacity-60' : 'cursor-pointer hover:bg-[color:var(--accent)] hover:text-white'}`}>
+                {busySlot === s.slot ? <Loader2 size={13} className="animate-spin" /> : <UploadCloud size={13} />}
+                {s.file ? 'Replace' : 'Upload'}
+                <input
+                  type="file"
+                  accept={Array.isArray(s.accepts) ? s.accepts.map((e) => `.${e}`).join(',') : undefined}
+                  className="hidden"
+                  disabled={busySlot === s.slot}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) handleFile(s.slot, f) }}
+                />
+              </label>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {editable && (
+        <button
+          onClick={handleSubmit}
+          disabled={!cycle.can_submit || submitting}
+          className="btn-primary mt-4 inline-flex items-center gap-2 disabled:opacity-50"
+        >
+          {submitting ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />}
+          {cycle.can_submit ? 'Submit for Review' : 'Upload both files to submit'}
+        </button>
       )}
     </div>
   )
