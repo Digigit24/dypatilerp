@@ -131,7 +131,6 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
     setStudent(null)
     setUser(null)
     setSubmissions([])
-    setProgressReports([])
     setReportDocs([])
 
     getStudentById(studentId)
