@@ -117,6 +117,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // Most recent reviewer feedback event per report id — { at, kind, text, stage } — so
   // the list itself shows what the coordinator/admin said, not just a status badge.
   const [reportFeedback,  setReportFeedback]  = useState({})
+  const [reportFeedbackLoading, setReportFeedbackLoading] = useState(true)
   const [reportUploadOpen,setReportUploadOpen]= useState(false)
   const [openTargetId,    setOpenTargetId]    = useState(null)  // which milestone's submit panel is expanded
   const [openAssignmentId,setOpenAssignmentId]= useState(null)  // which assignment's submit panel is expanded
@@ -220,6 +221,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // Extracted so the upload drawer can refresh the list without a full reload.
   function loadReportDocs() {
     if (!studentId) return
+    setReportFeedbackLoading(true)
     getProgressReportsByStudent(studentId)
       .then(async (r) => {
         const docs = r.data || []
@@ -233,8 +235,9 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         const map = {}
         docs.forEach((d, i) => { const ev = latestFeedbackEvent(approvalLists[i], remarkLists[i]); if (ev) map[d.id] = ev })
         setReportFeedback(map)
+        setReportFeedbackLoading(false)
       })
-      .catch(() => setReportDocs([]))
+      .catch(() => { setReportDocs([]); setReportFeedbackLoading(false) })
   }
 
   // Current-semester window — re-fetched after every slot upload / submit so
@@ -786,6 +789,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                           {feedback.text && <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs leading-5 text-[color:var(--text)]">{feedback.text}</p>}
                         </div>
                       )}
+                      {!feedback && <FeedbackPlaceholder loading={reportFeedbackLoading} className="mt-2" />}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <StatusBadge status={r.status} />
@@ -1423,15 +1427,21 @@ function ProgressCycleCard({ cycle, onChange, addToast }) {
   const [busySlot,   setBusySlot]   = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [feedback,   setFeedback]   = useState(null)
+  const [feedbackLoading, setFeedbackLoading] = useState(Boolean(cycle.submission_id))
   const editable = !cycle.submission_status || ['draft', 'needs_revision'].includes(cycle.submission_status)
 
   useEffect(() => {
-    if (!cycle.submission_id) { setFeedback(null); return }
+    if (!cycle.submission_id) { setFeedback(null); setFeedbackLoading(false); return }
     let alive = true
+    setFeedbackLoading(true)
     Promise.all([
       getApprovalsBySubmission(cycle.submission_id).then((r) => r.data || []).catch(() => []),
       getSubmissionRemarks(cycle.submission_id).then((r) => r.data || []).catch(() => []),
-    ]).then(([approvals, remarks]) => { if (alive) setFeedback(latestFeedbackEvent(approvals, remarks)) })
+    ]).then(([approvals, remarks]) => {
+      if (!alive) return
+      setFeedback(latestFeedbackEvent(approvals, remarks))
+      setFeedbackLoading(false)
+    })
     return () => { alive = false }
   }, [cycle.submission_id])
 
@@ -1524,14 +1534,17 @@ function ProgressCycleCard({ cycle, onChange, addToast }) {
         ))}
       </div>
 
-      {feedback && (
+      {feedback ? (
         <div className="mt-4 rounded-xl bg-[color:var(--surface)] p-3.5">
           <p className={`text-[10px] font-bold uppercase tracking-wide ${feedback.kind === 'revision' ? 'text-orange-700' : 'text-[color:var(--muted)]'}`}>
-            {feedback.kind === 'revision' ? 'Revision requested' : feedback.kind === 'approved' ? 'Approved' : 'Feedback'}
+            {feedback.kind === 'revision' ? 'Revision requested' : feedback.kind === 'approved' ? 'Approved' : feedback.kind === 'remark' ? 'Remark' : 'Feedback'}
             {feedback.stage ? ` · ${feedback.stage.replaceAll('_', ' ')}` : ''}
+            {feedback.author ? ` · ${feedback.author}` : ''}
           </p>
           {feedback.text && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-[color:var(--text)]">{feedback.text}</p>}
         </div>
+      ) : (
+        <FeedbackPlaceholder loading={feedbackLoading} className="mt-4" />
       )}
 
       {editable && (
@@ -1563,6 +1576,30 @@ function QuickStat({ label, value, sub }) {
       <p className="text-xs text-[color:var(--muted)] uppercase tracking-wide">{label}</p>
       <p className="mt-1 text-xl font-bold text-[color:var(--text)]">{value}</p>
       {sub && <p className="mt-0.5 text-xs text-[color:var(--secondary)]">{sub}</p>}
+    </div>
+  )
+}
+
+/**
+ * Placeholder shown wherever a feedback block would normally render, when
+ * there isn't one (yet). Pulses like a loading skeleton while the
+ * approvals/remarks fetch is in flight, then settles into a static muted
+ * "No feedback yet" box once it's confirmed there's genuinely nothing —
+ * so it never looks like content is stuck loading.
+ */
+function FeedbackPlaceholder({ loading, className = '' }) {
+  if (loading) {
+    return (
+      <div className={`rounded-lg bg-[color:var(--surface)] p-2.5 ${className}`}>
+        <div className="h-2.5 w-24 animate-pulse rounded bg-[color:var(--border)]" />
+        <div className="mt-2 h-2.5 w-full animate-pulse rounded bg-[color:var(--border)]" />
+        <div className="mt-1.5 h-2.5 w-2/3 animate-pulse rounded bg-[color:var(--border)]" />
+      </div>
+    )
+  }
+  return (
+    <div className={`rounded-lg border border-dashed border-[color:var(--border)] p-2.5 ${className}`}>
+      <p className="text-xs text-[color:var(--muted)]">No feedback yet</p>
     </div>
   )
 }
