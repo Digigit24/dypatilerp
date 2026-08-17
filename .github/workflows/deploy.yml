@@ -38,11 +38,11 @@ jobs:
                cd /home/divineblisspuna/public_html/app.dyperf.com/dypatilerp && \
                git reset --hard HEAD && \
                git pull origin main && \
-               npm install && \
+               npm ci && \
                VITE_API_URL=https://app.dyperf.com/api npm run build && \
                cp -r dist/* ../ && \
                cp -r dist/* /home/divineblisspuna/public_html/postdoc.dyperf.com/ && \
                cd backend && \
-               npm install && \
+               npm ci && \
                pm2 restart dyperf-api --update-env && \
                pm2 save"
