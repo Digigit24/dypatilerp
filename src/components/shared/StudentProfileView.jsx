@@ -742,11 +742,13 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
               {list.map((r) => {
                 const files = Array.isArray(r.file_urls) ? r.file_urls : []
                 return (
-                  <button
+                  <div
                     key={r.id}
-                    type="button"
-                    className="flex w-full items-start justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 text-left transition hover:border-[color:var(--accent)] hover:shadow-sm"
+                    role="button"
+                    tabIndex={0}
+                    className="flex w-full cursor-pointer items-start justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 text-left transition hover:border-[color:var(--accent)] hover:shadow-sm"
                     onClick={() => openSub(r)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') openSub(r) }}
                   >
                     <div className="min-w-0">
                       <p className="line-clamp-2 font-semibold text-[color:var(--text)]">{r.title}</p>
@@ -757,8 +759,17 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                         <span>{formatDate(r.submitted_at || r.created_at)}</span>
                       </p>
                     </div>
-                    <StatusBadge status={r.status} />
-                  </button>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <StatusBadge status={r.status} />
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); openSub(r) }}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-[color:var(--surface)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)]"
+                      >
+                        View
+                      </button>
+                    </div>
+                  </div>
                 )
               })}
             </div>
