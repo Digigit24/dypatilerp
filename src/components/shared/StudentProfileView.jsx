@@ -106,9 +106,18 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // Milestones now come from the targets module (/api/targets). Each target row may
   // already have its latest submission joined on it (s.id, s.status, s.submitted_at).
   const [targets,         setTargets]         = useState([])
+  // Most recent reviewer feedback event per target's submission id — same
+  // digest as the Progress Reports tab, so Milestones gets the same polish.
+  const [targetFeedback,  setTargetFeedback]  = useState({})
+  const [targetFeedbackLoading, setTargetFeedbackLoading] = useState(true)
   const [progressSummary, setProgressSummary] = useState(null)
   // Assignment-type submissions (filtered from the generic submissions list).
   const [assignments,     setAssignments]     = useState([])
+  // Keyed by submission id — covers both the admin `assignments` list (whose
+  // rows ARE submissions) and the student `myAssignments` list (keyed by
+  // each row's my_submission_id once one exists).
+  const [assignmentFeedback, setAssignmentFeedback] = useState({})
+  const [assignmentFeedbackLoading, setAssignmentFeedbackLoading] = useState(true)
   // Fees list, lazily loaded only when the student opens the Fees subtab.
   const [fees,            setFees]            = useState(null)
   // Uploaded progress-report DOCUMENTS (submissions of type 'progress_report').
@@ -248,15 +257,29 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
 
   // My batch's published assignments + my_submission_status (student self-view only).
   function loadMyAssignments() {
-    getMyAssignments().then((r) => setMyAssignments(r.data || [])).catch(() => setMyAssignments([]))
+    setAssignmentFeedbackLoading(true)
+    getMyAssignments()
+      .then(async (r) => {
+        const rows = r.data || []
+        setMyAssignments(rows)
+        await loadFeedbackFor(rows.map((a) => a.my_submission_id).filter(Boolean), setAssignmentFeedback)
+        setAssignmentFeedbackLoading(false)
+      })
+      .catch(() => { setMyAssignments([]); setAssignmentFeedbackLoading(false) })
   }
 
   // Assignment-type submissions for this scholar — admin view's "Assignments" subtab source.
   function loadAssignments() {
     if (!studentId) return
+    setAssignmentFeedbackLoading(true)
     getSubmissions({ student_user_id: studentId, submission_type: 'assignment' })
-      .then((r) => setAssignments(r.data || []))
-      .catch(() => setAssignments([]))
+      .then(async (r) => {
+        const rows = r.data || []
+        setAssignments(rows)
+        await loadFeedbackFor(rows.map((a) => a.id), setAssignmentFeedback)
+        setAssignmentFeedbackLoading(false)
+      })
+      .catch(() => { setAssignments([]); setAssignmentFeedbackLoading(false) })
   }
 
   // Milestones read from /api/targets (real module), not the legacy
@@ -264,9 +287,29 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   // ?student_user_id= also covers admin viewing one scholar's own status.
   function loadTargets() {
     if (!studentId) return
+    setTargetFeedbackLoading(true)
     getTargets({ student_user_id: studentId })
-      .then((r) => setTargets(r.data || []))
-      .catch(() => setTargets([]))
+      .then(async (r) => {
+        const rows = r.data || []
+        setTargets(rows)
+        await loadFeedbackFor(rows.map((t) => t.my_submission_id).filter(Boolean), setTargetFeedback)
+        setTargetFeedbackLoading(false)
+      })
+      .catch(() => { setTargets([]); setTargetFeedbackLoading(false) })
+  }
+
+  // Shared by Assignments/Milestones loaders — fetch approvals + remarks for
+  // a set of submission ids and reduce each to its latest feedback event,
+  // same digest already used on the Progress Reports tab.
+  async function loadFeedbackFor(submissionIds, setMap) {
+    if (submissionIds.length === 0) { setMap({}); return }
+    const [approvalLists, remarkLists] = await Promise.all([
+      Promise.all(submissionIds.map((id) => getApprovalsBySubmission(id).then((res) => res.data || []).catch(() => []))),
+      Promise.all(submissionIds.map((id) => getSubmissionRemarks(id).then((res) => res.data || []).catch(() => []))),
+    ])
+    const map = {}
+    submissionIds.forEach((id, i) => { const ev = latestFeedbackEvent(approvalLists[i], remarkLists[i]); if (ev) map[id] = ev })
+    setMap(map)
   }
 
   // ── Error / loading states ──────────────────────────────────────────────────
@@ -779,17 +822,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                         {r.remarks_count > 0 && <span>{r.remarks_count} remark{r.remarks_count === 1 ? '' : 's'}</span>}
                         <span>{formatDate(r.submitted_at || r.created_at)}</span>
                       </p>
-                      {feedback && (
-                        <div className="mt-2 rounded-lg bg-[color:var(--surface)] p-2.5">
-                          <p className={`text-[10px] font-bold uppercase tracking-wide ${feedback.kind === 'revision' ? 'text-orange-700' : 'text-[color:var(--muted)]'}`}>
-                            {feedback.kind === 'revision' ? 'Revision requested' : feedback.kind === 'approved' ? 'Approved' : feedback.kind === 'remark' ? 'Remark' : 'Feedback'}
-                            {feedback.stage ? ` · ${feedback.stage.replaceAll('_', ' ')}` : ''}
-                            {feedback.author ? ` · ${feedback.author}` : ''}
-                          </p>
-                          {feedback.text && <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs leading-5 text-[color:var(--text)]">{feedback.text}</p>}
-                        </div>
-                      )}
-                      {!feedback && <FeedbackPlaceholder loading={reportFeedbackLoading} className="mt-2" />}
+                      <FeedbackSnippet feedback={feedback} loading={reportFeedbackLoading} className="mt-2" />
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <StatusBadge status={r.status} />
@@ -838,28 +871,32 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
               </div>
             ) : (
               <div className="space-y-3">
-                {assignments.map((sub) => (
-                  <button
-                    key={sub.id}
-                    className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 text-left transition hover:border-[color:var(--accent)] hover:shadow-sm"
-                    onClick={() => openSub(sub)}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="line-clamp-2 font-semibold text-[color:var(--text)]">{sub.title}</p>
-                        <p className="mt-1 text-xs text-[color:var(--secondary)]">
-                          v{sub.version || 1} · {formatDate(sub.submitted_at)}
-                        </p>
+                {assignments.map((sub) => {
+                  const feedback = assignmentFeedback[sub.id]
+                  return (
+                    <button
+                      key={sub.id}
+                      className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 text-left transition hover:border-[color:var(--accent)] hover:shadow-sm"
+                      onClick={() => openSub(sub)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="line-clamp-2 font-semibold text-[color:var(--text)]">{sub.title}</p>
+                          <p className="mt-1 text-xs text-[color:var(--secondary)]">
+                            v{sub.version || 1} · {formatDate(sub.submitted_at)}
+                          </p>
+                        </div>
+                        <StatusBadge status={sub.status} />
                       </div>
-                      <StatusBadge status={sub.status} />
-                    </div>
-                    {sub.file_urls?.[0]?.name && (
-                      <p className="mt-2 flex items-center gap-1.5 text-xs text-[color:var(--muted)]">
-                        <FileText size={11} /> {sub.file_urls[0].name}
-                      </p>
-                    )}
-                  </button>
-                ))}
+                      {sub.file_urls?.[0]?.name && (
+                        <p className="mt-2 flex items-center gap-1.5 text-xs text-[color:var(--muted)]">
+                          <FileText size={11} /> {sub.file_urls[0].name}
+                        </p>
+                      )}
+                      <FeedbackSnippet feedback={feedback} loading={assignmentFeedbackLoading} />
+                    </button>
+                  )
+                })}
               </div>
             )
           ) : myAssignments.length === 0 ? (
@@ -903,6 +940,10 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                         )}
                       </div>
                     </div>
+
+                    {a.my_submission_id && (
+                      <FeedbackSnippet feedback={assignmentFeedback[a.my_submission_id]} loading={assignmentFeedbackLoading} className="mt-3" />
+                    )}
 
                     {isOpen && (
                       <AssignmentSubmitPanel
@@ -1001,8 +1042,19 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                             {state === 'needs_revision' ? 'Resubmit' : 'Add'}
                           </button>
                         )}
+                        {t.my_submission_id && !canSubmit && (
+                          <button
+                            onClick={() => openSub({ id: t.my_submission_id })}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-[color:var(--surface)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)]">
+                            View
+                          </button>
+                        )}
                       </div>
                     </div>
+
+                    {t.my_submission_id && (
+                      <FeedbackSnippet feedback={targetFeedback[t.my_submission_id]} loading={targetFeedbackLoading} className="mt-3" />
+                    )}
 
                     {isOpen && (
                       <TargetSubmitPanel
@@ -1526,18 +1578,7 @@ function ProgressCycleCard({ cycle, onChange, addToast }) {
         ))}
       </div>
 
-      {feedback ? (
-        <div className="mt-4 rounded-xl bg-[color:var(--surface)] p-3.5">
-          <p className={`text-[10px] font-bold uppercase tracking-wide ${feedback.kind === 'revision' ? 'text-orange-700' : 'text-[color:var(--muted)]'}`}>
-            {feedback.kind === 'revision' ? 'Revision requested' : feedback.kind === 'approved' ? 'Approved' : feedback.kind === 'remark' ? 'Remark' : 'Feedback'}
-            {feedback.stage ? ` · ${feedback.stage.replaceAll('_', ' ')}` : ''}
-            {feedback.author ? ` · ${feedback.author}` : ''}
-          </p>
-          {feedback.text && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-[color:var(--text)]">{feedback.text}</p>}
-        </div>
-      ) : (
-        <FeedbackPlaceholder loading={feedbackLoading} className="mt-4" />
-      )}
+      <FeedbackSnippet feedback={feedback} loading={feedbackLoading} className="mt-4" />
 
       {editable && (
         <button
@@ -1579,6 +1620,26 @@ function QuickStat({ label, value, sub }) {
  * "No feedback yet" box once it's confirmed there's genuinely nothing —
  * so it never looks like content is stuck loading.
  */
+/**
+ * The single feedback-digest renderer used across Progress Reports,
+ * Assignments and Milestones — shows the latest reviewer feedback/remark
+ * event, or falls back to FeedbackPlaceholder (shimmer while loading, a
+ * static "No feedback yet" once confirmed empty).
+ */
+function FeedbackSnippet({ feedback, loading, className = '' }) {
+  if (!feedback) return <FeedbackPlaceholder loading={loading} className={className} />
+  return (
+    <div className={`rounded-lg bg-[color:var(--surface)] p-2.5 ${className}`}>
+      <p className={`text-[10px] font-bold uppercase tracking-wide ${feedback.kind === 'revision' ? 'text-orange-700' : 'text-[color:var(--muted)]'}`}>
+        {feedback.kind === 'revision' ? 'Revision requested' : feedback.kind === 'approved' ? 'Approved' : feedback.kind === 'remark' ? 'Remark' : 'Feedback'}
+        {feedback.stage ? ` · ${feedback.stage.replaceAll('_', ' ')}` : ''}
+        {feedback.author ? ` · ${feedback.author}` : ''}
+      </p>
+      {feedback.text && <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs leading-5 text-[color:var(--text)]">{feedback.text}</p>}
+    </div>
+  )
+}
+
 function FeedbackPlaceholder({ loading, className = '' }) {
   if (loading) {
     return (
