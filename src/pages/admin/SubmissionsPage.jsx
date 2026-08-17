@@ -152,17 +152,22 @@ export default function SubmissionsPage() {
             onChange={(e) => setSearchInput(e.target.value)}
           />
         </label>
-        <select className="input w-44 py-2 text-sm" value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)}>
+        {/* flex-1 sets an explicit flex-basis, which is what actually sizes a flex
+            item on the main axis — that takes priority over `.input`'s own
+            `width: 100%`, so these size correctly instead of each claiming the
+            full row. min/max-w keeps them from going cramped or oversized, and
+            .toolbar's flex-wrap lets them drop to their own line on narrow screens. */}
+        <select className="input flex-1 min-w-[140px] max-w-[200px] py-2 text-sm" value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)}>
           <option value="">All batches</option>
           {batches.map((b) => <option key={b.id} value={b.id}>{b.code || b.name}</option>)}
         </select>
         {tab !== 'progress_report' && tab !== 'target' && (
-          <select className="input w-56 py-2 text-sm" value={assignmentFilter} onChange={(e) => setAssignmentFilter(e.target.value)}>
+          <select className="input flex-1 min-w-[160px] max-w-[240px] py-2 text-sm" value={assignmentFilter} onChange={(e) => setAssignmentFilter(e.target.value)}>
             <option value="">All assignments</option>
             {assignments.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
           </select>
         )}
-        <select className="input w-40 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+        <select className="input flex-1 min-w-[130px] max-w-[180px] py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
         {filtersActive && (

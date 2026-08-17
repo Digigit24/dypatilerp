@@ -26,7 +26,13 @@ import { usePermStore } from '../../store/permStore.js'
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
 
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp']
-const extOf = (file) => (file?.name || '').split('.').pop()?.toLowerCase() || ''
+// Prefer the descriptor's own `type` (the real extension, set by the backend
+// at upload time) — `name` has its extension stripped off before storage
+// (see videos.controller.js: `title: origName.replace(/\.[^.]+$/, '')`), so
+// parsing it back out of the filename silently fails for every real upload.
+// Fall back to parsing `.name` only for legacy { name, url } descriptors that
+// predate the `type` field.
+const extOf = (file) => (file?.type || (file?.name || '').split('.').pop() || '').toLowerCase()
 
 export default function SubmissionPreviewPage() {
   const { id } = useParams()
