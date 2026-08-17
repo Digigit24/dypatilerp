@@ -819,7 +819,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                       <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--secondary)]">
                         <span>Report {r.semester || 1}</span>
                         <span>{files.length} file{files.length === 1 ? '' : 's'}</span>
-                        {r.remarks_count > 0 && <span>{r.remarks_count} remark{r.remarks_count === 1 ? '' : 's'}</span>}
+                        {r.remarks_count > 0 && <span>{r.remarks_count} feedback item{r.remarks_count === 1 ? '' : 's'}</span>}
                         <span>{formatDate(r.submitted_at || r.created_at)}</span>
                       </p>
                       <FeedbackSnippet feedback={feedback} loading={reportFeedbackLoading} className="mt-2" />
@@ -1631,7 +1631,7 @@ function FeedbackSnippet({ feedback, loading, className = '' }) {
   return (
     <div className={`rounded-lg bg-[color:var(--surface)] p-2.5 ${className}`}>
       <p className={`text-[10px] font-bold uppercase tracking-wide ${feedback.kind === 'revision' ? 'text-orange-700' : 'text-[color:var(--muted)]'}`}>
-        {feedback.kind === 'revision' ? 'Revision requested' : feedback.kind === 'approved' ? 'Approved' : feedback.kind === 'remark' ? 'Remark' : 'Feedback'}
+        {feedback.kind === 'revision' ? 'Revision requested' : feedback.kind === 'approved' ? 'Approved' : 'Feedback'}
         {feedback.stage ? ` · ${feedback.stage.replaceAll('_', ' ')}` : ''}
         {feedback.author ? ` · ${feedback.author}` : ''}
       </p>

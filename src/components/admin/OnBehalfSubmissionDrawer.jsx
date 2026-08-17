@@ -278,7 +278,7 @@ export default function OnBehalfSubmissionDrawer({ kind, studentUserId = null, o
           {/* Remark */}
           <label className="block">
             <span className="text-sm font-semibold text-[color:var(--text)]">
-              Remark / feedback <span className="font-normal text-[color:var(--muted)]">(optional)</span>
+              Feedback <span className="font-normal text-[color:var(--muted)]">(optional)</span>
             </span>
             <textarea
               className="textarea mt-2 h-24 w-full"

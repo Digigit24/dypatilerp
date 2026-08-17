@@ -138,9 +138,17 @@ export const getOnboardingStatus = async (userId) => {
   // Skip flags let a scholar in without finishing onboarding, but they stay
   // LIVE — never stamped to onboarding_completed_at — so turning a skip back
   // off immediately re-locks a scholar who hasn't genuinely completed.
-  const { rows: [globalSetting] } = await query(`SELECT value FROM app_settings WHERE key='onboarding'`);
+  const [{ rows: [globalSetting] }, { rows: [enrollment] }] = await Promise.all([
+    query(`SELECT value FROM app_settings WHERE key='onboarding'`),
+    query(
+      `SELECT batch_id FROM batch_enrollments WHERE user_id=$1 AND status='active' ORDER BY enrolled_at DESC LIMIT 1`,
+      [userId]
+    ),
+  ]);
   const globalSkip = !!globalSetting?.value?.skip_all;
-  const complete = genuinelyComplete || details.onboarding_skip || globalSkip;
+  const skipBatchIds = Array.isArray(globalSetting?.value?.skip_batch_ids) ? globalSetting.value.skip_batch_ids : [];
+  const batchSkip = Boolean(enrollment?.batch_id) && skipBatchIds.includes(enrollment.batch_id);
+  const complete = genuinelyComplete || details.onboarding_skip || globalSkip || batchSkip;
 
   return {
     complete,
@@ -151,5 +159,6 @@ export const getOnboardingStatus = async (userId) => {
     missing_documents: missingDocuments,
     onboarding_skip: details.onboarding_skip,
     global_skip: globalSkip,
+    batch_skip: batchSkip,
   };
 };

@@ -12,7 +12,7 @@
  */
 import {
   ArrowDown, ArrowUp, Bell, CalendarClock, CheckCircle2, ClipboardCheck, Clock, GitBranch, GraduationCap,
-  KeyRound, Layers, Loader2, Mail, MailCheck, Network, Plus, RefreshCw, Save, Shield, ShieldOff, Target, Trash2, Users, Wand2, XCircle, Zap,
+  KeyRound, Layers, Loader2, Mail, MailCheck, Network, Plus, RefreshCw, Save, Search, Shield, ShieldOff, Target, Trash2, Users, Wand2, XCircle, Zap,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { getCourses, getCourseById, updateCourse } from '../../api/services/courseService.js'
@@ -225,17 +225,26 @@ function PersonNode({ a, full = false }) {
 function OnboardingSettingsTab() {
   const addToast = useUiStore((s) => s.addToast)
   const [skipAll, setSkipAll] = useState(null)   // null = loading
-  const [busy, setBusy] = useState(false)
+  const [skipBatchIds, setSkipBatchIds] = useState([])
+  const [batches, setBatches] = useState(null)
+  const [search, setSearch] = useState('')
+  const [busy, setBusy] = useState(false)        // global toggle
+  const [busyBatchId, setBusyBatchId] = useState(null)
 
   useEffect(() => {
-    getSettings('onboarding').then((r) => setSkipAll(!!r.data?.skip_all)).catch(() => setSkipAll(false))
+    getSettings('onboarding')
+      .then((r) => { setSkipAll(!!r.data?.skip_all); setSkipBatchIds(Array.isArray(r.data?.skip_batch_ids) ? r.data.skip_batch_ids : []) })
+      .catch(() => { setSkipAll(false); setSkipBatchIds([]) })
+    getBatches({}).then((r) => setBatches(r.data || [])).catch(() => setBatches([]))
   }, [])
 
-  const toggle = async () => {
+  const save = async (patch) => saveSettings('onboarding', { skip_all: skipAll, skip_batch_ids: skipBatchIds, ...patch })
+
+  const toggleAll = async () => {
     const next = !skipAll
     setBusy(true)
     try {
-      await saveSettings('onboarding', { skip_all: next })
+      await save({ skip_all: next })
       setSkipAll(next)
       addToast({ type: 'success', title: next ? 'Onboarding skip enabled for everyone.' : 'Onboarding skip disabled.' })
     } catch (err) {
@@ -245,32 +254,105 @@ function OnboardingSettingsTab() {
     }
   }
 
-  if (skipAll === null) return <SkeletonCard rows={2} />
+  const toggleBatch = async (batch) => {
+    const on = !skipBatchIds.includes(batch.id)
+    const next = on ? [...skipBatchIds, batch.id] : skipBatchIds.filter((id) => id !== batch.id)
+    setBusyBatchId(batch.id)
+    try {
+      await save({ skip_batch_ids: next })
+      setSkipBatchIds(next)
+      addToast({ type: 'success', title: on ? `Onboarding skip enabled for ${batch.name}.` : `Onboarding skip disabled for ${batch.name}.` })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Save failed', message: err.response?.data?.message })
+    } finally {
+      setBusyBatchId(null)
+    }
+  }
+
+  if (skipAll === null || batches === null) return <SkeletonCard rows={4} />
+
+  const q = search.trim().toLowerCase()
+  const filteredBatches = q
+    ? batches.filter((b) => (b.name || '').toLowerCase().includes(q) || (b.code || '').toLowerCase().includes(q) || (b.course_name || '').toLowerCase().includes(q))
+    : batches
 
   return (
-    <div className="card flex flex-wrap items-center justify-between gap-3 p-6">
-      <div className="flex items-center gap-3">
-        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${skipAll ? 'bg-amber-100 text-amber-600' : 'bg-[color:var(--surface)] text-[color:var(--secondary)]'}`}>
-          <ShieldOff size={19} />
-        </span>
-        <div>
-          <p className="text-sm font-semibold text-[color:var(--text)]">Allow all users to skip onboarding</p>
-          <p className="mt-0.5 max-w-md text-xs text-[color:var(--secondary)]">
-            Global override — every scholar gets full app access regardless of onboarding status while this is on.
-            For a single scholar, use the toggle on their profile page instead.
-          </p>
+    <div className="space-y-4">
+      <div className="card flex flex-wrap items-center justify-between gap-3 p-6">
+        <div className="flex items-center gap-3">
+          <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${skipAll ? 'bg-amber-100 text-amber-600' : 'bg-[color:var(--surface)] text-[color:var(--secondary)]'}`}>
+            <ShieldOff size={19} />
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-[color:var(--text)]">Allow all scholars to skip onboarding</p>
+            <p className="mt-0.5 max-w-md text-xs text-[color:var(--secondary)]">
+              Global override — every scholar in every batch gets full app access regardless of onboarding status while this is on.
+              For a single scholar, use the toggle on their profile page instead; for one or a few batches, use the list below.
+            </p>
+          </div>
         </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={skipAll}
+          disabled={busy}
+          onClick={toggleAll}
+          className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-50 ${skipAll ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}
+        >
+          <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${skipAll ? 'left-6' : 'left-1'}`} />
+        </button>
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={skipAll}
-        disabled={busy}
-        onClick={toggle}
-        className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-50 ${skipAll ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}
-      >
-        <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${skipAll ? 'left-6' : 'left-1'}`} />
-      </button>
+
+      <div className="card p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-[color:var(--text)]">Per-batch override</p>
+            <p className="mt-0.5 text-xs text-[color:var(--secondary)]">
+              Skip onboarding for every scholar in a specific batch, independent of the global switch above.
+            </p>
+          </div>
+          <label className="admin-search soft-panel flex h-9 w-full max-w-[280px] items-center gap-2 rounded-full px-3">
+            <Search size={14} className="text-[color:var(--muted)]" />
+            <input
+              className="w-full bg-transparent text-sm outline-none placeholder:text-[color:var(--muted)]"
+              placeholder="Search batch or course…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+        </div>
+
+        {filteredBatches.length === 0 ? (
+          <p className="mt-4 text-center text-sm text-[color:var(--secondary)]">
+            {batches.length === 0 ? 'No batches found.' : `No batches match "${search}"`}
+          </p>
+        ) : (
+          <div className="mt-4 max-h-[420px] space-y-2 overflow-y-auto">
+            {filteredBatches.map((b) => {
+              const on = skipBatchIds.includes(b.id)
+              return (
+                <div key={b.id} className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[color:var(--text)]">{b.name}</p>
+                    <p className="truncate text-xs text-[color:var(--secondary)]">{b.code}{b.course_name ? ` · ${b.course_name}` : ''}</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={on}
+                    disabled={busyBatchId === b.id || skipAll}
+                    title={skipAll ? 'Global skip is already on — this batch is covered' : undefined}
+                    onClick={() => toggleBatch(b)}
+                    className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-50 ${on ? 'bg-[color:var(--accent)]' : 'bg-[color:var(--border)]'}`}
+                  >
+                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

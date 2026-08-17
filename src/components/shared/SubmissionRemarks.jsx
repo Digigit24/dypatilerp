@@ -67,7 +67,7 @@ export default function SubmissionRemarks({ submissionId, onCountChange }) {
       onCountChange?.(next.length)
       setDraft('')
     } catch (err) {
-      addToast({ type: 'error', title: 'Could not save the remark', message: err.response?.data?.message || err.message })
+      addToast({ type: 'error', title: 'Could not save the feedback', message: err.response?.data?.message || err.message })
     } finally { setBusy(false) }
   }
 
@@ -78,14 +78,14 @@ export default function SubmissionRemarks({ submissionId, onCountChange }) {
       setRemarks(next)
       onCountChange?.(next.length)
     } catch (err) {
-      addToast({ type: 'error', title: 'Could not delete the remark', message: err.response?.data?.message || err.message })
+      addToast({ type: 'error', title: 'Could not delete the feedback', message: err.response?.data?.message || err.message })
     }
   }
 
   return (
     <div>
       <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--muted)]">
-        <MessageSquare size={13} /> Remarks &amp; Feedback
+        <MessageSquare size={13} /> Feedback
       </p>
 
       {canPost && (
@@ -94,7 +94,7 @@ export default function SubmissionRemarks({ submissionId, onCountChange }) {
             className="textarea h-20 w-full"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Add feedback or a remark for this report…"
+            placeholder="Add feedback for this report…"
           />
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             {isAdmin ? (
@@ -118,7 +118,7 @@ export default function SubmissionRemarks({ submissionId, onCountChange }) {
               onClick={post}
             >
               {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              {busy ? 'Posting…' : 'Post Remark'}
+              {busy ? 'Posting…' : 'Post Feedback'}
             </button>
           </div>
           {isAdmin && postAs !== 'admin' && (
@@ -131,10 +131,10 @@ export default function SubmissionRemarks({ submissionId, onCountChange }) {
 
       <div className="mt-3 space-y-2">
         {remarks === null ? (
-          <p className="text-sm text-[color:var(--secondary)]">Loading remarks…</p>
+          <p className="text-sm text-[color:var(--secondary)]">Loading feedback…</p>
         ) : remarks.length === 0 ? (
           <p className="rounded-lg bg-[color:var(--surface)] px-4 py-3 text-sm text-[color:var(--secondary)]">
-            No remarks yet.{canPost ? ' Be the first to leave feedback.' : ''}
+            No feedback yet.{canPost ? ' Be the first to leave feedback.' : ''}
           </p>
         ) : (
           remarks.map((r) => {
@@ -159,7 +159,7 @@ export default function SubmissionRemarks({ submissionId, onCountChange }) {
                   {(mine || isAdmin) && (
                     <button
                       type="button"
-                      title="Delete remark"
+                      title="Delete feedback"
                       className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[color:var(--muted)] hover:bg-[color:var(--border)] hover:text-red-500"
                       onClick={() => remove(r.id)}
                     >

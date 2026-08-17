@@ -410,7 +410,7 @@ export default function SubmissionPreviewPage() {
                 whether this submission kind has a chain at all. */}
             <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
               <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">
-                {hasChain ? 'Remarks' : submission.submission_type === 'assignment' ? 'Feedback (no approval step for assignments)' : 'Feedback'}
+                {!hasChain && submission.submission_type === 'assignment' ? 'Feedback (no approval step for assignments)' : 'Feedback'}
               </p>
               <SubmissionRemarks submissionId={submission.id} onCountChange={load} />
             </div>
