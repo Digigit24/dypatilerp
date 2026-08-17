@@ -477,15 +477,20 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         </div>
       </div>
 
-      {/* ── Outer tabs ── */}
-      <div className="mb-3 flex flex-wrap gap-2">
-        {TABS.map(({ key, label }) => (
-          <button key={key} onClick={() => { setTab(key); setSubTab(key === 'profile' ? 'profile' : 'reports') }}
-            className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition ${tab === key ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* ── Outer tabs — admin only. A student now reaches Submissions through
+          its own full-page route (sidenav "Submissions"); this component is
+          mounted fixed on whichever single section the page requested
+          (defaultTab), so there's nothing to switch between here. ── */}
+      {isAdminView && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {TABS.map(({ key, label }) => (
+            <button key={key} onClick={() => { setTab(key); setSubTab(key === 'profile' ? 'profile' : 'reports') }}
+              className={`rounded-lg px-5 py-2.5 text-sm font-semibold transition ${tab === key ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--card)] text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Inner subtabs (rendered only when an outer tab is active) ── */}
       {tab === 'profile' && (

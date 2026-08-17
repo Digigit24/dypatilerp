@@ -37,10 +37,9 @@ export default function StudentLayout() {
     title: 'STUDENT',
     items: [
       { to: '/student/dashboard', label: 'Dashboard', icon: Home },
-      // Submissions replaces the old Assignments / My Submissions / Progress Reports nav
-      // items — StudentProfileView now hosts Progress Reports, Assignments and Milestones
-      // as inner subtabs of its Submissions outer tab.
-      { to: '/student/profile#submissions', label: 'Submissions', icon: FileText },
+      // Its own full-page route now (not a tab inside My Profile) — hosts
+      // Progress Reports, Assignments and Milestones as subtabs.
+      { to: '/student/submissions', label: 'Submissions', icon: FileText },
       { to: '/student/formats', label: 'Formats', icon: FileDown },
       // Fees and Research Profile are folded into My Profile as subtabs (student-side only).
       // Their legacy top-level routes still resolve for deep links.
