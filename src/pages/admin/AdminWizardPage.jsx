@@ -11,16 +11,18 @@
  *   Courses        — full course management (embedded)
  */
 import {
-  ArrowDown, ArrowUp, Bell, CheckCircle2, ClipboardCheck, Clock, GitBranch, GraduationCap,
-  KeyRound, Layers, Loader2, Mail, MailCheck, Network, Plus, RefreshCw, Save, Shield, Trash2, Users, Wand2, XCircle, Zap,
+  ArrowDown, ArrowUp, Bell, CalendarClock, CheckCircle2, ClipboardCheck, Clock, GitBranch, GraduationCap,
+  KeyRound, Layers, Loader2, Mail, MailCheck, Network, Plus, RefreshCw, Save, Shield, Target, Trash2, Users, Wand2, XCircle, Zap,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { getCourses, getCourseById, updateCourse } from '../../api/services/courseService.js'
-import { getBatches, updateApprovalConfig } from '../../api/services/batchService.js'
+import { advanceSemester, getBatches, getBatchStudents, updateApprovalConfig } from '../../api/services/batchService.js'
+import { bulkCreateTargets } from '../../api/services/targetService.js'
 import { getAssignments } from '../../api/services/rolesService.js'
 import { getStudents } from '../../api/services/studentService.js'
 import { bulkSendCredentials } from '../../api/services/userService.js'
 import { getNotificationQueue, runNotificationScans } from '../../api/services/notificationService.js'
+import ConfirmDialog from '../../components/shared/ConfirmDialog.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import TeamAssignmentsPage from './TeamAssignmentsPage.jsx'
@@ -32,6 +34,7 @@ const TABS = [
   { key: 'org',           label: 'Org Chart',     icon: Network },
   { key: 'team',          label: 'Team',          icon: Users },
   { key: 'workflows',     label: 'Workflows',     icon: GitBranch },
+  { key: 'milestones',    label: 'Milestones',    icon: Target },
   { key: 'notifications', label: 'Notifications', icon: Bell },
   { key: 'credentials',   label: 'Credentials',   icon: KeyRound },
   { key: 'courses',       label: 'Courses',       icon: GraduationCap },
@@ -92,6 +95,8 @@ export default function AdminWizardPage() {
       {tab === 'org' && (course ? <OrgChartTab course={course} /> : <NoCourse />)}
       {tab === 'team' && (course ? <TeamAssignmentsPage courseOverride={course} embedded /> : <NoCourse />)}
       {tab === 'workflows' && (course ? <WorkflowsTab course={course} /> : <NoCourse />)}
+
+      {tab === 'milestones' && (course ? <MilestonesTab course={course} key={course.id} /> : <NoCourse />)}
       {tab === 'notifications' && (course ? <NotificationsTab course={course} key={course.id} /> : <NoCourse />)}
       {tab === 'credentials' && (course ? <CredentialsTab course={course} key={`cred-${course.id}`} /> : <NoCourse />)}
       {tab === 'courses' && <CoursesPage embedded />}
@@ -320,6 +325,193 @@ function WorkflowsTab({ course }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// Milestones — per-batch, per-semester bulk target creation + semester advance
+// ════════════════════════════════════════════════════════════════════════════════
+const BLANK_MILESTONE = { name: '', description: '', due_date: '', is_mandatory: true }
+
+function MilestonesTab({ course }) {
+  const addToast = useUiStore((s) => s.addToast)
+  const [batches, setBatches] = useState(null)
+  const [semesters, setSemesters] = useState({})     // batchId -> { current: n, distribution: {sem: count} }
+  const [openId, setOpenId] = useState(null)          // which batch's creator panel is expanded
+  const [semester, setSemester] = useState(1)
+  const [rows, setRows] = useState([{ ...BLANK_MILESTONE }])
+  const [creating, setCreating] = useState(false)
+  const [advanceTarget, setAdvanceTarget] = useState(null)   // batch pending confirm
+  const [advancing, setAdvancing] = useState(false)
+
+  const loadSemesters = (batchList) => {
+    batchList.forEach((b) => {
+      getBatchStudents(b.id).then((r) => {
+        const dist = {}
+        for (const s of r.data || []) {
+          const sem = s.current_semester || 1
+          dist[sem] = (dist[sem] || 0) + 1
+        }
+        const sems = Object.keys(dist).map(Number)
+        setSemesters((p) => ({ ...p, [b.id]: { distribution: dist, mixed: sems.length > 1, max: sems.length ? Math.max(...sems) : 1 } }))
+      }).catch(() => {})
+    })
+  }
+
+  useEffect(() => {
+    setBatches(null)
+    setSemesters({})
+    setOpenId(null)
+    getBatches({ course_id: course.id }).then((r) => {
+      const list = r.data || []
+      setBatches(list)
+      loadSemesters(list)
+    })
+  }, [course.id])
+
+  if (!batches) return <SkeletonCard rows={4} />
+  if (batches.length === 0) return <div className="card p-10 text-center text-sm text-[color:var(--secondary)]">No batches in this course yet.</div>
+
+  const openCreator = (b) => {
+    setOpenId(b.id)
+    setSemester(semesters[b.id]?.max || 1)
+    setRows([{ ...BLANK_MILESTONE }])
+  }
+  const updateRow = (i, patch) => setRows((r) => r.map((row, j) => j === i ? { ...row, ...patch } : row))
+  const addRow = () => setRows((r) => [...r, { ...BLANK_MILESTONE }])
+  const removeRow = (i) => setRows((r) => r.filter((_, j) => j !== i))
+
+  const submitBulk = async (b) => {
+    const clean = rows.filter((r) => r.name.trim())
+    if (!clean.length) { addToast({ type: 'error', title: 'Add at least one milestone name.' }); return }
+    setCreating(true)
+    try {
+      const r = await bulkCreateTargets({
+        batch_id: b.id,
+        semester,
+        targets: clean.map((row, i) => ({
+          name: row.name.trim(),
+          description: row.description.trim() || undefined,
+          due_date: row.due_date || undefined,
+          is_mandatory: row.is_mandatory,
+          order_index: i,
+        })),
+      })
+      addToast({ type: 'success', title: r.message || `${clean.length} milestone(s) created for Semester ${semester} — ${b.name}.` })
+      setOpenId(null)
+    } catch (err) {
+      addToast({ type: 'error', title: 'Create failed', message: err.response?.data?.message })
+    } finally { setCreating(false) }
+  }
+
+  const confirmAdvance = async () => {
+    const b = advanceTarget
+    setAdvancing(true)
+    try {
+      const r = await advanceSemester(b.id)
+      const d = r.data || {}
+      const warn = d.warnings?.length
+        ? ` ${d.warnings.length} scholar(s) have open milestones or unpaid fees from the semester they left — worth a follow-up.`
+        : ''
+      addToast({ type: 'success', title: `Advanced ${d.advanced ?? 0} scholar(s) in ${b.name}.${warn}` })
+      loadSemesters([b])
+    } catch (err) {
+      addToast({ type: 'error', title: 'Advance failed', message: err.response?.data?.message })
+    } finally { setAdvancing(false); setAdvanceTarget(null) }
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      {batches.map((b) => {
+        const semInfo = semesters[b.id]
+        const semLabel = !semInfo ? '…' : semInfo.mixed
+          ? Object.entries(semInfo.distribution).map(([s, n]) => `${n} on Sem ${s}`).join(', ')
+          : `Semester ${semInfo.max}`
+        const isOpen = openId === b.id
+        return (
+          <div key={b.id} className="card p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[color:var(--surface)] text-[color:var(--secondary)]"><Target size={16} /></span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[color:var(--text)]">{b.name}</p>
+                  <p className="flex items-center gap-1 text-[11px] text-[color:var(--secondary)]"><CalendarClock size={11} /> {semLabel}</p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  onClick={() => setAdvanceTarget(b)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--border)] px-2.5 py-1.5 text-[11px] font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
+                  title="Advance every active scholar in this batch to the next semester">
+                  <ArrowUp size={12} /> Start next semester
+                </button>
+                <button
+                  onClick={() => isOpen ? setOpenId(null) : openCreator(b)}
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition ${isOpen ? 'bg-[color:var(--accent)] text-white' : 'border border-[color:var(--border)] text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]'}`}>
+                  <Plus size={12} /> Add milestones
+                </button>
+              </div>
+            </div>
+
+            {isOpen && (
+              <div className="mt-4 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+                <label className="flex items-center gap-2 text-[11px] font-semibold text-[color:var(--secondary)]">
+                  Semester
+                  <input type="number" min={1} max={20} className="input h-7 w-16 px-2 py-0 text-xs"
+                    value={semester} onChange={(e) => setSemester(Math.max(1, Number(e.target.value) || 1))} />
+                </label>
+
+                <div className="mt-3 space-y-2">
+                  {rows.map((row, i) => (
+                    <div key={i} className="rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] p-2.5">
+                      <div className="flex items-center gap-2">
+                        <input className="input h-8 flex-1 text-xs" placeholder="Milestone name (e.g. Literature Review)"
+                          value={row.name} onChange={(e) => updateRow(i, { name: e.target.value })} />
+                        <input type="date" className="input h-8 w-36 text-xs"
+                          value={row.due_date} onChange={(e) => updateRow(i, { due_date: e.target.value })} />
+                        <button onClick={() => removeRow(i)} disabled={rows.length === 1}
+                          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[color:var(--muted)] hover:bg-red-50 hover:text-red-500 disabled:opacity-30">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                      <input className="input mt-1.5 h-7 w-full text-[11px]" placeholder="Description (optional)"
+                        value={row.description} onChange={(e) => updateRow(i, { description: e.target.value })} />
+                      <label className="mt-1.5 flex items-center gap-1.5 text-[11px] text-[color:var(--secondary)]">
+                        <input type="checkbox" checked={row.is_mandatory} onChange={(e) => updateRow(i, { is_mandatory: e.target.checked })} />
+                        Mandatory
+                      </label>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <button onClick={addRow}
+                    className="inline-flex items-center gap-1 rounded-xl border border-dashed border-[color:var(--border)] px-2.5 py-1.5 text-[11px] font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]">
+                    <Plus size={11} /> Another milestone
+                  </button>
+                  <button onClick={() => submitBulk(b)} disabled={creating}
+                    className="btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs">
+                    {creating ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                    Create for all active scholars
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      <ConfirmDialog
+        open={Boolean(advanceTarget)}
+        title="Start Next Semester"
+        message={advanceTarget && `Advance every active scholar in ${advanceTarget.name} to the next semester? This opens their next Progress Report window. Scholars with unfinished work in their current semester are not blocked, just flagged afterward for follow-up.`}
+        confirmLabel="Start Next Semester"
+        tone="accent"
+        busy={advancing}
+        onConfirm={confirmAdvance}
+        onClose={() => setAdvanceTarget(null)}
+      />
     </div>
   )
 }
