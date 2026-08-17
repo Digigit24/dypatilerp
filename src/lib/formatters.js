@@ -6,6 +6,12 @@ export const formatDate = (value) => {
   return Number.isNaN(date.getTime()) ? '-' : format(date, 'dd MMM yyyy')
 }
 
+export const formatDateTime = (value) => {
+  if (!value) return '-'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '-' : format(date, 'dd MMM yyyy, hh:mm a')
+}
+
 export const timeAgo = (value) => {
   if (!value) return ''
   const date = new Date(value)

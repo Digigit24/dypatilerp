@@ -24,7 +24,7 @@ import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
-import { formatDate } from '../../lib/formatters.js'
+import { formatDateTime } from '../../lib/formatters.js'
 import { useCourseStore } from '../../store/courseStore.js'
 
 // Assignments have no approval chain — only draft/submitted are meaningful
@@ -287,7 +287,7 @@ export default function SubmissionsPage() {
                       </td>
                       <td className="px-4 py-3 text-[color:var(--secondary)]">{s.batch_name || '—'}</td>
                       <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                      <td className="px-4 py-3 text-[color:var(--secondary)]">{formatDate(s.submitted_at)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-[color:var(--secondary)]">{formatDateTime(s.submitted_at)}</td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         {firstFile
                           ? <SubmissionFileLink file={firstFile} label={fileCount > 1 ? `Open (+${fileCount - 1})` : 'Open'} />
