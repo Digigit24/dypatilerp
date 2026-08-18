@@ -6,14 +6,32 @@ import { logout } from '../../api/services/userService.js'
 import { useAuthStore } from '../../store/authStore.js'
 import { useOnboardingStore } from '../../store/onboardingStore.js'
 
-const TOTAL_FIELDS = 8
-const TOTAL_DOCUMENTS = 11
-
+// Field/document counts come from the API (status.total_info_fields /
+// total_documents) — never hardcode them here. A hardcoded count silently
+// drifts out of sync whenever a field is added/removed server-side, which is
+// exactly what stuck every scholar at 95% after middle_name was added to
+// users without a matching bump here (it was also wrongly required — see
+// student-profile.service.js's INFO_FIELDS comment).
 const completionPct = (status) => {
   if (!status) return 0
-  const total = TOTAL_FIELDS + TOTAL_DOCUMENTS
+  const total = (status.total_info_fields || 0) + (status.total_documents || 0)
+  if (!total) return 0
   const done = total - (status.missing_info_fields?.length || 0) - (status.missing_documents?.length || 0)
   return Math.round((Math.max(done, 0) / total) * 100)
+}
+
+// Human-readable labels for the missing-field/slot keys the backend returns,
+// so a stuck scholar can actually see what's left instead of just a percent.
+const FIELD_LABELS = {
+  first_name: 'First name', last_name: 'Last name', phone: 'Mobile number',
+  father_name: "Father's name", mother_name: "Mother's name",
+  date_of_birth: 'Date of birth', postal_address: 'Postal address', blood_group: 'Blood group',
+}
+const SLOT_LABELS = {
+  cv: 'CV', research_proposal: 'Research proposal', publications_list: 'Publications list',
+  research_statement: 'Research statement', passport: 'Passport', aadhar_card: 'Aadhaar card',
+  pan_card: 'PAN card', marksheet_graduation: 'Graduation marksheet',
+  marksheet_postgraduation: 'Post-graduation marksheet', phd_result: 'PhD result', photo: 'Passport photo',
 }
 
 export default function OnboardingPage() {
@@ -63,12 +81,23 @@ export default function OnboardingPage() {
             This only needs to be done once.
           </p>
           {status && !status.complete && (
-            <div className="mt-4 flex items-center gap-3 text-sm">
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-[color:var(--surface-strong)]">
-                <div className="h-2 rounded-full bg-[color:var(--accent)] transition-all" style={{ width: `${pct}%` }} />
+            <>
+              <div className="mt-4 flex items-center gap-3 text-sm">
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-[color:var(--surface-strong)]">
+                  <div className="h-2 rounded-full bg-[color:var(--accent)] transition-all" style={{ width: `${pct}%` }} />
+                </div>
+                <span className="shrink-0 font-semibold text-[color:var(--secondary)]">{pct}% complete</span>
               </div>
-              <span className="shrink-0 font-semibold text-[color:var(--secondary)]">{pct}% complete</span>
-            </div>
+              {(status.missing_info_fields?.length > 0 || status.missing_documents?.length > 0) && (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <p className="font-semibold">Still needed:</p>
+                  <ul className="mt-1 list-inside list-disc space-y-0.5">
+                    {status.missing_info_fields?.map((f) => <li key={f}>{FIELD_LABELS[f] || f}</li>)}
+                    {status.missing_documents?.map((s) => <li key={s}>{SLOT_LABELS[s] || s}</li>)}
+                  </ul>
+                </div>
+              )}
+            </>
           )}
           {status?.complete && (
             <div className="mt-4 flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">

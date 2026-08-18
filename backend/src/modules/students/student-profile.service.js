@@ -16,8 +16,14 @@ export const ALL_SLOTS = [...UPLOAD_SLOTS, ...DOCUMENT_SLOTS];
 // new student_profile_details table, one row per student) + first_name /
 // last_name / phone, which already live on `users`. Email is intentionally
 // excluded — it's the account identifier and isn't part of onboarding.
+// middle_name is deliberately NOT here — it's optional (see CLAUDE.md /
+// commit "Add optional middle name for scholars"), so it must never gate
+// onboarding completeness. It was mistakenly added here once, which locked
+// every scholar without a middle name at 95% forever (19/20 fields+slots,
+// since middle_name could never be satisfied) — see the "Fix onboarding
+// completeness wrongly requiring middle_name" fix commit.
 const PROFILE_DETAIL_FIELDS = ['father_name', 'mother_name', 'date_of_birth', 'postal_address', 'blood_group'];
-const USER_INFO_FIELDS = ['first_name', 'middle_name', 'last_name', 'phone'];
+const USER_INFO_FIELDS = ['first_name', 'last_name', 'phone'];
 export const INFO_FIELDS = [...USER_INFO_FIELDS, ...PROFILE_DETAIL_FIELDS];
 
 // ─── Profile details (personal info) ──────────────────────────────────────────
@@ -119,7 +125,7 @@ export const listDocuments = async (userId) => {
 
 // ─── Onboarding completeness gate ─────────────────────────────────────────────
 //
-// Complete = all 8 info fields set AND all 11 slots (4 uploads + 7 documents)
+// Complete = every field in INFO_FIELDS set AND every slot in ALL_SLOTS
 // present. Computed and stamped server-side only — a client can never claim
 // completion. Once stamped, onboarding_completed_at is never cleared again:
 // there's no "unset a field" flow, so a scholar who already passed the gate
@@ -170,6 +176,10 @@ export const getOnboardingStatus = async (userId) => {
     documents_complete: missingDocuments.length === 0,
     missing_info_fields: missingInfoFields,
     missing_documents: missingDocuments,
+    // Counts, not hardcoded on the client — the frontend previously hardcoded
+    // these and silently drifted out of sync when a field was added/removed.
+    total_info_fields: INFO_FIELDS.length,
+    total_documents: documents.length,
     onboarding_skip: details.onboarding_skip,
     global_skip: globalSkip,
     batch_skip: batchSkip,
