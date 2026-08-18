@@ -104,6 +104,10 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [student,         setStudent]         = useState(null)
   const [user,            setUser]            = useState(null)
   const [research,        setResearch]        = useState(null)
+  // Populated by StudentOnboardingPanel's own status fetch (below) — surfaced
+  // here so the admin sees onboarding completeness at a glance on the header,
+  // not just buried inside the Profile subtab.
+  const [onboardingStatus, setOnboardingStatus] = useState(null)
   // Milestones now come from the targets module (/api/targets). Each target row may
   // already have its latest submission joined on it (s.id, s.status, s.submitted_at).
   const [targets,         setTargets]         = useState([])
@@ -568,6 +572,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <StatusBadge status={student.status} />
+              {isAdminView && <OnboardingBadge status={onboardingStatus} />}
               {student.profile?.linkedin_url && (
                 <a href={student.profile.linkedin_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-[color:var(--accent)] hover:underline">
                   <Link2 size={12} /> LinkedIn
@@ -826,7 +831,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
               Real API wiring against /students/:userId/profile-details and
               /students/:userId/documents/:slot (replaces the old CERT_TYPES
               block, which only toggled local state and never called an API). */}
-          <StudentOnboardingPanel userId={studentId} editable={canEditProfile} />
+          <StudentOnboardingPanel userId={studentId} editable={canEditProfile} onStatusChange={setOnboardingStatus} />
         </div>
       )}
 
@@ -1669,6 +1674,32 @@ function IR({ label, value }) {
       <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">{label}</p>
       <div className="mt-1.5 text-sm font-semibold text-[color:var(--text)]">{value ?? '—'}</div>
     </div>
+  )
+}
+
+// Onboarding status pill for the admin profile header. Reads whatever
+// StudentOnboardingPanel's own fetch produced (via onStatusChange) — no
+// separate API call. Renders nothing until that fetch resolves, so it never
+// flashes a wrong state.
+function OnboardingBadge({ status }) {
+  if (!status) return null
+  if (status.complete) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+        Onboarding complete
+      </span>
+    )
+  }
+  const missing = (status.missing_info_fields?.length || 0) + (status.missing_documents?.length || 0)
+  const total = (status.total_info_fields || 0) + (status.total_documents || 0)
+  const pct = total ? Math.round(((total - missing) / total) * 100) : 0
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700"
+      title={`Missing: ${[...(status.missing_info_fields || []), ...(status.missing_documents || [])].join(', ') || '—'}`}
+    >
+      Onboarding {pct}% · {missing} item{missing === 1 ? '' : 's'} left
+    </span>
   )
 }
 
