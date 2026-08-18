@@ -43,6 +43,7 @@ jobs:
                cp -r dist/* ../ && \
                cp -r dist/* /home/divineblisspuna/public_html/postdoc.dyperf.com/ && \
                cd backend && \
+               (grep -q '^FRONTEND_URL=' .env && sed -i 's#^FRONTEND_URL=.*#FRONTEND_URL=https://app.dyperf.com#' .env || echo 'FRONTEND_URL=https://app.dyperf.com' >> .env) && \
                npm ci && \
                pm2 restart dyperf-api --update-env && \
                pm2 save"
