@@ -180,3 +180,158 @@ export const uploadDocument = asyncHandler(async (req, res) => {
     await cleanup();
   }
 });
+
+// ─── Official letters (admin-issued, read-only for the scholar) ──────────────
+// Same owner-slot mechanism and validation as onboarding documents above, but
+// the upload route is staff-only (requireRole, not permission scope — a
+// scholar's own students:update grant must never reach it). See
+// student-profile.service.js#OFFICIAL_LETTER_SLOTS.
+
+export const listOfficialLetters = asyncHandler(async (req, res) => {
+  if (!assertOwnerOrBroaderScope(req, res)) return;
+  ok(res, await svc.listOfficialLetters(req.params.userId));
+});
+
+const LETTER_MAX_BYTES = 15 * 1024 * 1024; // same ceiling as onboarding documents — scans/PDFs, not bundles
+const LETTER_EXTS = ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp'];
+
+/**
+ * POST /students/:userId/official-letters/:slot
+ * Staff-only (enforced on the route). Streams to Zata, verifies, then upserts
+ * the (owner,slot) media row — a re-upload replaces the current letter, same
+ * as onboarding documents. Also resolves/creates the scholar's Media Manager
+ * folder (Course > Batch > Students > Name) so the letter is browsable there,
+ * not just reachable through this endpoint.
+ */
+export const uploadOfficialLetter = asyncHandler(async (req, res) => {
+  if (!s3.isConfigured()) {
+    return res.status(503).json({ success: false, message: 'File storage is not configured.' });
+  }
+
+  const { userId, slot } = req.params;
+  if (!svc.OFFICIAL_LETTER_SLOTS.includes(slot)) return badRequest(res, `Unknown letter type "${slot}"`);
+
+  const { rows: [student] } = await query(
+    `SELECT u.first_name, u.last_name, be.batch_id, b.code AS batch_code, b.course_id
+     FROM users u
+     LEFT JOIN batch_enrollments be ON be.user_id = u.id AND be.status = 'active'
+     LEFT JOIN batches b ON b.id = be.batch_id
+     WHERE u.id = $1
+     ORDER BY be.enrolled_at DESC NULLS LAST
+     LIMIT 1`,
+    [userId]
+  );
+  if (!student) return notFound(res, 'Scholar not found');
+
+  const { rows: [existing] } = await query(
+    'SELECT id, object_key FROM videos WHERE owner_user_id=$1 AND slot=$2', [userId, slot]
+  );
+
+  const form = new IncomingForm({ maxFileSize: LETTER_MAX_BYTES, maxFiles: 1, keepExtensions: true });
+  let files;
+  try {
+    ({ files } = await new Promise((resolve, reject) =>
+      form.parse(req, (err, f, fi) => (err ? reject(err) : resolve({ fields: f, files: fi })))
+    ));
+  } catch (err) {
+    const tooBig = /maxFileSize|maxTotalFileSize|biggerThan/i.test(err?.message || '') || err?.code === 1009;
+    return badRequest(res, tooBig ? 'File exceeds the 15MB limit' : 'Upload failed — please try again');
+  }
+
+  const file = Array.isArray(files.file) ? files.file[0] : files.file;
+  if (!file) return badRequest(res, 'No file uploaded (field name must be "file")');
+  const cleanup = async () => { if (file?.filepath) await unlink(file.filepath).catch(() => {}); };
+
+  try {
+    const origName = file.originalFilename || 'letter';
+    const ext = (origName.split('.').pop() || '').toLowerCase();
+    const declaredMime = file.mimetype || '';
+    const size = file.size || 0;
+
+    if (size <= 0 || size > LETTER_MAX_BYTES) { await cleanup(); return badRequest(res, 'File exceeds the 15MB limit'); }
+    if (!LETTER_EXTS.includes(ext)) {
+      await cleanup();
+      return badRequest(res, `Allowed file types: ${LETTER_EXTS.join(', ').toUpperCase()}.`);
+    }
+    if (!(MIME_BY_EXT[ext] || []).includes(declaredMime)) {
+      await cleanup(); return badRequest(res, 'File type does not match its contents.');
+    }
+    const fh = await open(file.filepath, 'r');
+    const head = Buffer.alloc(12);
+    try { await fh.read(head, 0, 12, 0); } finally { await fh.close(); }
+    if (sniffFamily(head) !== EXT_FAMILY[ext]) {
+      await cleanup(); return badRequest(res, 'File content does not match its type');
+    }
+
+    const safe = origName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
+    // Structured per-student root, same convention as onboarding documents
+    // and the avatar (students/{userId}/...) — every file a scholar owns
+    // lives under one predictable prefix.
+    const objectKey = `students/${userId}/official-letters/${slot}-${Date.now()}-${safe}`;
+
+    await s3.uploadFile(objectKey, file.filepath, declaredMime, size);
+    try { await s3.headObject(objectKey); }
+    catch (e) {
+      return res.status(502).json({ success: false, message: 'Upload could not be verified in storage — please retry.', detail: e.message });
+    }
+
+    const studentLabel = `${student.first_name || ''} ${student.last_name || ''}`.trim() || userId;
+    let folderId = null;
+    if (student.course_id) {
+      folderId = await videoSvc.getOrCreateStudentDocFolder(student.course_id, student.batch_code, studentLabel, req.user.id);
+    }
+
+    let media;
+    try {
+      media = await videoSvc.upsertOwnerSlotVideo({
+        title: svc.OFFICIAL_LETTER_LABELS[slot] || origName.replace(/\.[^.]+$/, ''),
+        description: `Official letter — ${svc.OFFICIAL_LETTER_LABELS[slot] || slot}`,
+        object_key: objectKey, file_size: size, mime_type: declaredMime,
+        owner_user_id: userId, slot,
+        course_id: student.course_id || null, folder_id: folderId, batch_id: student.batch_id || null,
+      }, req.user.id);
+    } catch (dbErr) {
+      try { await s3.deleteObject(objectKey); } catch { /* ignore */ }
+      throw dbErr;
+    }
+
+    // Slot held a different file before this upload — remove the superseded
+    // object now that the new one is verified and recorded.
+    if (existing?.object_key && existing.object_key !== objectKey) {
+      try { await s3.deleteObject(existing.object_key); } catch { /* ignore */ }
+    }
+
+    ok(res, { media_id: media.id, slot, filename: media.title }, `${svc.OFFICIAL_LETTER_LABELS[slot]} uploaded`);
+  } finally {
+    await cleanup();
+  }
+});
+
+/**
+ * GET /students/:userId/official-letters/:slot/file?mode=preview|download
+ * Read access mirrors listOfficialLetters (own-scope student, or broader-scope
+ * staff). `mode=download` sets Content-Disposition: attachment; anything else
+ * (default) is inline, so the browser renders it instead of saving it.
+ */
+export const streamOfficialLetter = asyncHandler(async (req, res) => {
+  if (!assertOwnerOrBroaderScope(req, res)) return;
+  const { userId, slot } = req.params;
+  if (!svc.OFFICIAL_LETTER_SLOTS.includes(slot)) return notFound(res, 'Not found');
+
+  const { rows: [row] } = await query(
+    'SELECT object_key, mime_type, title FROM videos WHERE owner_user_id=$1 AND slot=$2', [userId, slot]
+  );
+  if (!row) return notFound(res, 'Letter not uploaded yet');
+
+  const disposition = req.query.mode === 'download' ? 'attachment' : 'inline';
+  const safeName = (row.title || slot).replace(/[^a-zA-Z0-9 ._-]/g, '_');
+  const ext = row.object_key?.split('.').pop() || '';
+  res.setHeader('Content-Disposition', `${disposition}; filename="${safeName}${ext ? `.${ext}` : ''}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+
+  try {
+    await s3.streamObject(row.object_key, res, { contentType: row.mime_type });
+  } catch {
+    if (!res.headersSent) res.status(404).json({ success: false, message: 'File not found in storage' });
+  }
+});

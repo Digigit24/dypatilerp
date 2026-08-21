@@ -395,6 +395,33 @@ router.post('/:userId/documents/:slot', requirePermission('students', 'update'),
 
 /**
  * @swagger
+ * /students/{userId}/official-letters:
+ *   get:
+ *     tags: [Students]
+ *     summary: State of the 3 official-letter slots (admission confirmation, guide approval, title approval)
+ */
+router.get('/:userId/official-letters', requirePermission('students', 'read'), profileCtrl.listOfficialLetters);
+
+/**
+ * @swagger
+ * /students/{userId}/official-letters/{slot}:
+ *   post:
+ *     tags: [Students]
+ *     summary: Upload (or replace) one official letter — staff only, never self-service
+ */
+router.post('/:userId/official-letters/:slot', requireRole('admin', 'coordinator'), profileCtrl.uploadOfficialLetter);
+
+/**
+ * @swagger
+ * /students/{userId}/official-letters/{slot}/file:
+ *   get:
+ *     tags: [Students]
+ *     summary: Preview (inline) or download an official letter
+ */
+router.get('/:userId/official-letters/:slot/file', requirePermission('students', 'read'), profileCtrl.streamOfficialLetter);
+
+/**
+ * @swagger
  * /students/{userId}/onboarding-status:
  *   get:
  *     tags: [Students]

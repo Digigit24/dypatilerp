@@ -12,6 +12,19 @@ export const DOCUMENT_SLOTS = [
 ];
 export const ALL_SLOTS = [...UPLOAD_SLOTS, ...DOCUMENT_SLOTS];
 
+// ─── Official letters (admin-issued, read-only for the scholar) ──────────────
+// Same owner-slot mechanism as the onboarding documents above, but these are
+// NEVER self-service: only staff can upload them (enforced by requireRole on
+// the route, not permission scope — see students.routes.js). Deliberately
+// kept out of UPLOAD_SLOTS/DOCUMENT_SLOTS/ALL_SLOTS so they never factor into
+// onboarding completeness.
+export const OFFICIAL_LETTER_SLOTS = ['admission_confirmation', 'guide_approval', 'title_approval'];
+export const OFFICIAL_LETTER_LABELS = {
+  admission_confirmation: 'Admission Confirmation Letter',
+  guide_approval: 'Guide Approval Letter',
+  title_approval: 'Title Approval Letter',
+};
+
 // The "8 info fields" from the plan = the 5 columns below (which live on the
 // new student_profile_details table, one row per student) + first_name /
 // last_name / phone, which already live on `users`. Email is intentionally
@@ -112,6 +125,29 @@ export const listDocuments = async (userId) => {
     return {
       slot,
       kind: UPLOAD_SLOTS.includes(slot) ? 'upload' : 'document',
+      present: !!row,
+      media_id: row?.id ?? null,
+      filename: row?.title ?? null,
+      mime_type: row?.mime_type ?? null,
+      file_size: row?.file_size ?? null,
+      uploaded_at: row?.uploaded_at ?? null,
+      verified: !!row?.verified_at,
+    };
+  });
+};
+
+export const listOfficialLetters = async (userId) => {
+  const { rows } = await query(
+    `SELECT id, slot, title, mime_type, file_size, created_at AS uploaded_at, verified_at
+     FROM videos WHERE owner_user_id=$1 AND slot = ANY($2::text[])`,
+    [userId, OFFICIAL_LETTER_SLOTS]
+  );
+  const bySlot = new Map(rows.map((r) => [r.slot, r]));
+  return OFFICIAL_LETTER_SLOTS.map((slot) => {
+    const row = bySlot.get(slot);
+    return {
+      slot,
+      label: OFFICIAL_LETTER_LABELS[slot],
       present: !!row,
       media_id: row?.id ?? null,
       filename: row?.title ?? null,

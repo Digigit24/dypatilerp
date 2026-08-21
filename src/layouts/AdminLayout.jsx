@@ -1,4 +1,4 @@
-﻿import { Activity, Bell, BookOpen, ClipboardCheck, FileText, Globe, Home, IndianRupee, Layers, ListChecks, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Settings, Shield, Sun, Target, UserCog, Users, Wand2 } from 'lucide-react'
+﻿import { Activity, Bell, BookOpen, ClipboardCheck, FileSignature, FileText, Globe, Home, IndianRupee, Layers, ListChecks, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Settings, Shield, Sun, Target, UserCog, Users, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -79,6 +79,7 @@ export default function AdminLayout() {
         { to: '/admin/batches',    label: 'Batches',          icon: Layers,  perm: 'batches' },
         { to: '/admin/formats',    label: 'Formats',          icon: FileText, perm: 'formats' },
         { to: '/admin/progress',   label: 'Progress Reports', icon: BookOpen, perm: 'progress_reports' },
+        { to: '/admin/official-letters', label: 'Official Letters', icon: FileSignature, perm: 'students' },
       ],
     },
     {

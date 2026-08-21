@@ -115,3 +115,40 @@ export const archiveStudent = async (userId) => {
 
 /** Restore an archived scholar back to active. */
 export const restoreStudent = async (userId) => bulkStudentAction([userId], 'restore')
+
+// ─── Official letters ───────────────────────────────────────────────────────
+// Admission Confirmation / Guide Approval / Title Approval — staff upload,
+// scholar can only view/preview/download. Backed by /students/:userId/official-letters*.
+
+export const getOfficialLetters = async (userId) => {
+  if (USE_MOCK) { await delay(); return ok([]) }
+  const { data: res } = await http.get(`/students/${userId}/official-letters`)
+  return ok(res.data)
+}
+
+export const uploadOfficialLetter = async (userId, slot, file) => {
+  if (USE_MOCK) { await delay(); return ok({ slot }) }
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data: res } = await http.post(`/students/${userId}/official-letters/${slot}`, formData)
+  return ok(res.data)
+}
+
+/** Opens the letter inline in a new tab (auth token can't ride a plain <a href>, so this fetches as a blob first). */
+export const previewOfficialLetter = async (userId, slot) => {
+  const response = await http.get(`/students/${userId}/official-letters/${slot}/file`, { params: { mode: 'preview' }, responseType: 'blob' })
+  const blobUrl = URL.createObjectURL(response.data)
+  window.open(blobUrl, '_blank', 'noopener')
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
+}
+
+/** Triggers a browser file-save for the letter. */
+export const downloadOfficialLetter = async (userId, slot, filename) => {
+  const response = await http.get(`/students/${userId}/official-letters/${slot}/file`, { params: { mode: 'download' }, responseType: 'blob' })
+  const url = URL.createObjectURL(response.data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename || slot
+  a.click()
+  URL.revokeObjectURL(url)
+}

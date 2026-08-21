@@ -95,15 +95,17 @@ export const createVideo = async (payload, uploadedBy) => {
  */
 export const upsertOwnerSlotVideo = async (payload, uploadedBy) => {
   const { rows } = await query(
-    `INSERT INTO videos (course_id, title, description, object_key, file_size, mime_type, media_type, uploaded_by, is_published, visibility, upload_status, owner_user_id, slot, verified_at)
-     VALUES (NULL,$1,$2,$3,$4,$5,'document',$6,false,'private','ready',$7,$8,NOW())
+    `INSERT INTO videos (course_id, folder_id, batch_id, title, description, object_key, file_size, mime_type, media_type, uploaded_by, is_published, visibility, upload_status, owner_user_id, slot, verified_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'document',$9,false,'private','ready',$10,$11,NOW())
      ON CONFLICT (owner_user_id, slot) WHERE owner_user_id IS NOT NULL AND slot IS NOT NULL
      DO UPDATE SET
        title=EXCLUDED.title, description=EXCLUDED.description, object_key=EXCLUDED.object_key,
        file_size=EXCLUDED.file_size, mime_type=EXCLUDED.mime_type, uploaded_by=EXCLUDED.uploaded_by,
+       course_id=EXCLUDED.course_id, folder_id=EXCLUDED.folder_id, batch_id=EXCLUDED.batch_id,
        upload_status='ready', verified_at=NOW(), updated_at=NOW()
      RETURNING *`,
     [
+      payload.course_id || null, payload.folder_id || null, payload.batch_id || null,
       payload.title, payload.description || null, payload.object_key,
       payload.file_size || 0, payload.mime_type || null, uploadedBy,
       payload.owner_user_id, payload.slot,
@@ -168,6 +170,34 @@ export const getOrCreateSubmissionFolder = async (courseId, batchCode, semester,
       `INSERT INTO media_folders (course_id, parent_id, name, created_by, is_system, semester, kind)
        VALUES ($1,$2,$3,$4,TRUE,$5,$6) RETURNING id`,
       [courseId, parentId, name, createdBy, Number(semester) || 1, kind]
+    );
+    parentId = made.id;
+  }
+  return parentId;
+};
+
+/**
+ * Resolve (creating if needed) the folder a scholar's admin-managed, owner-slot
+ * documents belong in: Course > Batch > Students > <Scholar Name>. Mirrors
+ * getOrCreateSubmissionFolder's path-walk exactly, just keyed to a scholar
+ * instead of a submission kind — so official letters (and any future
+ * admin-issued, per-scholar document) show up in the Media Manager's normal
+ * folder tree instead of being invisible owner-slot rows.
+ */
+export const getOrCreateStudentDocFolder = async (courseId, batchCode, studentLabel, createdBy) => {
+  const path = [batchCode || 'Unassigned batch', 'Students', studentLabel || 'Unnamed scholar'];
+  let parentId = null;
+  for (const name of path) {
+    const { rows: [found] } = await query(
+      `SELECT id FROM media_folders WHERE course_id=$1 AND name=$2
+         AND parent_id IS NOT DISTINCT FROM $3 LIMIT 1`,
+      [courseId, name, parentId]
+    );
+    if (found) { parentId = found.id; continue; }
+    const { rows: [made] } = await query(
+      `INSERT INTO media_folders (course_id, parent_id, name, created_by, is_system, kind)
+       VALUES ($1,$2,$3,$4,TRUE,'student_documents') RETURNING id`,
+      [courseId, parentId, name, createdBy]
     );
     parentId = made.id;
   }

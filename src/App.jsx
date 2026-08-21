@@ -21,6 +21,7 @@ import SettingsPage from './pages/admin/SettingsPage.jsx'
 import EmailTemplatesPage from './pages/admin/EmailTemplatesPage.jsx'
 import StudentProfilePage from './pages/admin/StudentProfilePage.jsx'
 import StudentsPage from './pages/admin/StudentsPage.jsx'
+import OfficialLettersPage from './pages/admin/OfficialLettersPage.jsx'
 import TestBuilderPage from './pages/admin/TestBuilderPage.jsx'
 import UserManagementPage from './pages/admin/UserManagementPage.jsx'
 import LoginPage from './pages/auth/LoginPage.jsx'
@@ -134,6 +135,7 @@ export default function App() {
           <Route index element={<AdminDashboard />} />
           <Route path="applicants" element={<ApplicantsPage />} />
           <Route path="students" element={<StudentsPage />} />
+          <Route path="official-letters" element={<OfficialLettersPage />} />
           <Route path="students/:id" element={<StudentProfilePage />} />
           <Route path="students/:id/progress" element={<ProgressPage />} />
           <Route path="progress" element={<AdminProgressReportsPage />} />
