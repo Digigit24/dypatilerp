@@ -54,7 +54,7 @@ export const createSubmissionOnBehalfSchema = z.object({
 // override it to post "on behalf of" coordinator/guide/mentor (the author is
 // still recorded as the admin — this only changes the displayed role tag).
 export const createRemarkSchema = z.object({
-  remark: z.string().min(1).max(5000),
+  remark: z.string().min(1).max(30000),
   author_role: z.enum(['admin', 'coordinator', 'academic_guide', 'industry_mentor']).optional(),
 });
 

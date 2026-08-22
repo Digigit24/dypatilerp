@@ -95,7 +95,11 @@ export default function SubmissionRemarks({ submissionId, onCountChange }) {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Add feedback for this report…"
+            maxLength={30000}
           />
+          {draft.length > 27000 && (
+            <p className="mt-1 text-right text-[11px] text-[color:var(--muted)]">{draft.length}/30000</p>
+          )}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             {isAdmin ? (
               <label className="inline-flex items-center gap-2 text-xs font-semibold text-[color:var(--secondary)]">
