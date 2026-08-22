@@ -988,7 +988,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                             {a.my_submission_status === 'needs_revision' ? 'Resubmit' : 'Submit'}
                           </button>
                         )}
-                        {a.my_submission_id && !canSubmit && (
+                        {a.my_submission_id && (
                           <button
                             onClick={() => navigate(`/student/submissions/${a.my_submission_id}/preview`)}
                             className="inline-flex items-center gap-1.5 rounded-xl bg-[color:var(--surface)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)]">
@@ -1099,7 +1099,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                             {state === 'needs_revision' ? 'Resubmit' : 'Add'}
                           </button>
                         )}
-                        {t.my_submission_id && !canSubmit && (
+                        {t.my_submission_id && (
                           <button
                             onClick={() => openSub({ id: t.my_submission_id })}
                             className="inline-flex items-center gap-1.5 rounded-xl bg-[color:var(--surface)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--border)]">
