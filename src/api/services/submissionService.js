@@ -62,6 +62,16 @@ export const uploadSubmissionAttachment = async (submissionId, file, slot = null
   return ok(res.data)
 }
 
+// Removes one file from a submission — allowed any time before a final
+// approval decision (draft/needs_revision/submitted/under_review), by the
+// owning scholar or staff. Mirrors uploadSubmissionAttachment's status gate
+// on the backend; see videos.controller.js.
+export const removeSubmissionAttachment = async (submissionId, mediaId) => {
+  if (USE_MOCK) return ok({})
+  const { data: res } = await http.delete(`/submissions/${submissionId}/attachment/${mediaId}`)
+  return ok(res.data)
+}
+
 export const getSubmissionsByStudent = async (student_user_id) => getSubmissions({ student_user_id })
 
 // ─── Progress reports (uploaded documents) ───────────────────────────────────

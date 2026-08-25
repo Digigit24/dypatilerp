@@ -483,6 +483,49 @@ export const EMAIL_TEMPLATES = [
       <p><strong>Important:</strong> Please change your password from your Profile page after your first login.</p>
       <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>`,
   },
+
+  {
+    key: 'password_reset',
+    label: 'Password Reset Link',
+    category: 'General',
+    audience: 'Scholar',
+    description: 'Sent when a user requests a self-service password reset.',
+    variables: [
+      { name: 'firstName', sample: SAMPLE.firstName, description: "User's first name" },
+      { name: 'resetUrl', sample: 'https://app.dyperf.com/reset-password?token=abc123', description: 'One-time reset link (30-minute expiry)' },
+    ],
+    subject: 'Reset your DY Patil ERP password',
+    body: `
+      <h2>Reset your password</h2>
+      <p>Dear {{firstName}},</p>
+      <p>We received a request to reset your password. Click the button below to choose a new one — this link expires in 30 minutes and can only be used once.</p>
+      <a href="{{resetUrl}}" class="cta">Reset Password →</a>
+      <p style="word-break:break-all;font-size:12px;color:#6b7280">{{resetUrl}}</p>
+      <p>If you didn't request this, you can safely ignore this email — your password will not change.</p>
+      <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>`,
+  },
+
+  {
+    key: 'login_otp',
+    label: 'Email Sign-In Code',
+    category: 'General',
+    audience: 'Scholar',
+    description: 'One-time 6-digit code for the passwordless email-OTP login option.',
+    variables: [
+      { name: 'firstName', sample: SAMPLE.firstName, description: "User's first name" },
+      { name: 'code', sample: '482913', description: 'One-time 6-digit sign-in code (5-minute expiry)' },
+    ],
+    subject: '{{code}} is your DY Patil ERP sign-in code',
+    body: `
+      <h2>Your sign-in code</h2>
+      <p>Dear {{firstName}},</p>
+      <p>Use this code to sign in — it expires in 5 minutes and can only be used once.</p>
+      <div class="cred-box" style="text-align:center">
+        <span class="val" style="font-size:28px;letter-spacing:6px">{{code}}</span>
+      </div>
+      <p>If you didn't request this, you can safely ignore this email — no one can sign in without this code.</p>
+      <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>`,
+  },
 ];
 
 /** Map keyed by template key for quick lookup. */

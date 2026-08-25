@@ -27,17 +27,20 @@ const KIND_META = {
   target:     { label: 'Milestone',  idField: 'target_id',     nameField: 'name' },
 }
 
-export default function OnBehalfSubmissionDrawer({ kind, studentUserId = null, onClose, onUploaded }) {
+export default function OnBehalfSubmissionDrawer({ kind, studentUserId = null, preselectedDef = null, onClose, onUploaded }) {
   const addToast = useUiStore((s) => s.addToast)
   const locked = Boolean(studentUserId)
   const meta = KIND_META[kind]
+  // Opened from a specific milestone/assignment's own row (rather than the
+  // tab's generic top button) — skip the definition dropdown entirely.
+  const defLocked = Boolean(preselectedDef?.id)
 
   const [roster, setRoster] = useState(locked ? [] : null)
   const [lockedStudent, setLockedStudent] = useState(null)
   const [selectedId, setSelectedId] = useState(studentUserId || '')
   const [search, setSearch] = useState('')
   const [defs, setDefs] = useState(null)
-  const [defId, setDefId] = useState('')
+  const [defId, setDefId] = useState(preselectedDef?.id || '')
   const [files, setFiles] = useState([])
   const [remark, setRemark] = useState('')
   const [busy, setBusy] = useState(false)
@@ -61,8 +64,11 @@ export default function OnBehalfSubmissionDrawer({ kind, studentUserId = null, o
     : (roster || []).find((s) => s.user_id === selectedId) || null
 
   // Once a scholar (and therefore batch) is known, load that batch's
-  // published assignment/milestone definitions to pick from.
+  // published assignment/milestone definitions to pick from. Skipped
+  // entirely when opened from a specific row — preselectedDef already
+  // carries everything the UI needs, no picker to populate.
   useEffect(() => {
+    if (defLocked) return
     setDefId('')
     if (!selected?.batch_id) { setDefs(null); return }
     let alive = true
@@ -74,7 +80,7 @@ export default function OnBehalfSubmissionDrawer({ kind, studentUserId = null, o
       .then((r) => { if (alive) setDefs((r.data || []).filter((d) => kind !== 'assignment' || d.is_published !== false)) })
       .catch(() => { if (alive) setDefs([]) })
     return () => { alive = false }
-  }, [selected?.batch_id, selected?.user_id, kind])
+  }, [selected?.batch_id, selected?.user_id, kind, defLocked])
 
   const q = search.trim().toLowerCase()
   const filtered = useMemo(() => {
@@ -98,7 +104,7 @@ export default function OnBehalfSubmissionDrawer({ kind, studentUserId = null, o
     return null
   }, [files])
 
-  const selectedDef = (defs || []).find((d) => d.id === defId) || null
+  const selectedDef = defLocked ? preselectedDef : (defs || []).find((d) => d.id === defId) || null
   const noBatch = Boolean(selected) && !selected.batch_id
   const canSubmit = Boolean(selected) && !noBatch && Boolean(defId) && files.length > 0 && !fileError && !busy
 
@@ -225,26 +231,42 @@ export default function OnBehalfSubmissionDrawer({ kind, studentUserId = null, o
             )}
           </div>
 
-          {/* Definition picker */}
+          {/* Definition picker — replaced by a locked display when opened
+              from a specific milestone/assignment row (preselectedDef set). */}
           {selected && !noBatch && (
-            <label className="block">
-              <span className="text-sm font-semibold text-[color:var(--text)]">
-                {meta.label}<span className="ml-1 text-red-500">*</span>
-              </span>
-              <select className="input mt-2 w-full" value={defId} onChange={(e) => setDefId(e.target.value)} disabled={defs === null}>
-                <option value="">
-                  {defs === null ? 'Loading…' : defs.length === 0 ? `No ${meta.label.toLowerCase()}s in this batch` : `Select a ${meta.label.toLowerCase()}…`}
-                </option>
-                {(defs || []).map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d[meta.nameField] || d.module_name}{d.semester ? ` (Sem ${d.semester})` : ''}
-                    {kind === 'assignment' && d.submission_count != null ? ` — ${d.submission_count} submitted` : ''}
-                    {kind === 'target' && d.my_submission_status ? ` — already ${d.my_submission_status.replace('_', ' ')}` : ''}
+            defLocked ? (
+              <div>
+                <span className="text-sm font-semibold text-[color:var(--text)]">{meta.label}</span>
+                <div className="mt-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
+                  <p className="truncate text-sm font-semibold text-[color:var(--text)]">
+                    {preselectedDef[meta.nameField] || preselectedDef.module_name}
+                    {preselectedDef.semester ? ` (Sem ${preselectedDef.semester})` : ''}
+                  </p>
+                  {preselectedDef.description && (
+                    <p className="mt-1 text-xs text-[color:var(--secondary)]">{preselectedDef.description}</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <label className="block">
+                <span className="text-sm font-semibold text-[color:var(--text)]">
+                  {meta.label}<span className="ml-1 text-red-500">*</span>
+                </span>
+                <select className="input mt-2 w-full" value={defId} onChange={(e) => setDefId(e.target.value)} disabled={defs === null}>
+                  <option value="">
+                    {defs === null ? 'Loading…' : defs.length === 0 ? `No ${meta.label.toLowerCase()}s in this batch` : `Select a ${meta.label.toLowerCase()}…`}
                   </option>
-                ))}
-              </select>
-              {selectedDef?.description && <p className="mt-1.5 text-xs text-[color:var(--secondary)]">{selectedDef.description}</p>}
-            </label>
+                  {(defs || []).map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d[meta.nameField] || d.module_name}{d.semester ? ` (Sem ${d.semester})` : ''}
+                      {kind === 'assignment' && d.submission_count != null ? ` — ${d.submission_count} submitted` : ''}
+                      {kind === 'target' && d.my_submission_status ? ` — already ${d.my_submission_status.replace('_', ' ')}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {selectedDef?.description && <p className="mt-1.5 text-xs text-[color:var(--secondary)]">{selectedDef.description}</p>}
+              </label>
+            )
           )}
 
           {/* Files */}

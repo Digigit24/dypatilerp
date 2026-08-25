@@ -25,6 +25,9 @@ import OfficialLettersPage from './pages/admin/OfficialLettersPage.jsx'
 import TestBuilderPage from './pages/admin/TestBuilderPage.jsx'
 import UserManagementPage from './pages/admin/UserManagementPage.jsx'
 import LoginPage from './pages/auth/LoginPage.jsx'
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx'
+import ResetPasswordPage from './pages/auth/ResetPasswordPage.jsx'
+import ImpersonationBanner from './components/shared/ImpersonationBanner.jsx'
 import LecturesGalleryPage from './pages/student/LecturesGalleryPage.jsx'
 import LecturePlayerPage from './pages/student/LecturePlayerPage.jsx'
 import MediaManagerPage from './pages/admin/MediaManagerPage.jsx'
@@ -70,6 +73,7 @@ export default function App() {
   }, [theme, themeConfig])
 
   return <>
+    <ImpersonationBanner />
     <div key={location.pathname} className="fade-page">
       <Routes>
         {/* Root → login */}
@@ -77,6 +81,8 @@ export default function App() {
 
         {/* Public routes — no auth required */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route element={<PublicLayout />}>
           <Route path="/apply" element={<ApplyPage />} />
           <Route path="/confirmation" element={<ConfirmationPage />} />

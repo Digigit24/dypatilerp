@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { authenticate } from '../../middleware/auth.js';
+import { authenticate, blockDuringImpersonation } from '../../middleware/auth.js';
 import { requirePermission, requireRole, isOwnScope } from '../../middleware/rbac.js';
 import { randomBytes } from 'crypto';
 import { sendLoginCredentials } from '../email/email.service.js';
+import * as authService from '../auth/auth.service.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok, created, notFound, noContent, badRequest } from '../../utils/response.js';
 import { query } from '../../config/database.js';
@@ -223,7 +224,9 @@ const rotateAndSend = async (userId) => {
 };
 
 // ─── POST /users/me/password ──────────────────────────────────────────────────
-router.post('/me/password', asyncHandler(async (req, res) => {
+// blockDuringImpersonation: an admin viewing-as a scholar must never be able
+// to change that scholar's real password from inside the impersonated session.
+router.post('/me/password', blockDuringImpersonation, asyncHandler(async (req, res) => {
   const { current_password, new_password } = req.body;
   if (!current_password || !new_password) {
     return res.status(400).json({ success: false, message: 'current_password and new_password are required' });
@@ -278,6 +281,63 @@ router.post('/:id/reset-password', requireRole('admin'), asyncHandler(async (req
     email_sent = !!r.success;
   }
   ok(res, { password, email_sent }, 'Password reset');
+}));
+
+// ─── POST /users/:id/impersonate ─────────────────────────────────────────────
+// Admin-only "log in as scholar" without knowing their password. Hard-gated by
+// requireRole('admin') — a fixed JWT-role check, not the editable permissions
+// table — so this can never be handed to another role by editing role_permissions.
+router.post('/:id/impersonate', requireRole('admin'), asyncHandler(async (req, res) => {
+  // No chaining: an impersonation-scoped token can never start another one.
+  if (req.user.scope === 'impersonation') {
+    return res.status(403).json({
+      success: false,
+      message: 'Cannot start a new impersonation session while viewing as another user.',
+    });
+  }
+  if (req.params.id === req.user.id) {
+    return badRequest(res, 'You cannot impersonate yourself.');
+  }
+
+  const target = await authService.findUserById(req.params.id);
+  if (!target) return notFound(res, 'User not found');
+  if (!target.is_active) return badRequest(res, 'Cannot impersonate an inactive user.');
+  const targetRoles = target.role_names || [];
+  if (targetRoles.includes('admin')) {
+    return res.status(403).json({ success: false, message: 'Admins cannot be impersonated.' });
+  }
+  if (!targetRoles.length) {
+    // A roleless user has no route the frontend guards would ever admit them
+    // to — ProtectedRoute would bounce them in a redirect loop. Shouldn't
+    // occur for any real enrolled scholar, but fail cleanly instead of handing
+    // back a session with nowhere valid to land.
+    return badRequest(res, 'This user has no role assigned and cannot be impersonated.');
+  }
+
+  const ipAddress = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress;
+
+  let session;
+  try {
+    session = await authService.startImpersonationSession(req.user.id, target.id, ipAddress);
+  } catch (err) {
+    if (err.code === 'ALREADY_IMPERSONATING' || err.code === 'TARGET_ALREADY_IMPERSONATED') {
+      return res.status(409).json({ success: false, message: err.message });
+    }
+    throw err;
+  }
+
+  const accessToken = authService.generateImpersonationToken(target, targetRoles, {
+    impersonatedBy: req.user.id,
+    sessionId: session.id,
+  });
+
+  const { password_hash, ...safeTarget } = target;
+  ok(res, {
+    access_token: accessToken,
+    expires_at: session.expires_at,
+    target_user: safeTarget,
+    session_id: session.id,
+  }, `Now viewing as ${target.first_name}`);
 }));
 
 // ─── GET /users ───────────────────────────────────────────────────────────────

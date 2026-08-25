@@ -518,9 +518,13 @@ export const uploadSubmissionAttachment = asyncHandler(async (req, res) => {
              : 'progress_report';
   const allowedExts = EXTS_BY_KIND[kind] || EXTS_BY_KIND.progress_report;
 
-  // Files may be attached while the submission is still open for editing.
-  if (!['draft', 'needs_revision'].includes(sub.status)) {
-    return badRequest(res, 'Files can only be attached before the submission is sent for review.');
+  // Files may be attached any time before a final approval decision — a
+  // scholar (or staff on their behalf) can fix a wrong upload while it's
+  // sitting in the review queue, not only before they hit Submit. Locked
+  // once approved; 'rejected' stays terminal too (no resubmit path exists
+  // for it today, unlike needs_revision — treat that as a separate decision).
+  if (!['draft', 'needs_revision', 'submitted', 'under_review'].includes(sub.status)) {
+    return badRequest(res, 'Files can no longer be changed once this submission has been approved or rejected.');
   }
 
   // A progress report requires a named slot; other kinds never use one.
@@ -645,8 +649,9 @@ export const removeSubmissionAttachment = asyncHandler(async (req, res) => {
   const roles = req.user.roles || [];
   const isStaff = roles.includes('admin') || roles.includes('coordinator');
   if (sub.student_user_id !== req.user.id && !isStaff) return forbidden(res);
-  if (!['draft', 'needs_revision'].includes(sub.status)) {
-    return badRequest(res, 'Files can only be removed before the submission is sent for review.');
+  // Mirrors the upload gate above — editable up to a final approval decision.
+  if (!['draft', 'needs_revision', 'submitted', 'under_review'].includes(sub.status)) {
+    return badRequest(res, 'Files can no longer be changed once this submission has been approved or rejected.');
   }
 
   const { rows: [media] } = await query(

@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { query } from '../config/database.js';
 import { unauthorized } from '../utils/response.js';
+import { isImpersonationSessionActive } from '../modules/auth/auth.service.js';
 
 // PostgreSQL returns text[] as "{admin,coordinator}" — parse to a real JS array
 const parseRoles = (raw) => {
@@ -23,6 +24,12 @@ export const mapTokenToUser = (user, payload) => {
     user.applicant_id = payload.applicant_id || null;
     user.token_id     = payload.token_id     || null;
     user.test_scope   = payload.test_id      || null;
+  }
+  // Admin-impersonation claims — carried through so route handlers (and the
+  // global audit trail) can always tell a request apart from the target's own.
+  if (payload.scope === 'impersonation') {
+    user.impersonated_by         = payload.impersonated_by || null;
+    user.impersonation_session_id = payload.impersonation_session_id || null;
   }
   return user;
 };
@@ -46,6 +53,17 @@ export const authenticate = async (req, res, next) => {
   // 2. DB lookup — a DB outage must NOT masquerade as an auth failure,
   //    otherwise the frontend logs the user out on every DB hiccup.
   try {
+    // An impersonation token stays cryptographically valid for its full 15
+    // minutes even after "Return to Admin" is clicked — re-check the backing
+    // session row on every request so ending it takes effect immediately
+    // instead of merely on the client, or after the token naturally expires.
+    if (payload.scope === 'impersonation') {
+      const active = await isImpersonationSessionActive(
+        payload.impersonation_session_id, payload.impersonated_by, payload.sub
+      );
+      if (!active) return unauthorized(res, 'Impersonation session has ended');
+    }
+
     const { rows } = await query(
       'SELECT id, email, first_name, last_name, is_active FROM users WHERE id = $1',
       [payload.sub]
@@ -78,5 +96,20 @@ export const optionalAuth = async (req, res, next) => {
       req.user = mapTokenToUser(rows[0], payload);
     }
   } catch { /* ignore */ }
+  next();
+};
+
+/**
+ * Guard for the handful of self-service actions an impersonated session must
+ * never be allowed to take on the target's behalf — e.g. changing their
+ * password. Mount after `authenticate`.
+ */
+export const blockDuringImpersonation = (req, res, next) => {
+  if (req.user?.scope === 'impersonation') {
+    return res.status(403).json({
+      success: false,
+      message: 'This action is disabled while viewing as another user.',
+    });
+  }
   next();
 };

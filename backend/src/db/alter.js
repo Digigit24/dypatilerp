@@ -696,6 +696,76 @@ const run = async () => {
     `);
     console.log('✓  student_profile_details.title column added (or already exists)');
 
+    // 33. FORGOT PASSWORD — self-service reset flow (previously admin-only,
+    //     hand-rolled per user). Only the SHA-256 hash of the reset token is
+    //     ever stored, so a DB leak alone cannot be used to reset a password.
+    //     One row per outstanding request: a fresh request supersedes (deletes)
+    //     any earlier unused token for that user, so an old, already-emailed
+    //     link stops working the moment a new one is issued.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash  VARCHAR(64) NOT NULL UNIQUE,
+        expires_at  TIMESTAMP NOT NULL,
+        used_at     TIMESTAMP,
+        ip_address  VARCHAR(64),
+        created_at  TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id)`);
+    console.log('✓  password_reset_tokens table created (or already exists)');
+
+    // 34. ADMIN IMPERSONATION — "log in as scholar" without knowing their
+    //     password. `expires_at` mirrors the short-lived impersonation JWT so a
+    //     session whose token merely expired (no explicit end-impersonation
+    //     call) doesn't stay "active" forever and block a future start — the
+    //     start-session query lazily closes those first. Two partial unique
+    //     indexes enforce "one session at a time" from both directions: one
+    //     admin can't impersonate two people at once, and one target can't be
+    //     impersonated by two admins at once.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS impersonation_sessions (
+        id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        admin_user_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        target_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        started_at     TIMESTAMP NOT NULL DEFAULT NOW(),
+        expires_at     TIMESTAMP NOT NULL,
+        ended_at       TIMESTAMP,
+        ended_reason   VARCHAR(20),
+        ip_address     VARCHAR(64)
+      )
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_impersonation_admin_active
+        ON impersonation_sessions (admin_user_id) WHERE ended_at IS NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_impersonation_target_active
+        ON impersonation_sessions (target_user_id) WHERE ended_at IS NULL
+    `);
+    console.log('✓  impersonation_sessions table created (or already exists)');
+
+    // 35. EMAIL OTP LOGIN — passwordless secondary sign-in. A 6-digit code is
+    //     low-entropy compared to the forgot-password token, so brute force is
+    //     stopped by `attempt_count` (server invalidates a code after 5 wrong
+    //     tries) rather than by the hash itself — bcrypt is used only for
+    //     consistency with the rest of the codebase's password-ish hashing.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS login_otps (
+        id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        code_hash     VARCHAR(255) NOT NULL,
+        expires_at    TIMESTAMP NOT NULL,
+        used_at       TIMESTAMP,
+        attempt_count INT NOT NULL DEFAULT 0,
+        ip_address    VARCHAR(64),
+        created_at    TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_login_otps_user ON login_otps(user_id)`);
+    console.log('✓  login_otps table created (or already exists)');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

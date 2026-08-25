@@ -129,6 +129,9 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [openTargetId,    setOpenTargetId]    = useState(null)  // which milestone's submit panel is expanded
   const [openAssignmentId,setOpenAssignmentId]= useState(null)  // which assignment's submit panel is expanded
   const [assignmentUploadOpen, setAssignmentUploadOpen] = useState(false) // admin on-behalf drawer
+  // false = closed, true = open via the tab's generic top button (no
+  // preselection), or a target row object = opened from that specific
+  // milestone's own "Upload"/"Replace" button.
   const [milestoneUploadOpen,  setMilestoneUploadOpen]  = useState(false) // admin on-behalf drawer
   // Student's own batch assignments + my_submission_* status (mine=1). Admin
   // view keeps reading the generic `assignments` list (filtered submissions)
@@ -1106,6 +1109,18 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
                             View
                           </button>
                         )}
+                        {/* Per-milestone shortcut — opens the same drawer as the tab's
+                            top button, but with this exact milestone already selected
+                            instead of making the admin re-pick it from a dropdown. */}
+                        {isAdminView && canUploadReport && (
+                          <button
+                            onClick={() => setMilestoneUploadOpen(t)}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-[color:var(--accent-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--accent)] hover:bg-[color:var(--accent)] hover:text-white"
+                            title="Upload this milestone on behalf of the scholar"
+                          >
+                            <UploadCloud size={12} /> {t.my_submission_id ? 'Replace' : 'Upload'}
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -1345,6 +1360,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         <OnBehalfSubmissionDrawer
           kind="target"
           studentUserId={studentId}
+          preselectedDef={milestoneUploadOpen === true ? null : milestoneUploadOpen}
           onClose={() => setMilestoneUploadOpen(false)}
           onUploaded={loadTargets}
         />

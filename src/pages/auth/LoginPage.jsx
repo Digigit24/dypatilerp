@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { login } from '../../api/services/userService.js'
+import { login, requestLoginOtp, verifyLoginOtp } from '../../api/services/userService.js'
 import { getUserPreferences } from '../../api/services/settingsService.js'
 import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
@@ -25,7 +25,25 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  // Passwordless email-code login — a separate mini-flow toggled from the
+  // same page. 'password' | 'otp-request' | 'otp-verify'.
+  const [mode, setMode] = useState('password')
+  const [otpEmail, setOtpEmail] = useState('')
+  const [otpCode, setOtpCode] = useState('')
+  const [otpLoading, setOtpLoading] = useState(false)
+  const [otpError, setOtpError] = useState('')
+
   const from = location.state?.from?.pathname
+
+  // Shared by both the password and OTP flows once a token pair comes back.
+  const completeLogin = (user, access_token, refresh_token) => {
+    setAuth(user, access_token, refresh_token)
+    // Load and apply saved user preferences (dark mode, accent colour)
+    getUserPreferences().then((r) => applyUserPreferences(r.data)).catch(() => {})
+    const role = user?.roles?.[0]
+    const dest = from && from !== '/login' ? from : redirectForRole(role)
+    navigate(dest, { replace: true })
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -38,12 +56,7 @@ export default function LoginPage() {
         return
       }
       const { user, access_token, refresh_token } = result.data
-      setAuth(user, access_token, refresh_token)
-      // Load and apply saved user preferences (dark mode, accent colour)
-      getUserPreferences().then((r) => applyUserPreferences(r.data)).catch(() => {})
-      const role = user?.roles?.[0]
-      const dest = from && from !== '/login' ? from : redirectForRole(role)
-      navigate(dest, { replace: true })
+      completeLogin(user, access_token, refresh_token)
     } catch (err) {
       const msg = err.response?.data?.message || 'Invalid email or password'
       setError(msg)
@@ -51,6 +64,45 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleRequestOtp = async (e) => {
+    e.preventDefault()
+    setOtpError('')
+    setOtpLoading(true)
+    try {
+      await requestLoginOtp(otpEmail)
+    } catch {
+      // The backend only ever replies with the generic message for this
+      // endpoint — a rejection here means a network/5xx failure, not an
+      // invalid email. Still advance so this can never be used to probe
+      // which addresses are registered.
+    } finally {
+      setMode('otp-verify')
+      setOtpLoading(false)
+    }
+  }
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault()
+    setOtpError('')
+    setOtpLoading(true)
+    try {
+      const result = await verifyLoginOtp(otpEmail, otpCode)
+      const { user, access_token, refresh_token } = result.data
+      completeLogin(user, access_token, refresh_token)
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Incorrect code'
+      setOtpError(msg)
+      addToast({ type: 'error', title: 'Sign-in failed', message: msg })
+    } finally {
+      setOtpLoading(false)
+    }
+  }
+
+  const resetToPassword = () => {
+    setMode('password')
+    setOtpEmail(''); setOtpCode(''); setOtpError('')
   }
 
   return (
@@ -125,59 +177,168 @@ export default function LoginPage() {
           </div>
 
           <h2 className="text-3xl font-bold text-[color:var(--text)]">Welcome back</h2>
-          <p className="mt-2 text-[color:var(--secondary)] text-sm">Sign in to continue to your dashboard</p>
+          <p className="mt-2 text-[color:var(--secondary)] text-sm">
+            {mode === 'password' ? 'Sign in to continue to your dashboard' : 'Sign in with a one-time code instead of a password'}
+          </p>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-            <div>
-              <label className="block text-sm font-semibold text-[color:var(--text)] mb-1.5">
-                Email address
-              </label>
-              <input
-                className="input w-full"
-                type="email"
-                autoComplete="email"
-                required
-                placeholder="you@dypatil.edu"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
-              />
-            </div>
+          {mode === 'password' && (
+            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-[color:var(--text)] mb-1.5">
+                  Email address
+                </label>
+                <input
+                  className="input w-full"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  placeholder="you@dypatil.edu"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-[color:var(--text)] mb-1.5">
-                Password
-              </label>
-              <input
-                className="input w-full"
-                type="password"
-                autoComplete="current-password"
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-              />
-            </div>
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="block text-sm font-semibold text-[color:var(--text)]">
+                    Password
+                  </label>
+                  <Link to="/forgot-password" className="text-sm font-semibold text-[color:var(--accent)] hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
+                <input
+                  className="input w-full"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
 
-            {error && (
-              <p className="text-sm text-red-500 bg-red-50 rounded-xl px-4 py-2">{error}</p>
-            )}
-
-            <button
-              type="submit"
-              className="btn-primary w-full flex items-center justify-center gap-2"
-              disabled={loading}
-            >
-              {loading && (
-                <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
+              {error && (
+                <p className="text-sm text-red-500 bg-red-50 rounded-xl px-4 py-2">{error}</p>
               )}
-              {loading ? 'Signing in…' : 'Sign In'}
-            </button>
-          </form>
+
+              <button
+                type="submit"
+                className="btn-primary w-full flex items-center justify-center gap-2"
+                disabled={loading}
+              >
+                {loading && (
+                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                )}
+                {loading ? 'Signing in…' : 'Sign In'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMode('otp-request')}
+                className="w-full text-center text-sm font-semibold text-[color:var(--accent)] hover:underline"
+              >
+                Sign in with an email code instead
+              </button>
+            </form>
+          )}
+
+          {mode === 'otp-request' && (
+            <form onSubmit={handleRequestOtp} className="mt-8 space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-[color:var(--text)] mb-1.5">
+                  Email address
+                </label>
+                <input
+                  className="input w-full"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  autoFocus
+                  placeholder="you@dypatil.edu"
+                  value={otpEmail}
+                  onChange={(e) => setOtpEmail(e.target.value)}
+                  disabled={otpLoading}
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="btn-primary w-full flex items-center justify-center gap-2"
+                disabled={otpLoading || !otpEmail}
+              >
+                {otpLoading ? 'Sending…' : 'Send Code'}
+              </button>
+
+              <button
+                type="button"
+                onClick={resetToPassword}
+                className="w-full text-center text-sm font-semibold text-[color:var(--accent)] hover:underline"
+              >
+                ← Back to password sign-in
+              </button>
+            </form>
+          )}
+
+          {mode === 'otp-verify' && (
+            <form onSubmit={handleVerifyOtp} className="mt-8 space-y-5">
+              <p className="rounded-xl bg-[color:var(--accent-tint)] px-4 py-3 text-sm text-[color:var(--accent)]">
+                If <strong>{otpEmail}</strong> is registered, a 6-digit code is on its way. It expires in 5 minutes.
+              </p>
+              <div>
+                <label className="block text-sm font-semibold text-[color:var(--text)] mb-1.5">
+                  6-digit code
+                </label>
+                <input
+                  className="input w-full text-center text-lg tracking-[0.5em]"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  required
+                  autoFocus
+                  placeholder="••••••"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  disabled={otpLoading}
+                />
+              </div>
+
+              {otpError && (
+                <p className="text-sm text-red-500 bg-red-50 rounded-xl px-4 py-2">{otpError}</p>
+              )}
+
+              <button
+                type="submit"
+                className="btn-primary w-full flex items-center justify-center gap-2"
+                disabled={otpLoading || otpCode.length !== 6}
+              >
+                {otpLoading ? 'Verifying…' : 'Verify & Sign In'}
+              </button>
+
+              <div className="flex items-center justify-between text-sm">
+                <button
+                  type="button"
+                  onClick={() => { setMode('otp-request'); setOtpCode(''); setOtpError('') }}
+                  className="font-semibold text-[color:var(--accent)] hover:underline"
+                >
+                  Use a different email
+                </button>
+                <button
+                  type="button"
+                  onClick={resetToPassword}
+                  className="font-semibold text-[color:var(--secondary)] hover:underline"
+                >
+                  Use password instead
+                </button>
+              </div>
+            </form>
+          )}
 
           <p className="mt-6 text-sm text-center text-[color:var(--secondary)]">
             New applicant?{' '}

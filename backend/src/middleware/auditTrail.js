@@ -39,6 +39,7 @@ const SPECIAL_VERBS = [
   [/\/permissions$/, 'permissions_change'],
   [/\/questions$/, 'questions_save'],
   [/\/reorder$/, 'reorder'],
+  [/\/impersonate$/, 'impersonate_start'],
 ];
 
 // Never persist credentials or secrets in the log payload
@@ -90,7 +91,13 @@ export const auditTrail = (req, res, next) => {
         action: `${moduleName}.${verb}`,
         resourceType: moduleName,
         resourceId: idMatch ? idMatch[0] : null,
-        changes: { method, path, status: res.statusCode, ...(bodySummary ? { body: bodySummary } : {}) },
+        changes: {
+          method, path, status: res.statusCode,
+          ...(bodySummary ? { body: bodySummary } : {}),
+          // Every action taken during an impersonated session is traceable
+          // back to the admin behind it, not just the scholar it's logged under.
+          ...(req.user?.impersonated_by ? { impersonated_by: req.user.impersonated_by } : {}),
+        },
         ipAddress: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || null,
       });
     } catch { /* the audit trail must never affect the request */ }

@@ -21,3 +21,21 @@ export const changePasswordSchema = z.object({
   current_password: z.string().min(1),
   new_password: z.string().min(8),
 });
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(20),
+  new_password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
+export const requestLoginOtpSchema = z.object({
+  email: z.string().email(),
+});
+
+export const verifyLoginOtpSchema = z.object({
+  email: z.string().email(),
+  code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code'),
+});

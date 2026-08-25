@@ -5,8 +5,8 @@
  * Replaces the old sidedrawer preview (ApprovalsPage's `selected` panel).
  */
 import {
-  ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Download,
-  FileQuestion, Loader2, MessageSquarePlus, Paperclip, RotateCcw, XCircle,
+  AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Download,
+  FileQuestion, Loader2, MessageSquarePlus, Paperclip, RotateCcw, Trash2, UploadCloud, XCircle,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -16,15 +16,28 @@ import 'react-pdf/dist/Page/TextLayer.css'
 import {
   getApprovalsBySubmission, reviewSubmission, submitApprovalFeedback, uploadFeedbackAttachment,
 } from '../../api/services/approvalService.js'
-import { getSubmissionById } from '../../api/services/submissionService.js'
+import {
+  getSubmissionById, removeSubmissionAttachment, uploadSubmissionAttachment,
+} from '../../api/services/submissionService.js'
 import { getSubmissionFileUrl } from '../../api/services/videoService.js'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
 import SubmissionRemarks from '../../components/shared/SubmissionRemarks.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { formatDate } from '../../lib/formatters.js'
+import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { usePermStore } from '../../store/permStore.js'
+
+// Editable up to a final approval decision — matches the backend gate in
+// videos.controller.js exactly. 'rejected' is deliberately excluded: there is
+// no resubmit path for it anywhere in the UI today (unlike needs_revision),
+// so reopening file edits for it would have nowhere for the scholar to go.
+const FILE_EDITABLE_STATUSES = ['draft', 'needs_revision', 'submitted', 'under_review']
+const PROGRESS_REPORT_SLOTS = [
+  { slot: 'report', label: 'Progress Report' },
+  { slot: 'presentation', label: 'Presentation' },
+]
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
 
@@ -60,6 +73,13 @@ export default function SubmissionPreviewPage() {
   // showing action buttons nobody's allowed to use.
   const canReview = usePermStore((s) =>
     s.hasRole('admin') || s.hasRole('coordinator') || s.hasRole('academic_guide') || s.hasRole('industry_mentor'))
+  // File management (delete/replace) mirrors the backend's own authorization
+  // exactly — owner, or admin/coordinator — not the broader canReview set
+  // (a guide/mentor can approve but was never allowed to edit files on
+  // someone's behalf; showing them a button that then 403s would be worse
+  // than not showing it).
+  const currentUser = useAuthStore((s) => s.currentUser)
+  const isStaffFileManager = usePermStore((s) => s.hasRole('admin') || s.hasRole('coordinator'))
 
   const [submission, setSubmission] = useState(null)
   const [approvals, setApprovals] = useState([])
@@ -77,6 +97,9 @@ export default function SubmissionPreviewPage() {
   const [feedbackDraft, setFeedbackDraft] = useState('')
   const [feedbackSaving, setFeedbackSaving] = useState(false)
   const [feedbackFileBusy, setFeedbackFileBusy] = useState(false)
+  // Either a media_id (deleting that file) or a slot/'file' key (uploading) —
+  // only one file operation may be in flight at a time on this page.
+  const [fileBusy, setFileBusy] = useState(null)
 
   // Siblings for prev/next — passed via navigation state from whichever list
   // linked here. Opened directly (bookmark/refresh) → no state, no prev/next.
@@ -203,6 +226,38 @@ export default function SubmissionPreviewPage() {
     } finally { setFeedbackFileBusy(false) }
   }
 
+  // ── File management — delete / add / replace, gated the same way the
+  //     backend gates it (see FILE_EDITABLE_STATUSES above). ──
+  const handleDeleteFile = async (mediaId) => {
+    if (!submission) return
+    if (!confirm('Remove this file? You can upload a replacement afterwards.')) return
+    setFileBusy(mediaId)
+    try {
+      await removeSubmissionAttachment(submission.id, mediaId)
+      addToast({ type: 'success', title: 'File removed' })
+      setFileIndex(0)
+      load()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Could not remove file', message: err.response?.data?.message })
+    } finally {
+      setFileBusy(null)
+    }
+  }
+
+  const handleAddFile = async (file, slot = null) => {
+    if (!submission || !file) return
+    setFileBusy(slot || 'file')
+    try {
+      await uploadSubmissionAttachment(submission.id, file, slot)
+      addToast({ type: 'success', title: slot ? `${slot === 'report' ? 'Report' : 'Presentation'} uploaded` : 'File uploaded' })
+      load()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Upload failed', message: err.response?.data?.message })
+    } finally {
+      setFileBusy(null)
+    }
+  }
+
   if (notFound) {
     return (
       <div className="fixed inset-0 z-40 grid place-items-center bg-[color:var(--bg)] p-6">
@@ -226,6 +281,22 @@ export default function SubmissionPreviewPage() {
   }
 
   const scholarName = `${submission.first_name || ''} ${submission.last_name || ''}`.trim() || '—'
+
+  // Same kind detection the backend uses (videos.controller.js) — a target_id
+  // marks a milestone submission; submission_type itself has no enum value
+  // for it (schema drift noted in CLAUDE.md — target_id is the real signal).
+  const kind = submission.target_id ? 'target'
+    : submission.submission_type === 'assignment' ? 'assignment' : 'progress_report'
+  const isOwner = currentUser?.id === submission.student_user_id
+  const canEditFiles = (isOwner || isStaffFileManager) && FILE_EDITABLE_STATUSES.includes(submission.status)
+  // updated_at is bumped by submitForReview in the SAME statement as
+  // submitted_at (both NOW() in one UPDATE), so they're equal immediately
+  // after submit; any LATER file/content change makes updated_at strictly
+  // newer. No extra column needed to detect "changed after submission".
+  const filesChangedAfterSubmit = Boolean(
+    submission.submitted_at && submission.updated_at
+    && new Date(submission.updated_at) > new Date(submission.submitted_at)
+  )
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-[color:var(--bg)]">
@@ -329,6 +400,86 @@ export default function SubmissionPreviewPage() {
               <Info label="Version" value={`v${submission.version || 1}`} />
               <Info label="Submitted" value={formatDate(submission.submitted_at)} />
               <Info label="Status" value={<StatusBadge status={submission.status} />} />
+            </div>
+
+            {filesChangedAfterSubmit && canReview && (
+              <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                <span>Files were changed after this was submitted — re-check them before approving.</span>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-[color:var(--muted)]">Files</p>
+              <div className="mt-3 space-y-2">
+                {files.length === 0 && (
+                  <p className="text-xs text-[color:var(--secondary)]">No files uploaded yet.</p>
+                )}
+                {files.map((f, i) => (
+                  <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-2 rounded-lg bg-[color:var(--card)] px-3 py-2 text-xs">
+                    <span className="min-w-0 truncate text-[color:var(--text)]">
+                      {kind === 'progress_report' && f.slot && (
+                        <span className="mr-1.5 font-semibold text-[color:var(--accent)]">
+                          {f.slot === 'report' ? 'Report:' : 'Presentation:'}
+                        </span>
+                      )}
+                      {f.name || `File ${i + 1}`}
+                    </span>
+                    {canEditFiles && f.media_id && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFile(f.media_id)}
+                        disabled={fileBusy === f.media_id}
+                        className="shrink-0 text-[color:var(--muted)] hover:text-red-500 disabled:opacity-50"
+                        title="Remove this file"
+                      >
+                        {fileBusy === f.media_id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {canEditFiles && (
+                <div className="mt-3 space-y-2">
+                  {kind === 'progress_report' ? (
+                    PROGRESS_REPORT_SLOTS.map(({ slot, label }) => {
+                      const has = files.some((f) => f.slot === slot)
+                      return (
+                        <label
+                          key={slot}
+                          className={`flex cursor-pointer items-center gap-1.5 rounded-lg bg-[color:var(--accent-tint)] px-3 py-2 text-xs font-semibold text-[color:var(--accent)] ${fileBusy === slot ? 'pointer-events-none opacity-60' : 'hover:bg-[color:var(--accent)] hover:text-white'}`}
+                        >
+                          {fileBusy === slot ? <Loader2 size={13} className="animate-spin" /> : <UploadCloud size={13} />}
+                          {has ? `Replace ${label}` : `Upload ${label}`}
+                          <input
+                            type="file"
+                            accept=".pdf,.ppt,.pptx"
+                            className="hidden"
+                            disabled={fileBusy === slot}
+                            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) handleAddFile(f, slot) }}
+                          />
+                        </label>
+                      )
+                    })
+                  ) : (kind !== 'target' || files.length === 0) && (
+                    // Targets take exactly one file — once it has one, the only
+                    // way to change it is delete-then-upload (above), not append.
+                    <label
+                      className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-[color:var(--border)] px-3 py-2.5 text-xs font-semibold text-[color:var(--secondary)] ${fileBusy === 'file' ? 'pointer-events-none opacity-60' : 'hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]'}`}
+                    >
+                      {fileBusy === 'file' ? <Loader2 size={13} className="animate-spin" /> : <UploadCloud size={13} />}
+                      Add a file
+                      <input
+                        type="file"
+                        className="hidden"
+                        disabled={fileBusy === 'file'}
+                        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) handleAddFile(f) }}
+                      />
+                    </label>
+                  )}
+                </div>
+              )}
             </div>
 
             {hasChain ? (

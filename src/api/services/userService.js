@@ -31,6 +31,44 @@ export const logout = async () => {
   return ok(null)
 }
 
+/** Always resolves — the backend never reveals whether the email is registered. */
+export const forgotPassword = async (email) => {
+  const { data: res } = await http.post('/auth/forgot-password', { email })
+  return { data: res.data, message: res.message }
+}
+
+export const resetPassword = async (token, new_password) => {
+  const { data: res } = await http.post('/auth/reset-password', { token, new_password })
+  return { data: res.data, message: res.message }
+}
+
+/** Always resolves — the backend never reveals whether the email is registered. */
+export const requestLoginOtp = async (email) => {
+  const { data: res } = await http.post('/auth/otp/request', { email })
+  return { data: res.data, message: res.message }
+}
+
+export const verifyLoginOtp = async (email, code) => {
+  const { data: res } = await http.post('/auth/otp/verify', { email, code })
+  return ok({ ...res.data, user: normalizeUser(res.data.user) })
+}
+
+/** Admin: start a "view as" session for a target user. */
+export const impersonateUser = async (id) => {
+  const { data: res } = await http.post(`/users/${id}/impersonate`)
+  return { data: { ...res.data, target_user: normalizeUser(res.data.target_user) }, message: res.message }
+}
+
+/** Best-effort server-side close of the current impersonation session. */
+export const endImpersonation = async () => {
+  try {
+    const { data: res } = await http.post('/auth/end-impersonation')
+    return { data: res.data }
+  } catch {
+    return { data: null }
+  }
+}
+
 export const getMe = async () => {
   if (USE_MOCK) {
     await delay()

@@ -21,14 +21,21 @@ import { pool } from '../config/database.js';
 import '../config/env.js';
 
 const APPLY = process.argv.includes('--apply');
+const REQUIRED_SLOTS = ['report', 'presentation'];
 
-/** Classify a row as the report or the presentation. */
+/**
+ * Classify a row as the report or the presentation. Title checked FIRST:
+ * either slot accepts either file type, so a presentation submitted as a
+ * PDF (common — several real scholars did exactly this) would otherwise be
+ * misclassified as a report by extension alone before the title is ever
+ * checked, and two rows would collide into the same slot.
+ */
 const classify = (row) => {
+  if (/present|slide|ppt|deck/i.test(row.title || '')) return 'presentation';
   const files = Array.isArray(row.file_urls) ? row.file_urls : [];
   const exts = files.map((f) => (f.type || '').toLowerCase());
   if (exts.some((e) => e === 'ppt' || e === 'pptx')) return 'presentation';
-  if (exts.some((e) => e === 'pdf')) return 'report';
-  return /present|slide|ppt|deck/i.test(row.title || '') ? 'presentation' : 'report';
+  return 'report';
 };
 
 const main = async () => {
@@ -99,9 +106,16 @@ const main = async () => {
     }
     if (p.empties.length) console.log(`    IGNORE  ${p.empties.length} empty draft(s)`);
 
-    const slotsUsed = [p.survivor, ...p.sources].map((r) => p.slots[r.id]);
-    if (new Set(slotsUsed).size < slotsUsed.length) {
-      console.log('    ⚠  two rows classified into the SAME slot — needs a human decision, skipping');
+    // A genuine duplicate upload (same report submitted twice) legitimately
+    // classifies into the same slot as another row — that's harmless, it
+    // just carries an extra file_urls entry into the merge as retained
+    // history. What actually needs a human is a required slot missing
+    // entirely: with 3+ rows this can still happen (e.g. three copies of the
+    // report and no presentation at all) even though no single PAIR collides.
+    const slotsUsed = new Set([p.survivor, ...p.sources].map((r) => p.slots[r.id]));
+    const missing = REQUIRED_SLOTS.filter((slot) => !slotsUsed.has(slot));
+    if (missing.length) {
+      console.log(`    ⚠  no row classified as [${missing.join(', ')}] — needs a human decision, skipping`);
       p.skip = true;
     }
   }

@@ -1,11 +1,12 @@
-import { KeyRound, Loader2, Users2, UploadCloud } from 'lucide-react'
+import { Eye, KeyRound, Loader2, Users2, UploadCloud } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { sendCredentials } from '../../api/services/userService.js'
+import { impersonateUser, sendCredentials } from '../../api/services/userService.js'
 import UploadProgressReportDrawer from '../../components/admin/UploadProgressReportDrawer.jsx'
 import ScholarSwitchPanel from '../../components/shared/ScholarSwitchPanel.jsx'
 import StudentProfileView from '../../components/shared/StudentProfileView.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
+import { useAuthStore } from '../../store/authStore.js'
 import { useLabels } from '../../store/labelStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { usePermStore } from '../../store/permStore.js'
@@ -27,6 +28,32 @@ export default function StudentProfilePage() {
   // :id changing — picking another scholar navigates without unmounting this
   // page, so the panel stays open across the switch instead of re-opening.
   const [switchOpen, setSwitchOpen] = useState(false)
+
+  // Impersonation is a fixed, admin-only capability (matches the backend's
+  // requireRole('admin') gate) — not tied to the editable permissions table.
+  const isAdmin = useAuthStore((s) => s.role === 'admin')
+  const startImpersonation = useAuthStore((s) => s.startImpersonation)
+  const [impersonating, setImpersonating] = useState(false)
+
+  const handleImpersonate = async () => {
+    if (!confirm(`View the app as this ${labels.student.toLowerCase()}? You'll be signed in as them for up to 15 minutes, and can return to your own account at any time.`)) return
+    setImpersonating(true)
+    try {
+      const r = await impersonateUser(id)
+      const { access_token, target_user } = r.data
+      startImpersonation({ targetUser: target_user, accessToken: access_token })
+      addToast({
+        type: 'success',
+        title: `Now viewing as ${target_user.first_name}`,
+        message: 'Use the banner at the top of the screen to return to your admin account.',
+      })
+      navigate('/student/dashboard', { replace: true })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Could not start impersonation', message: err.response?.data?.message })
+    } finally {
+      setImpersonating(false)
+    }
+  }
 
   const handleSendCredentials = async () => {
     if (!confirm(`Send fresh login credentials by email? This replaces the ${labels.student.toLowerCase()}'s current password.`)) return
@@ -74,6 +101,17 @@ export default function StudentProfilePage() {
             >
               <Users2 size={15} /> Switch {labels.student}
             </button>
+            {isAdmin && (
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
+                onClick={handleImpersonate}
+                disabled={impersonating}
+                title={`Sign in as this ${labels.student.toLowerCase()} to see exactly what they see`}
+              >
+                {impersonating ? <Loader2 size={15} className="animate-spin" /> : <Eye size={15} />}
+                View as {labels.student}
+              </button>
+            )}
           </div>
         }
       />

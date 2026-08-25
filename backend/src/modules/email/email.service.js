@@ -601,6 +601,77 @@ export const sendLoginCredentials = async ({ user, password, courseId = null, po
 };
 
 /**
+ * Send a self-service password-reset link. Not course-scoped — the request
+ * comes from the login page, before we know which course context applies —
+ * so it always uses the default/global sender.
+ */
+export const sendPasswordResetEmail = async ({ user, resetUrl }) => {
+  const sender = await getCourseSender(null);
+  const { subject, html } = await renderTemplate(
+    'password_reset',
+    { firstName: user.first_name, resetUrl },
+    () => ({
+      subject: 'Reset your DY Patil ERP password',
+      html: base(`
+    <h2>Reset your password</h2>
+    <p>Dear ${user.first_name},</p>
+    <p>We received a request to reset your password. Click the button below to choose a new one — this link expires in 30 minutes and can only be used once.</p>
+    <a href="${resetUrl}" class="cta">Reset Password →</a>
+    <p style="word-break:break-all;font-size:12px;color:#6b7280">${resetUrl}</p>
+    <p>If you didn't request this, you can safely ignore this email — your password will not change.</p>
+    <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
+  `),
+    })
+  );
+  const text = [
+    'Reset your DY Patil ERP password',
+    '',
+    `Reset link (valid 30 minutes): ${resetUrl}`,
+    '',
+    "If you didn't request this, you can safely ignore this email.",
+  ].join('\n');
+
+  return sendEmail({
+    to: { email: user.email, name: `${user.first_name} ${user.last_name || ''}`.trim() },
+    subject, html, text, sender,
+  });
+};
+
+/** Send a one-time 6-digit sign-in code for the passwordless email-OTP login. */
+export const sendLoginOtpEmail = async ({ user, code }) => {
+  const sender = await getCourseSender(null);
+  const { subject, html } = await renderTemplate(
+    'login_otp',
+    { firstName: user.first_name, code },
+    () => ({
+      subject: `${code} is your DY Patil ERP sign-in code`,
+      html: base(`
+    <h2>Your sign-in code</h2>
+    <p>Dear ${user.first_name},</p>
+    <p>Use this code to sign in — it expires in 5 minutes and can only be used once.</p>
+    <div class="cred-box" style="text-align:center">
+      <span class="val" style="font-size:28px;letter-spacing:6px">${code}</span>
+    </div>
+    <p>If you didn't request this, you can safely ignore this email — no one can sign in without this code.</p>
+    <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
+  `),
+    })
+  );
+  const text = [
+    'Your DY Patil ERP sign-in code',
+    '',
+    `Code (valid 5 minutes): ${code}`,
+    '',
+    "If you didn't request this, you can safely ignore this email.",
+  ].join('\n');
+
+  return sendEmail({
+    to: { email: user.email, name: `${user.first_name} ${user.last_name || ''}`.trim() },
+    subject, html, text, sender,
+  });
+};
+
+/**
  * Send test credentials to one applicant.
  * Called by test-assign.routes.js after creating a token.
  */
