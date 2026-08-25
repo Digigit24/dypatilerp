@@ -32,7 +32,10 @@ export const avatarFileHandler = asyncHandler(async (req, res) => {
   );
   if (!row) return res.status(404).end();
   try {
-    await s3.streamObject(row.object_key, res, { contentType: row.mime_type });
+    // avatar_url is a fixed URL (no cache-buster) reused by every <img> tag —
+    // it stays identical across a photo replace, so it must never be cached,
+    // or the old photo keeps showing. See the same fix on streamDocument.
+    await s3.streamObject(row.object_key, res, { contentType: row.mime_type, cacheControl: 'private, no-store, no-cache, must-revalidate' });
   } catch {
     res.status(404).end();
   }
