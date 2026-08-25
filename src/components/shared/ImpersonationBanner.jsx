@@ -1,5 +1,5 @@
 import { Eye } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
@@ -20,6 +20,15 @@ export default function ImpersonationBanner() {
   // store-side endImpersonation() is idempotent regardless, but this also
   // stops a redundant second toast/navigate.
   const [returning, setReturning] = useState(false)
+
+  // This component is always mounted (App.jsx renders it unconditionally and
+  // it just returns null when idle), so its state survives across sessions.
+  // Without this, a second "view as" after a completed return flow would
+  // inherit the previous session's returning=true and render permanently
+  // stuck on "Returning…" until a manual page refresh.
+  useEffect(() => {
+    if (impersonation) setReturning(false)
+  }, [impersonation?.startedAt])
 
   if (!impersonation) return null
 
