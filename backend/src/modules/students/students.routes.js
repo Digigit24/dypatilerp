@@ -238,9 +238,30 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
   }
 
   const scopeFrag = scopeBatchSQL(req, 'be.batch_id');
+
+  // Per-kind submission-status filters for the Scholars list — "which scholars
+  // have a pending progress report", "haven't submitted an assignment yet",
+  // etc. Value is one of: not_submitted | submitted | under_review |
+  // needs_revision | approved | rejected. `merged_into_id IS NULL` matches
+  // the "current, non-superseded" convention used everywhere else in this
+  // file (see submissions_count/progress_reports_count/milestones_count above).
+  const submissionStatusFrag = (queryKey, submissionType) => {
+    const status = req.query[queryKey];
+    if (!status) return '';
+    if (status === 'not_submitted') {
+      return `AND NOT EXISTS (SELECT 1 FROM submissions ss WHERE ss.student_user_id = be.user_id AND ss.submission_type = '${submissionType}' AND ss.status <> 'draft' AND ss.merged_into_id IS NULL)`;
+    }
+    params.push(status);
+    return `AND EXISTS (SELECT 1 FROM submissions ss WHERE ss.student_user_id = be.user_id AND ss.submission_type = '${submissionType}' AND ss.status = $${params.length} AND ss.merged_into_id IS NULL)`;
+  };
+  const progressReportFrag = submissionStatusFrag('progress_report_status', 'progress_report');
+  const assignmentFrag     = submissionStatusFrag('assignment_status', 'assignment');
+  const milestoneFrag      = submissionStatusFrag('milestone_status', 'target');
+  const submissionFilterFrag = [progressReportFrag, assignmentFrag, milestoneFrag].filter(Boolean).join(' ');
+
   const scopedWhere = where
-    ? `${where} ${ownFrag} ${scopeFrag}`
-    : (ownFrag || scopeFrag) ? `WHERE TRUE ${ownFrag} ${scopeFrag}` : '';
+    ? `${where} ${ownFrag} ${scopeFrag} ${submissionFilterFrag}`
+    : (ownFrag || scopeFrag || submissionFilterFrag) ? `WHERE TRUE ${ownFrag} ${scopeFrag} ${submissionFilterFrag}` : '';
 
   // Onboarding-document completeness — how many of the 11 CV/identity/research
   // slots this scholar has uploaded (see student-profile.service.js#ALL_SLOTS).
@@ -255,19 +276,21 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
   const { rows: data } = await query(
     `SELECT be.*, u.first_name, u.middle_name, u.last_name, u.email, u.phone, u.avatar_url,
             b.name as batch_name, b.code as batch_code, c.name as course_name,
-            (SELECT COUNT(*) FROM submissions s2 WHERE s2.student_user_id = be.user_id)::int
+            (SELECT COUNT(*) FROM submissions s2 WHERE s2.student_user_id = be.user_id
+               AND s2.status <> 'draft' AND s2.merged_into_id IS NULL)::int
               AS submissions_count,
             (SELECT COUNT(*) FROM videos v2
                WHERE v2.owner_user_id = be.user_id AND v2.slot = ANY($${docSlotsParam}::text[]))::int
               AS documents_count,
             (SELECT COUNT(*) FROM submissions s2 WHERE s2.student_user_id = be.user_id
-               AND s2.submission_type = 'progress_report')::int
+               AND s2.submission_type = 'progress_report' AND s2.status <> 'draft' AND s2.merged_into_id IS NULL)::int
               AS progress_reports_count,
             (SELECT COUNT(*) FROM submissions s2 WHERE s2.student_user_id = be.user_id
-               AND s2.submission_type = 'assignment')::int
+               AND s2.submission_type = 'assignment' AND s2.status <> 'draft' AND s2.merged_into_id IS NULL)::int
               AS assignments_count,
             (SELECT json_build_object(
-               'completed', COUNT(*) FILTER (WHERE ms.status = 'approved'),
+               'submitted', COUNT(*) FILTER (WHERE ms.status IS NOT NULL),
+               'approved',  COUNT(*) FILTER (WHERE ms.status = 'approved'),
                'total', COUNT(*)
              )
              FROM targets t2
@@ -277,7 +300,7 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
                  AND status <> 'draft' AND merged_into_id IS NULL
                ORDER BY created_at DESC LIMIT 1
              ) ms ON TRUE
-             WHERE t2.batch_id = be.batch_id AND t2.semester = be.current_semester)
+             WHERE t2.batch_id = be.batch_id)
               AS milestones_count,
             (spd.onboarding_completed_at IS NOT NULL) AS onboarding_completed
      FROM batch_enrollments be

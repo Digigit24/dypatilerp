@@ -28,7 +28,7 @@ export const listTargets = async ({
 
   const { rows: data } = await query(
     `SELECT t.*, t.module_name AS name, b.name AS batch_name, b.code AS batch_code,
-            (SELECT COUNT(*) FROM submissions s WHERE s.target_id = t.id AND s.merged_into_id IS NULL)::int AS submission_count,
+            (SELECT COUNT(*) FROM submissions s WHERE s.target_id = t.id AND s.status <> 'draft' AND s.merged_into_id IS NULL)::int AS submission_count,
             (SELECT COUNT(*) FROM submissions s WHERE s.target_id = t.id AND s.status = 'approved' AND s.merged_into_id IS NULL)::int AS approved_count,
             (SELECT COUNT(*) FROM batch_enrollments be WHERE be.batch_id = t.batch_id AND be.status = 'active')::int AS student_count
      FROM targets t

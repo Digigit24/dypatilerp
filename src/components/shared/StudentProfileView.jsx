@@ -118,6 +118,10 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   const [progressSummary, setProgressSummary] = useState(null)
   // Assignment-type submissions (filtered from the generic submissions list).
   const [assignments,     setAssignments]     = useState([])
+  // Progress-report submissions this scholar has actually submitted (excludes
+  // in-progress drafts sitting on an unfinished slot upload) — the "Progress
+  // Reports" subtab's real submitted count, same methodology as Assignments.
+  const [progressReports, setProgressReports] = useState([])
   // Keyed by submission id — covers both the admin `assignments` list (whose
   // rows ARE submissions) and the student `myAssignments` list (keyed by
   // each row's my_submission_id once one exists).
@@ -218,6 +222,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
 
     // Assignment-type submissions — the new "Assignments" subtab source.
     loadAssignments()
+    loadProgressReports()
 
     loadTargets()
     getProgressSummary(studentId)
@@ -280,6 +285,18 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
         setAssignmentFeedbackLoading(false)
       })
       .catch(() => { setAssignments([]); setAssignmentFeedbackLoading(false) })
+  }
+
+  // Progress-report submissions for this scholar — the "Progress Reports"
+  // subtab's real submitted count. Excludes drafts: a report only becomes a
+  // submission the scholar has actually SUBMITTED once submitForReview()
+  // fires (see ProgressCycleCard.handleSubmit below) — until then it's a
+  // draft row created by the first slot upload, not a submitted report.
+  function loadProgressReports() {
+    if (!studentId) return
+    getSubmissions({ student_user_id: studentId, submission_type: 'progress_report' })
+      .then((r) => setProgressReports((r.data || []).filter((s) => s.status !== 'draft' && !s.merged_into_id)))
+      .catch(() => setProgressReports([]))
   }
 
   // Milestones read from /api/targets (real module), not the legacy
@@ -498,11 +515,17 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
     rejected: assignments.filter((s) => s.status === 'rejected').length,
   }
 
+  // Targets actually SUBMITTED against — not `targets.length`, which is every
+  // target definition the admin created for the batch (that's a "how many
+  // milestones exist", not "how many has this scholar submitted" number).
+  // Mirrors targetState()'s not_started/draft exclusion.
+  const submittedTargets = targets.filter((t) => t.my_submission_id && t.my_submission_status !== 'draft')
+
   // Outer tabs. The old Profile | Progress Reports | Submissions | Milestones | Research
   // Profile row is collapsed into two outer tabs: My Profile (with inner subtabs
   // Profile / Fees [student only] / Research Profile) and Submissions (with inner
   // subtabs Progress Reports / Assignments / Milestones).
-  const subsCount = assignments.length + targets.length
+  const subsCount = progressReports.length + assignments.length + submittedTargets.length
   const TABS = [
     { key: 'profile',     label: 'My Profile' },
     { key: 'submissions', label: `Submissions${subsCount ? ` (${subsCount})` : ''}` },
@@ -632,9 +655,9 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
       {tab === 'submissions' && (
         <div className="mb-5 flex flex-wrap gap-2 border-b border-[color:var(--border)] pb-3">
           {[
-            { key: 'reports',     label: 'Progress Reports' },
+            { key: 'reports',     label: `Progress Reports${progressReports.length ? ` (${progressReports.length})` : ''}` },
             { key: 'assignments', label: `Assignments${assignments.length    ? ` (${assignments.length})`    : ''}` },
-            { key: 'milestones',  label: `Milestones${targets.length         ? ` (${targets.length})`         : ''}` },
+            { key: 'milestones',  label: `Milestones${submittedTargets.length ? ` (${submittedTargets.length})` : ''}` },
           ].map(({ key, label }) => (
             <button key={key} onClick={() => setSubTab(key)}
               className={`rounded-md px-4 py-1.5 text-xs font-semibold transition ${subTab === key ? 'bg-[color:var(--accent-tint)] text-[color:var(--accent)]' : 'text-[color:var(--secondary)] hover:bg-[color:var(--surface)]'}`}>
@@ -895,7 +918,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
               cycle={cycle}
               isAdminView={isAdminView}
               canUpload={canUploadReport}
-              onChange={() => loadCycle(selectedReportSemester)}
+              onChange={() => { loadCycle(selectedReportSemester); loadProgressReports() }}
               onUploadOnBehalf={() => setReportUploadOpen(true)}
               addToast={addToast}
             />
@@ -1343,7 +1366,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
           studentUserId={studentId}
           semester={selectedReportSemester}
           onClose={() => setReportUploadOpen(false)}
-          onUploaded={() => loadCycle(selectedReportSemester)}
+          onUploaded={() => { loadCycle(selectedReportSemester); loadProgressReports() }}
         />
       )}
 

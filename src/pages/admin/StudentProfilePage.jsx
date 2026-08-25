@@ -1,6 +1,6 @@
 import { Eye, KeyRound, Loader2, Users2, UploadCloud } from 'lucide-react'
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { impersonateUser, sendCredentials } from '../../api/services/userService.js'
 import UploadProgressReportDrawer from '../../components/admin/UploadProgressReportDrawer.jsx'
 import ScholarSwitchPanel from '../../components/shared/ScholarSwitchPanel.jsx'
@@ -15,6 +15,9 @@ export default function StudentProfilePage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const labels = useLabels()
+  // Deep link from the Scholars list count columns, e.g. /admin/students/:id?subtab=assignments
+  const [searchParams] = useSearchParams()
+  const linkedSubTab = searchParams.get('subtab')
   const addToast = useUiStore((s) => s.addToast)
   const [sending, setSending] = useState(false)
   // After an upload, remount the profile view on its Progress Reports tab so the
@@ -115,7 +118,13 @@ export default function StudentProfilePage() {
           </div>
         }
       />
-      <StudentProfileView studentId={id} isAdminView={true} defaultTab={openedFromUpload ? 'reports' : 'profile'} key={reloadKey} />
+      <StudentProfileView
+        studentId={id}
+        isAdminView={true}
+        defaultTab={openedFromUpload ? 'reports' : linkedSubTab ? 'submissions' : 'profile'}
+        defaultSubTab={!openedFromUpload ? linkedSubTab : undefined}
+        key={reloadKey}
+      />
       {uploadOpen && (
         <UploadProgressReportDrawer
           studentUserId={id}

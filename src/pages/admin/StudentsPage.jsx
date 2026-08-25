@@ -1,5 +1,5 @@
 import {
-  CheckSquare, ClipboardList, Download, ExternalLink, FileSignature, Files, FileText, Filter, KeyRound, Lock,
+  Award, CheckSquare, ClipboardList, Download, ExternalLink, FileSignature, Files, FileText, Filter, KeyRound, Lock,
   Loader2, RotateCcw, Square, Trash2, Upload, Users, XCircle,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -24,6 +24,34 @@ import { usePermStore } from '../../store/permStore.js'
 // Tabs map to the enrollment_status enum (active | suspended | withdrawn=archived).
 const STATUS_TABS = ['all', 'active', 'suspended', 'archived']
 const TAB_TO_STATUS = { active: 'active', suspended: 'suspended', archived: 'withdrawn' }
+
+// Per-kind submission-status filter options — mirrors the `submissions.status`
+// enum the backend filters against (see GET /students' submissionStatusFrag).
+// Assignments have no approval chain (draft/submitted only), so its dropdown
+// drops the approval-chain-only statuses that could never match a real row.
+const PROGRESS_REPORT_STATUS_OPTIONS = [
+  { value: '', label: 'All progress reports' },
+  { value: 'not_submitted', label: 'Not submitted' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'under_review', label: 'Under review' },
+  { value: 'needs_revision', label: 'Needs revision' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'rejected', label: 'Rejected' },
+]
+const ASSIGNMENT_STATUS_OPTIONS = [
+  { value: '', label: 'All assignments' },
+  { value: 'not_submitted', label: 'Not submitted' },
+  { value: 'submitted', label: 'Submitted' },
+]
+const MILESTONE_STATUS_OPTIONS = [
+  { value: '', label: 'All milestones' },
+  { value: 'not_submitted', label: 'Not submitted' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'under_review', label: 'Under review' },
+  { value: 'needs_revision', label: 'Needs revision' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'rejected', label: 'Rejected' },
+]
 
 const PAGE_SIZE = 100
 
@@ -65,6 +93,13 @@ export default function StudentsPage() {
   const [studentSubs,    setStudentSubs]    = useState([])
   const [studentReports, setStudentReports] = useState([])           // uploaded progress-report submissions
   const [statusFilter,   setStatusFilter]   = useState('all')
+  // Per-kind submission-status filters — "which scholars have a pending
+  // progress report", "haven't submitted an assignment yet", etc. Applied
+  // server-side (GET /students ?progress_report_status=/&assignment_status=
+  // /&milestone_status=) so paging + counts stay correct, same as statusFilter.
+  const [progressReportStatus, setProgressReportStatus] = useState('')
+  const [assignmentStatus,     setAssignmentStatus]     = useState('')
+  const [milestoneStatus,      setMilestoneStatus]      = useState('')
   const [selectedIds,    setSelectedIds]    = useState(new Set())   // bulk selection (user_id)
   const [bulkLoading,    setBulkLoading]    = useState(false)
   const [exportLoading,  setExportLoading]  = useState(false)
@@ -92,7 +127,12 @@ export default function StudentsPage() {
   useScrollLock(Boolean(selected) || showImport)
 
   // Status filter is applied server-side so paging + counts stay correct.
-  const statusParam = () => (statusFilter === 'all' ? {} : { status: TAB_TO_STATUS[statusFilter] })
+  const statusParam = () => ({
+    ...(statusFilter === 'all' ? {} : { status: TAB_TO_STATUS[statusFilter] }),
+    ...(progressReportStatus ? { progress_report_status: progressReportStatus } : {}),
+    ...(assignmentStatus     ? { assignment_status: assignmentStatus }         : {}),
+    ...(milestoneStatus      ? { milestone_status: milestoneStatus }           : {}),
+  })
 
   // Core scholar data (students:read) — the students list already carries
   // first_name/last_name/email, so names render without the users enrichment.
@@ -142,7 +182,7 @@ export default function StudentsPage() {
     setItems(null)
     setSelectedIds(new Set())
     loadStudents()
-  }, [currentCourse?.id, currentBatch?.id, statusFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentCourse?.id, currentBatch?.id, statusFilter, progressReportStatus, assignmentStatus, milestoneStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Infinite scroll — load the next 100 when the sentinel scrolls into view.
   useEffect(() => {
@@ -400,14 +440,30 @@ export default function StudentsPage() {
               </button>
             ))}
           </div>
-          <button className="flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-2 text-xs font-semibold text-[color:var(--secondary)]">
-            <Filter size={14} /> Filter
-          </button>
+        </div>
+
+        {/* ── Submission-status filters — "which scholars have a pending progress
+            report", "haven't submitted an assignment yet", etc. Applied server-side. ── */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-[color:var(--border)] px-5 py-3">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[color:var(--secondary)]">
+            <Filter size={13} /> Filter by:
+          </span>
+          <SubmissionFilterSelect value={progressReportStatus} onChange={setProgressReportStatus} options={PROGRESS_REPORT_STATUS_OPTIONS} />
+          <SubmissionFilterSelect value={assignmentStatus}     onChange={setAssignmentStatus}     options={ASSIGNMENT_STATUS_OPTIONS} />
+          <SubmissionFilterSelect value={milestoneStatus}      onChange={setMilestoneStatus}      options={MILESTONE_STATUS_OPTIONS} />
+          {(progressReportStatus || assignmentStatus || milestoneStatus) && (
+            <button
+              onClick={() => { setProgressReportStatus(''); setAssignmentStatus(''); setMilestoneStatus('') }}
+              className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--surface)] px-3 py-1.5 text-xs font-semibold text-[color:var(--secondary)] transition hover:bg-[color:var(--border)]"
+            >
+              <RotateCcw size={12} /> Reset
+            </button>
+          )}
         </div>
 
         {/* ── Table ── */}
         <div className="table-wrap">
-          <table className="min-w-[1620px] w-full text-left text-sm">
+          <table className="min-w-[1900px] w-full text-left text-sm">
             <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
               <tr>
                 {/* Checkbox select-all */}
@@ -424,7 +480,7 @@ export default function StudentsPage() {
                         : <Square size={18} />}
                   </button>
                 </th>
-                {['Name', 'Permanent ID', 'Batch', 'Enrolled', 'Progress', 'Submissions', 'Progress Reports', 'Documents', 'Status'].map((h) => (
+                {['Name', 'Permanent ID', 'Batch', 'Enrolled', 'Progress', 'Submissions', 'Progress Reports', 'Assignments', 'Milestones', 'Documents', 'Status'].map((h) => (
                   <th key={h} className="px-6 py-4">{h}</th>
                 ))}
                 <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
@@ -433,7 +489,7 @@ export default function StudentsPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-6 py-16 text-center text-sm text-[color:var(--muted)]">
+                  <td colSpan={13} className="px-6 py-16 text-center text-sm text-[color:var(--muted)]">
                     <Users className="mx-auto mb-3 text-[color:var(--border)]" size={32} />
                     No students found.
                   </td>
@@ -502,6 +558,32 @@ export default function StudentsPage() {
                       >
                         <ClipboardList size={13} /> {s.progress_reports_count ?? 0}
                       </button>
+                    </td>
+                    <td className="px-6" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-[color:var(--secondary)] transition hover:bg-[color:var(--accent-tint)] hover:text-[color:var(--accent)]"
+                        onClick={() => navigate(`/admin/students/${s.user_id}?subtab=assignments`)}
+                        title="View this scholar's assignment submissions"
+                      >
+                        <FileSignature size={13} /> {s.assignments_count ?? 0}
+                      </button>
+                    </td>
+                    <td className="px-6" onClick={(e) => e.stopPropagation()}>
+                      {(() => {
+                        const submitted = s.milestones_count?.submitted ?? 0
+                        const total = s.milestones_count?.total ?? 0
+                        return (
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-[color:var(--secondary)] transition hover:bg-[color:var(--accent-tint)] hover:text-[color:var(--accent)]"
+                            onClick={() => navigate(`/admin/students/${s.user_id}?subtab=milestones`)}
+                            title={`${submitted} of ${total} milestones submitted`}
+                          >
+                            <Award size={13} /> {submitted}/{total}
+                          </button>
+                        )
+                      })()}
                     </td>
                     <td className="px-6" onClick={(e) => e.stopPropagation()}>
                       {(() => {
@@ -820,6 +902,22 @@ export default function StudentsPage() {
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
+
+function SubmissionFilterSelect({ value, onChange, options }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`h-8 shrink-0 rounded-full border px-3 text-xs font-semibold transition ${
+        value
+          ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)] text-[color:var(--accent)]'
+          : 'border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--secondary)]'
+      }`}
+    >
+      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  )
+}
 
 function Info({ label, value }) {
   return (

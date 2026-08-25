@@ -50,7 +50,7 @@ router.get('/', requirePermission('assignments', 'read'), asyncHandler(async (re
   const where = (conds.length ? `WHERE ${conds.join(' AND ')}` : 'WHERE TRUE') + ` ${scopeFrag}`;
   const { rows } = await query(
     `SELECT a.*, b.name AS batch_name, b.code AS batch_code,
-            (SELECT COUNT(*) FROM submissions s WHERE s.assignment_id = a.id)::int AS submission_count,
+            (SELECT COUNT(*) FROM submissions s WHERE s.assignment_id = a.id AND s.status <> 'draft')::int AS submission_count,
             (SELECT COUNT(*) FROM submissions s WHERE s.assignment_id = a.id AND s.status = 'approved')::int AS approved_count,
             (SELECT COUNT(*) FROM batch_enrollments be WHERE be.batch_id = a.batch_id)::int AS student_count
      FROM assignments a

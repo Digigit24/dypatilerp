@@ -1,13 +1,12 @@
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { ArrowRight, FileText, Info, Paperclip, UploadCloud, X } from 'lucide-react'
+import { ArrowRight, Check, FileText, Info, Paperclip, UploadCloud, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { useSearchParams } from 'react-router-dom'
 import { createSubmission, submitForReview, uploadSubmissionAttachment } from '../../api/services/submissionService.js'
 import { getMyAssignments } from '../../api/services/assignmentService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
-import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { useUiStore } from '../../store/uiStore.js'
 
 export default function SubmitPage() {
@@ -125,7 +124,13 @@ export default function SubmitPage() {
                   <p className="text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--muted)]">Report Title</p>
                   <p className="mt-1 text-sm text-[color:var(--secondary)]">Use a clear title, e.g. "Progress Report 1". Keep it between 3 and 200 characters.</p>
                 </div>
-                <StatusBadge status={validTitle ? 'approved' : 'draft'} />
+                {/* Title-length validity, not a submission status — this page hasn't
+                    created a submission yet, so it must never borrow the real
+                    draft/approved vocabulary (that badge previously showed a
+                    misleading "Approved" pill for a merely well-formed title). */}
+                <span className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${validTitle ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-stone-200 bg-stone-100 text-stone-600'}`}>
+                  {validTitle && <Check size={11} />} {validTitle ? 'Looks good' : 'Needs a title'}
+                </span>
               </div>
             </div>
             <div className="p-5 md:p-7">

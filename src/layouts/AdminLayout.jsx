@@ -1,4 +1,4 @@
-﻿import { Activity, Bell, BookOpen, ClipboardCheck, FileSignature, FileText, Globe, Home, IndianRupee, Layers, ListChecks, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Settings, Shield, Sun, Target, UserCog, Users, Wand2 } from 'lucide-react'
+﻿import { Activity, Bell, ClipboardCheck, FileSignature, FileText, Globe, Home, IndianRupee, Layers, ListChecks, Loader2, LogOut, Mail, Menu, Moon, PanelLeftClose, PanelLeftOpen, PlayCircle, RefreshCw, Settings, Shield, Sun, Target, UserCog, Users, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import Breadcrumbs from '../components/shared/Breadcrumbs.jsx'
@@ -78,7 +78,9 @@ export default function AdminLayout() {
         { to: '/admin/students',   label: labels.studentPlural, icon: UserCog, perm: 'students' },
         { to: '/admin/batches',    label: 'Batches',          icon: Layers,  perm: 'batches' },
         { to: '/admin/formats',    label: 'Formats',          icon: FileText, perm: 'formats' },
-        { to: '/admin/progress',   label: 'Progress Reports', icon: BookOpen, perm: 'progress_reports' },
+        // Progress Reports hidden from the sidebar — reviewing them now lives
+        // under Submissions (tabbed), same as Assignments/Milestones review.
+        // Route/page kept reachable at /admin/progress, just not linked here.
         { to: '/admin/official-letters', label: 'Official Letters', icon: FileSignature, perm: 'students' },
       ],
     },
