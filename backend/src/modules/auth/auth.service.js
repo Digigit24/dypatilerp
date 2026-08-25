@@ -169,6 +169,13 @@ export const generateImpersonationToken = (targetUser, roles, { impersonatedBy, 
  * impersonate two people at once, and a target can't be impersonated by two
  * admins at once. Sessions whose token already expired without an explicit
  * end are lazily closed first so they never block a future start.
+ *
+ * This call is only reachable with the admin's own, non-impersonation-scoped
+ * JWT (see the /users/:id/impersonate route guard), so a still-open session
+ * under this same admin_user_id is by definition orphaned — the frontend
+ * lost track of it (tab closed, crash, direct navigation away without
+ * hitting "Return to Admin") rather than a second concurrent attempt. Close
+ * it and proceed instead of blocking the admin out of their own feature.
  */
 export const startImpersonationSession = async (adminUserId, targetUserId, ipAddress) => {
   const client = await getClient();
@@ -180,15 +187,11 @@ export const startImpersonationSession = async (adminUserId, targetUserId, ipAdd
        WHERE ended_at IS NULL AND expires_at <= NOW()`
     );
 
-    const { rows: adminActive } = await client.query(
-      `SELECT id FROM impersonation_sessions WHERE admin_user_id = $1 AND ended_at IS NULL`,
+    await client.query(
+      `UPDATE impersonation_sessions SET ended_at = NOW(), ended_reason = 'superseded'
+       WHERE admin_user_id = $1 AND ended_at IS NULL`,
       [adminUserId]
     );
-    if (adminActive.length) {
-      const err = new Error('You are already impersonating another user. Return to your own account first.');
-      err.code = 'ALREADY_IMPERSONATING';
-      throw err;
-    }
 
     const { rows: targetActive } = await client.query(
       `SELECT id FROM impersonation_sessions WHERE target_user_id = $1 AND ended_at IS NULL`,
