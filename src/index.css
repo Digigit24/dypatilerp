@@ -511,73 +511,72 @@ table { border-collapse: collapse; }
     line-height: 1.2 !important;
   }
 
-/* === Table cell action buttons (no wrap, tight, tinted) =========== */
-.table-actions {
+/* === Scholar-list action chips — clearly bordered, arranged as a 2-col grid === */
+.action-chip {
   display: inline-flex;
   align-items: center;
-  flex-wrap: nowrap;
+  justify-content: center;
   gap: 6px;
   white-space: nowrap;
-  overflow-wrap: normal;
-  word-break: keep-all;
-}
-
-.btn-table-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 12px;
   border-radius: 9999px;
+  border-width: 1.5px;
+  border-style: solid;
+  padding: 6px 12px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
-  white-space: nowrap;
-  overflow-wrap: normal;
-  word-break: keep-all;
-  flex-shrink: 0;
-  border: 1px solid transparent;
-  background: var(--surface);
-  color: var(--text);
-  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
   cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, transform 80ms ease;
+}
+.action-chip:hover:not(:disabled) { transform: translateY(-1px); }
+.action-chip:disabled { cursor: not-allowed; }
+
+.action-chip--neutral {
+  border-color: color-mix(in srgb, var(--secondary) 30%, transparent);
+  background: var(--card);
+  color: var(--secondary);
+}
+.action-chip--neutral:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
-.btn-table-action:hover {
-  background: var(--surface-strong);
-}
-
-.btn-table-action--accent {
+.action-chip--accent {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   background: var(--accent-tint);
   color: var(--accent);
-  border-color: transparent;
 }
-.btn-table-action--accent:hover {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
-.btn-table-action--success {
-  background: var(--success-bg);
-  color: var(--success-fg);
-}
-.btn-table-action--success:hover {
-  background: color-mix(in srgb, var(--success-fg) 14%, transparent);
+.action-chip--accent:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
-.btn-table-action--warn {
+.action-chip--warn {
+  border-color: color-mix(in srgb, var(--warn-fg) 45%, transparent);
   background: var(--warn-bg);
   color: var(--warn-fg);
 }
-.btn-table-action--warn:hover {
-  background: color-mix(in srgb, var(--warn-fg) 14%, transparent);
+.action-chip--warn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn-fg) 20%, transparent);
 }
 
-.btn-table-action--danger {
+.action-chip--success {
+  border-color: color-mix(in srgb, var(--success-fg) 45%, transparent);
+  background: var(--success-bg);
+  color: var(--success-fg);
+}
+.action-chip--success:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--success-fg) 20%, transparent);
+}
+
+.action-chip--danger {
+  border-color: color-mix(in srgb, var(--danger-fg) 45%, transparent);
   background: var(--danger-bg);
   color: var(--danger-fg);
 }
-.btn-table-action--danger:hover {
-  background: color-mix(in srgb, var(--danger-fg) 14%, transparent);
+.action-chip--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger-fg) 20%, transparent);
 }
 
 .btn-table-icon {
@@ -636,7 +635,6 @@ table { border-collapse: collapse; }
   font-size: 13px;
 }
 .table-wrap > table tr:last-child td { border-bottom: none; }
-.table-wrap > table .table-actions { white-space: nowrap; flex-wrap: nowrap; }
 
 /* === Toolbar: row of filters + actions ============================= */
 .toolbar {

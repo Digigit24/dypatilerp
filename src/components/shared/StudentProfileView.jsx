@@ -10,7 +10,7 @@
  */
 import {
   Award, BookOpen, Camera, Clock,
-  DollarSign, ExternalLink, FileText, Globe, GraduationCap,
+  ExternalLink, FileText, Globe, GraduationCap, IndianRupee,
   Link2, Loader2, Pencil, Plus, Save, Shield, UploadCloud, User, X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -762,7 +762,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
             <div className="card p-6">
               <div className="safe-row">
                 <div className="flex items-center gap-3">
-                  <span className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-50 text-emerald-600"><DollarSign size={18} /></span>
+                  <span className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-50 text-emerald-600"><IndianRupee size={18} /></span>
                   <h2 className="text-lg font-semibold text-[color:var(--text)]">Fees Summary</h2>
                 </div>
               </div>
@@ -1158,12 +1158,12 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
 
           {fees === null ? (
             <div className="card p-10 text-center">
-              <DollarSign className="mx-auto text-[color:var(--muted)]" size={32} />
+              <IndianRupee className="mx-auto text-[color:var(--muted)]" size={32} />
               <p className="mt-3 text-sm text-[color:var(--secondary)]">Loading fees…</p>
             </div>
           ) : fees.length === 0 ? (
             <div className="card p-10 text-center">
-              <DollarSign className="mx-auto text-[color:var(--muted)]" size={32} />
+              <IndianRupee className="mx-auto text-[color:var(--muted)]" size={32} />
               <p className="mt-3 font-semibold text-[color:var(--text)]">No fee records yet</p>
               <p className="mt-1 text-sm text-[color:var(--secondary)]">Installments will appear here once finance records them.</p>
             </div>

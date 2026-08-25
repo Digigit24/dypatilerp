@@ -1,5 +1,5 @@
 import {
-  CheckSquare, ClipboardList, Download, ExternalLink, FileText, Filter, KeyRound, Lock,
+  CheckSquare, ClipboardList, Download, ExternalLink, FileSignature, Files, FileText, Filter, KeyRound, Lock,
   Loader2, RotateCcw, Square, Trash2, Upload, Users, XCircle,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -8,6 +8,7 @@ import { getProgressReportsByStudent, getSubmissionsByStudent } from '../../api/
 import { archiveStudent, bulkStudentAction, exportStudents, getStudents } from '../../api/services/studentService.js'
 import { bulkSendCredentials, getUsers, sendCredentials } from '../../api/services/userService.js'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
+import OfficialLettersDrawer from '../../components/admin/OfficialLettersDrawer.jsx'
 import ConfirmDialog from '../../components/shared/ConfirmDialog.jsx'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import ResetPasswordModal from '../../components/shared/ResetPasswordModal.jsx'
@@ -25,6 +26,11 @@ const STATUS_TABS = ['all', 'active', 'suspended', 'archived']
 const TAB_TO_STATUS = { active: 'active', suspended: 'suspended', archived: 'withdrawn' }
 
 const PAGE_SIZE = 100
+
+// Matches student-profile.service.js#ALL_SLOTS on the backend (CV, research
+// proposal, publications list, research statement + 7 identity/marksheet
+// scans) — the denominator for the "X/11 documents" column below.
+const TOTAL_ONBOARDING_DOCS = 11
 
 // Merge pages without ever duplicating a row (guards against double-fired loads).
 const dedupeBy = (rows, key) => {
@@ -67,6 +73,7 @@ export default function StudentsPage() {
   const [confirmDialog,  setConfirmDialog]  = useState(null)      // { title, message, confirmLabel, tone, onConfirm }
   const [confirmBusy,    setConfirmBusy]    = useState(false)
   const [resetTarget,    setResetTarget]    = useState(null)      // { id, first_name, last_name, email } pending password reset
+  const [lettersTarget,  setLettersTarget]  = useState(null)      // scholar row -> Official Letters drawer
   const addToast = useUiStore((s) => s.addToast)
   const { currentCourse, currentBatch } = useCourseStore()
 
@@ -400,7 +407,7 @@ export default function StudentsPage() {
 
         {/* ── Table ── */}
         <div className="table-wrap">
-          <table className="min-w-[1480px] w-full text-left text-sm">
+          <table className="min-w-[1620px] w-full text-left text-sm">
             <thead className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted)]">
               <tr>
                 {/* Checkbox select-all */}
@@ -417,7 +424,7 @@ export default function StudentsPage() {
                         : <Square size={18} />}
                   </button>
                 </th>
-                {['Name', 'Permanent ID', 'Batch', 'Enrolled', 'Progress', 'Submissions', 'Progress Reports', 'Status'].map((h) => (
+                {['Name', 'Permanent ID', 'Batch', 'Enrolled', 'Progress', 'Submissions', 'Progress Reports', 'Documents', 'Status'].map((h) => (
                   <th key={h} className="px-6 py-4">{h}</th>
                 ))}
                 <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
@@ -426,7 +433,7 @@ export default function StudentsPage() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-6 py-16 text-center text-sm text-[color:var(--muted)]">
+                  <td colSpan={11} className="px-6 py-16 text-center text-sm text-[color:var(--muted)]">
                     <Users className="mx-auto mb-3 text-[color:var(--border)]" size={32} />
                     No students found.
                   </td>
@@ -496,26 +503,46 @@ export default function StudentsPage() {
                         <ClipboardList size={13} /> {s.progress_reports_count ?? 0}
                       </button>
                     </td>
+                    <td className="px-6" onClick={(e) => e.stopPropagation()}>
+                      {(() => {
+                        const count = s.documents_count ?? 0
+                        const complete = count >= TOTAL_ONBOARDING_DOCS
+                        return (
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold ${
+                              complete
+                                ? 'bg-emerald-50 text-emerald-600'
+                                : count > 0
+                                  ? 'bg-amber-50 text-amber-600'
+                                  : 'bg-[color:var(--surface)] text-[color:var(--muted)]'
+                            }`}
+                            title={`${count} of ${TOTAL_ONBOARDING_DOCS} onboarding documents uploaded`}
+                          >
+                            <Files size={13} /> {count}/{TOTAL_ONBOARDING_DOCS}
+                          </span>
+                        )
+                      })()}
+                    </td>
                     <td className="px-6"><StatusBadge status={s.status} /></td>
-                    <td className="px-6 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      <div className="table-actions">
+                    <td className="px-6 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="ml-auto grid w-max grid-cols-2 gap-1.5">
                         {canSendCreds && (
                           s.user_id ? (
                             <button
                               onClick={(e) => sendCredsOne(s, e)}
                               disabled={sendingCredId === s.user_id}
-                              className="btn-table-action disabled:opacity-60"
+                              className="action-chip action-chip--accent"
                               title="Generate a new password and email the login details to this scholar"
                             >
-                              {sendingCredId === s.user_id ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />} Send Login Details
+                              {sendingCredId === s.user_id ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />} Send Login
                             </button>
                           ) : (
                             <button
                               disabled
-                              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--muted)] opacity-60"
+                              className="action-chip action-chip--neutral opacity-50"
                               title="This scholar has no linked login account, so login details can't be sent."
                             >
-                              <KeyRound size={13} /> Send Login Details
+                              <KeyRound size={13} /> Send Login
                             </button>
                           )
                         )}
@@ -523,7 +550,7 @@ export default function StudentsPage() {
                           s.user_id ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); setResetTarget({ id: s.user_id, first_name: nameOf(s), last_name: '', email: emailOf(s) }) }}
-                              className="btn-table-action btn-table-action--warn"
+                              className="action-chip action-chip--warn"
                               title="Set a custom password (or auto-generate one) for this scholar"
                             >
                               <Lock size={13} /> Reset Password
@@ -531,17 +558,24 @@ export default function StudentsPage() {
                           ) : (
                             <button
                               disabled
-                              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-[color:var(--border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--muted)] opacity-60"
+                              className="action-chip action-chip--neutral opacity-50"
                               title="This scholar has no linked login account, so their password can't be reset."
                             >
                               <Lock size={13} /> Reset Password
                             </button>
                           )
                         )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setLettersTarget(s) }}
+                          className="action-chip action-chip--accent"
+                          title="Upload or view this scholar's Official Letters"
+                        >
+                          <FileSignature size={13} /> Official Letter
+                        </button>
                         {s.status === 'withdrawn' ? (
                           <button
                             onClick={(e) => restoreOne(s, e)}
-                            className="btn-table-action btn-table-action--success"
+                            className="action-chip action-chip--success"
                             title="Restore scholar"
                           >
                             <RotateCcw size={13} /> Restore
@@ -549,7 +583,7 @@ export default function StudentsPage() {
                         ) : (
                           <button
                             onClick={(e) => archiveOne(s, e)}
-                            className="btn-table-action btn-table-action--danger"
+                            className="action-chip action-chip--danger"
                             title="Archive (soft-delete) scholar"
                           >
                             <Trash2 size={13} /> Archive
@@ -771,6 +805,14 @@ export default function StudentsPage() {
         <ResetPasswordModal
           user={resetTarget}
           onClose={() => setResetTarget(null)}
+        />
+      )}
+
+      {/* ── Official Letters — same drawer the dedicated Official Letters page uses ── */}
+      {lettersTarget && (
+        <OfficialLettersDrawer
+          student={lettersTarget}
+          onClose={() => setLettersTarget(null)}
         />
       )}
     </div>
