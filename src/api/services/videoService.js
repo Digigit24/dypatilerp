@@ -1,4 +1,4 @@
-import { USE_MOCK } from '../config.js'
+import { USE_MOCK, BASE_URL } from '../config.js'
 import { ok } from './_mock.js'
 import http from '../http.js'
 
@@ -68,7 +68,7 @@ export const deleteFolder = async (id) => {
 
 /** Returns the download URL for any media file (requires a session token) */
 export const buildDownloadUrl = (mediaId, sessionToken) =>
-  `${import.meta.env.VITE_API_URL || 'https://dypatilerp.celiyo.com/api'}/videos/${mediaId}/download?sessionToken=${sessionToken}`
+  `${BASE_URL}/videos/${mediaId}/download?sessionToken=${sessionToken}`
 
 // ─── Upload ───────────────────────────────────────────────────────────────────
 
@@ -94,11 +94,11 @@ export const createSession = async (videoId) => {
 
 /** Returns the proxy stream URL to pass to the <video> src */
 export const buildStreamUrl = (videoId, sessionToken) =>
-  `${import.meta.env.VITE_API_URL || 'https://app.dyperf.com/api'}/videos/${videoId}/stream?sessionToken=${sessionToken}`
+  `${BASE_URL}/videos/${videoId}/stream?sessionToken=${sessionToken}`
 
 /** Returns the thumbnail URL for a video (no auth required) */
 export const buildThumbnailUrl = (videoId) =>
-  `${import.meta.env.VITE_API_URL || 'https://app.dyperf.com/api'}/videos/${videoId}/thumbnail`
+  `${BASE_URL}/videos/${videoId}/thumbnail`
 
 // ─── Progress heartbeat ───────────────────────────────────────────────────────
 

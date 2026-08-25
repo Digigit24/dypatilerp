@@ -2,10 +2,9 @@ import axios from 'axios'
 import { useCourseStore } from '../store/courseStore.js'
 import { useUiStore } from '../store/uiStore.js'
 import { useAuthStore } from '../store/authStore.js'
+import { BASE_URL } from './config.js'
 
-const BASE =
-    import.meta.env.VITE_API_URL ||
-    'https://app.dyperf.com/api'
+const BASE = BASE_URL
 
 const http = axios.create({ baseURL: BASE, timeout: 15000 })
 

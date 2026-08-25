@@ -4,10 +4,9 @@
  * This prevents session mixing when an admin and applicant share the same browser.
  */
 import axios from 'axios'
+import { PROD_API_BASE } from './config.js'
 
-const BASE = import.meta.env.PROD
-  ? 'https://app.dyperf.com/api'
-  : 'https://app.dyperf.com/api'
+const BASE = PROD_API_BASE
 
 const testHttp = axios.create({ baseURL: BASE, timeout: 15000 })
 

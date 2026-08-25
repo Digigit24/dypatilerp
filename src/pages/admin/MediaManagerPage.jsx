@@ -10,6 +10,7 @@ import {
   getFolderPath, getFolders, getVideoAnalytics, getVideos, updateFolder, updateVideo,
 } from '../../api/services/videoService.js'
 import { getBatches } from '../../api/services/batchService.js'
+import { BASE_URL } from '../../api/config.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import { useCourseStore } from '../../store/courseStore.js'
@@ -54,7 +55,7 @@ const TYPE_FILTERS = [
   { key: 'other',    label: 'Other' },
 ]
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://dypatilerp.celiyo.com/api'
+const API_BASE = BASE_URL
 
 const toQueueItem = (file) => ({
   key: `${file.name}_${file.size}_${Math.random().toString(36).slice(2)}`,

@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createFormat, deleteFormat, getFormats, updateFormat } from '../../api/services/formatService.js'
 import { createVideo, createSession, buildDownloadUrl } from '../../api/services/videoService.js'
 import { getBatches } from '../../api/services/batchService.js'
+import { BASE_URL } from '../../api/config.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import { useCourseStore } from '../../store/courseStore.js'
@@ -15,7 +16,7 @@ import useScrollLock from '../../hooks/useScrollLock.js'
 import { formatDate } from '../../lib/formatters.js'
 
 const fmtBytes = (b) => !b ? '—' : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${(b / 1e3).toFixed(0)} KB`
-const API_BASE = import.meta.env.VITE_API_URL || 'https://app.dyperf.com/api'
+const API_BASE = BASE_URL
 
 export default function FormatsPage() {
   const { currentCourse } = useCourseStore()

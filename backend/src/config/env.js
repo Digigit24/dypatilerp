@@ -6,6 +6,17 @@ const required = (key) => {
   return val;
 };
 
+// The one and only production frontend URL — emails, redirects and any
+// backend-generated link must resolve here in production. Hard-forced below
+// (ignoring FRONTEND_URL) so a stale/local value in the production .env can
+// never leak a dev/tailnet URL to a real user again.
+const PROD_FRONTEND_URL = 'https://postdoc.dyperf.com';
+const isProdEnv = process.env.NODE_ENV === 'production';
+
+const resolvedFrontendUrl = isProdEnv
+  ? PROD_FRONTEND_URL
+  : (process.env.FRONTEND_URL || 'http://localhost:5173');
+
 export const env = {
   PORT: parseInt(process.env.PORT || '5000', 10),
   NODE_ENV: process.env.NODE_ENV || 'development',
@@ -14,7 +25,7 @@ export const env = {
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   JWT_REFRESH_SECRET: required('JWT_REFRESH_SECRET'),
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
-  FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
+  FRONTEND_URL: resolvedFrontendUrl,
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
   RATE_LIMIT_MAX: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
   // Brevo SMTP
