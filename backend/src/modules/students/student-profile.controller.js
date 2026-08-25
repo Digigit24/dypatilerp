@@ -228,7 +228,11 @@ export const streamDocument = asyncHandler(async (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
 
   try {
-    await s3.streamObject(row.object_key, res, { contentType: row.mime_type });
+    // The URL is keyed by (userId, slot), not by file — it stays identical
+    // across a replace. Must never be cacheable, or a browser/proxy keeps
+    // serving the superseded file after re-upload. See s3.streamObject's
+    // default (public, max-age=300), meant for immutable assets like avatars.
+    await s3.streamObject(row.object_key, res, { contentType: row.mime_type, cacheControl: 'private, no-store, no-cache, must-revalidate' });
   } catch {
     if (!res.headersSent) res.status(404).json({ success: false, message: 'File not found in storage' });
   }
@@ -383,7 +387,9 @@ export const streamOfficialLetter = asyncHandler(async (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
 
   try {
-    await s3.streamObject(row.object_key, res, { contentType: row.mime_type });
+    // Same non-cacheable requirement as streamDocument above — the URL is
+    // keyed by (userId, slot) and stays identical across a re-upload.
+    await s3.streamObject(row.object_key, res, { contentType: row.mime_type, cacheControl: 'private, no-store, no-cache, must-revalidate' });
   } catch {
     if (!res.headersSent) res.status(404).json({ success: false, message: 'File not found in storage' });
   }
