@@ -8,6 +8,7 @@ import { getPagination, buildPaginationMeta } from '../../utils/pagination.js';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate.js';
 import * as profileCtrl from './student-profile.controller.js';
+import { ALL_SLOTS as ONBOARDING_DOC_SLOTS } from './student-profile.service.js';
 
 const router = Router();
 router.use(authenticate);
@@ -241,11 +242,24 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
     ? `${where} ${ownFrag} ${scopeFrag}`
     : (ownFrag || scopeFrag) ? `WHERE TRUE ${ownFrag} ${scopeFrag}` : '';
 
+  // Onboarding-document completeness — how many of the 11 CV/identity/research
+  // slots this scholar has uploaded (see student-profile.service.js#ALL_SLOTS).
+  // A real Postgres bind requires the parameter count to match the prepared
+  // statement's placeholder count EXACTLY (unlike some drivers, extra values
+  // are a hard error, not silently ignored) — so this extra param goes into
+  // its own array for the SELECT query only. `params` itself stays untouched
+  // for the totals COUNT query below, whose SQL text never references it.
+  const selectParams = [...params, ONBOARDING_DOC_SLOTS];
+  const docSlotsParam = selectParams.length;
+
   const { rows: data } = await query(
     `SELECT be.*, u.first_name, u.middle_name, u.last_name, u.email, u.phone, u.avatar_url,
             b.name as batch_name, b.code as batch_code, c.name as course_name,
             (SELECT COUNT(*) FROM submissions s2 WHERE s2.student_user_id = be.user_id)::int
               AS submissions_count,
+            (SELECT COUNT(*) FROM videos v2
+               WHERE v2.owner_user_id = be.user_id AND v2.slot = ANY($${docSlotsParam}::text[]))::int
+              AS documents_count,
             (SELECT COUNT(*) FROM submissions s2 WHERE s2.student_user_id = be.user_id
                AND s2.submission_type = 'progress_report')::int
               AS progress_reports_count,
@@ -271,8 +285,8 @@ router.get('/', requirePermission('students', 'read'), asyncHandler(async (req, 
      JOIN batches b ON b.id=be.batch_id
      JOIN courses c ON c.id=b.course_id
      LEFT JOIN student_profile_details spd ON spd.user_id = be.user_id
-     ${scopedWhere} ORDER BY be.enrolled_at DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
-    [...params, limit, offset]
+     ${scopedWhere} ORDER BY be.enrolled_at DESC LIMIT $${selectParams.length+1} OFFSET $${selectParams.length+2}`,
+    [...selectParams, limit, offset]
   );
   const { rows: [{ total }] } = await query(
     `SELECT COUNT(*) AS total FROM batch_enrollments be
@@ -392,6 +406,19 @@ router.get('/:userId/documents', requirePermission('students', 'read'), profileC
  *     summary: Upload (or replace) the file for one onboarding document slot
  */
 router.post('/:userId/documents/:slot', requirePermission('students', 'update'), profileCtrl.uploadDocument);
+
+/**
+ * @swagger
+ * /students/{userId}/documents/{slot}/file:
+ *   get:
+ *     tags: [Students]
+ *     summary: Preview or download one uploaded onboarding document
+ *     parameters:
+ *       - in: query
+ *         name: mode
+ *         schema: { type: string, enum: [preview, download] }
+ */
+router.get('/:userId/documents/:slot/file', requirePermission('students', 'read'), profileCtrl.streamDocument);
 
 /**
  * @swagger

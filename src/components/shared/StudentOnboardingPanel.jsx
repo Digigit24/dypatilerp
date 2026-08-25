@@ -8,10 +8,11 @@
  * `editable` is true for the scholar's own view, and for admin/coordinator
  * staff viewing a scholar (they hold students:update); false otherwise.
  */
-import { FileText, ShieldOff, Upload } from 'lucide-react'
+import { Download, Eye, FileText, Loader2, ShieldOff, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
-  getDocuments, getOnboardingStatus, getProfileDetails, saveProfileDetails, setOnboardingSkip, uploadDocument,
+  downloadDocument, getDocuments, getOnboardingStatus, getProfileDetails, previewDocument,
+  saveProfileDetails, setOnboardingSkip, uploadDocument,
 } from '../../api/services/studentProfileService.js'
 import DatePicker from './DatePicker.jsx'
 import { useUiStore } from '../../store/uiStore.js'
@@ -52,6 +53,7 @@ export default function StudentOnboardingPanel({ userId, editable = true, onStat
   const [documents, setDocuments] = useState([])
   const [saving, setSaving]     = useState(false)
   const [uploadingSlot, setUploadingSlot] = useState(null)
+  const [actionSlot, setActionSlot] = useState(null) // `preview:<slot>` or `download:<slot>` currently in flight
   const [status, setStatus]     = useState(null)
   const [skipBusy, setSkipBusy] = useState(false)
   const addToast = useUiStore((s) => s.addToast)
@@ -115,6 +117,20 @@ export default function StudentOnboardingPanel({ userId, editable = true, onStat
     } finally {
       setUploadingSlot(null)
     }
+  }
+
+  const handlePreview = async (slot) => {
+    setActionSlot(`preview:${slot}`)
+    try { await previewDocument(userId, slot) }
+    catch (e) { addToast({ type: 'error', title: 'Preview failed', message: e?.response?.data?.message || e.message }) }
+    finally { setActionSlot(null) }
+  }
+
+  const handleDownload = async (slot, filename) => {
+    setActionSlot(`download:${slot}`)
+    try { await downloadDocument(userId, slot, filename) }
+    catch (e) { addToast({ type: 'error', title: 'Download failed', message: e?.response?.data?.message || e.message }) }
+    finally { setActionSlot(null) }
   }
 
   if (!details) return null
@@ -217,7 +233,11 @@ export default function StudentOnboardingPanel({ userId, editable = true, onStat
               label={SLOT_LABELS[doc.slot] || doc.slot}
               editable={editable}
               uploading={uploadingSlot === doc.slot}
+              previewing={actionSlot === `preview:${doc.slot}`}
+              downloading={actionSlot === `download:${doc.slot}`}
               onUpload={(file) => handleUpload(doc.slot, file)}
+              onPreview={() => handlePreview(doc.slot)}
+              onDownload={() => handleDownload(doc.slot, doc.filename)}
             />
           ))}
         </div>
@@ -226,7 +246,7 @@ export default function StudentOnboardingPanel({ userId, editable = true, onStat
   )
 }
 
-function DocumentSlot({ doc, label, editable, uploading, onUpload }) {
+function DocumentSlot({ doc, label, editable, uploading, previewing, downloading, onUpload, onPreview, onDownload }) {
   const inputId = `doc-upload-${doc.slot}`
   return (
     <div className={`flex items-start gap-3 rounded-xl border p-4 transition ${doc.present ? 'border-emerald-200 bg-emerald-50' : 'border-[color:var(--border)] bg-[color:var(--surface)]'}`}>
@@ -238,11 +258,33 @@ function DocumentSlot({ doc, label, editable, uploading, onUpload }) {
         <p className="mt-0.5 truncate text-xs text-[color:var(--secondary)]">
           {doc.present ? (doc.filename || 'Uploaded') : 'Not uploaded yet'}
         </p>
-        {editable && (
-          <label htmlFor={inputId} className={`mt-2 inline-block cursor-pointer text-xs font-semibold ${uploading ? 'pointer-events-none text-[color:var(--muted)]' : 'text-[color:var(--accent)]'}`}>
-            {uploading ? 'Uploading…' : doc.present ? 'Replace file' : '+ Upload file'}
-          </label>
-        )}
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          {doc.present && (
+            <>
+              <button
+                type="button"
+                onClick={onPreview}
+                disabled={previewing}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--accent)] disabled:opacity-50"
+              >
+                {previewing ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />} View
+              </button>
+              <button
+                type="button"
+                onClick={onDownload}
+                disabled={downloading}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--secondary)] disabled:opacity-50"
+              >
+                {downloading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Download
+              </button>
+            </>
+          )}
+          {editable && (
+            <label htmlFor={inputId} className={`inline-block cursor-pointer text-xs font-semibold ${uploading ? 'pointer-events-none text-[color:var(--muted)]' : 'text-[color:var(--accent)]'}`}>
+              {uploading ? 'Uploading…' : doc.present ? 'Replace file' : '+ Upload file'}
+            </label>
+          )}
+        </div>
         <input
           id={inputId}
           type="file"

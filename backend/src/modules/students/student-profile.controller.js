@@ -100,6 +100,22 @@ export const uploadDocument = asyncHandler(async (req, res) => {
   const { userId, slot } = req.params;
   if (!svc.ALL_SLOTS.includes(slot)) return badRequest(res, `Unknown document slot "${slot}"`);
 
+  // Same course/batch lookup uploadOfficialLetter already uses — resolving it
+  // here too means a CV and an Official Letter for the same scholar land in
+  // the SAME Media Manager folder (Course > Batch > Students > Name) instead
+  // of onboarding documents being invisible outside this one profile page.
+  const { rows: [student] } = await query(
+    `SELECT u.first_name, u.last_name, be.batch_id, b.code AS batch_code, b.course_id
+     FROM users u
+     LEFT JOIN batch_enrollments be ON be.user_id = u.id AND be.status = 'active'
+     LEFT JOIN batches b ON b.id = be.batch_id
+     WHERE u.id = $1
+     ORDER BY be.enrolled_at DESC NULLS LAST
+     LIMIT 1`,
+    [userId]
+  );
+  if (!student) return notFound(res, 'Scholar not found');
+
   const { rows: [existing] } = await query(
     'SELECT id, object_key FROM videos WHERE owner_user_id=$1 AND slot=$2', [userId, slot]
   );
@@ -155,6 +171,12 @@ export const uploadDocument = asyncHandler(async (req, res) => {
       return res.status(502).json({ success: false, message: 'Upload could not be verified in storage — please retry.', detail: e.message });
     }
 
+    const studentLabel = `${student.first_name || ''} ${student.last_name || ''}`.trim() || userId;
+    let folderId = null;
+    if (student.course_id) {
+      folderId = await videoSvc.getOrCreateStudentDocFolder(student.course_id, student.batch_code, studentLabel, req.user.id);
+    }
+
     let media;
     try {
       media = await videoSvc.upsertOwnerSlotVideo({
@@ -162,6 +184,7 @@ export const uploadDocument = asyncHandler(async (req, res) => {
         description: `Profile ${slot.replace(/_/g, ' ')} document`,
         object_key: objectKey, file_size: size, mime_type: declaredMime,
         owner_user_id: userId, slot,
+        course_id: student.course_id || null, folder_id: folderId, batch_id: student.batch_id || null,
       }, req.user.id);
     } catch (dbErr) {
       try { await s3.deleteObject(objectKey); } catch { /* ignore */ }
@@ -178,6 +201,36 @@ export const uploadDocument = asyncHandler(async (req, res) => {
     ok(res, { media_id: media.id, slot, filename: media.title, onboarding }, `${slot.replace(/_/g, ' ')} uploaded`);
   } finally {
     await cleanup();
+  }
+});
+
+/**
+ * GET /students/:userId/documents/:slot/file?mode=preview|download
+ * Same shape as streamOfficialLetter below — own-scope student, or
+ * broader-scope staff. `mode=download` sets Content-Disposition: attachment;
+ * anything else (default) is inline, so the browser renders it instead of
+ * saving it.
+ */
+export const streamDocument = asyncHandler(async (req, res) => {
+  if (!assertOwnerOrBroaderScope(req, res)) return;
+  const { userId, slot } = req.params;
+  if (!svc.ALL_SLOTS.includes(slot)) return notFound(res, 'Not found');
+
+  const { rows: [row] } = await query(
+    'SELECT object_key, mime_type, title FROM videos WHERE owner_user_id=$1 AND slot=$2', [userId, slot]
+  );
+  if (!row) return notFound(res, 'Document not uploaded yet');
+
+  const disposition = req.query.mode === 'download' ? 'attachment' : 'inline';
+  const safeName = (row.title || slot).replace(/[^a-zA-Z0-9 ._-]/g, '_');
+  const ext = row.object_key?.split('.').pop() || '';
+  res.setHeader('Content-Disposition', `${disposition}; filename="${safeName}${ext ? `.${ext}` : ''}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+
+  try {
+    await s3.streamObject(row.object_key, res, { contentType: row.mime_type });
+  } catch {
+    if (!res.headersSent) res.status(404).json({ success: false, message: 'File not found in storage' });
   }
 });
 

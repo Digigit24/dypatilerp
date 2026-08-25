@@ -54,3 +54,22 @@ export const uploadDocument = async (userId, slot, file) => {
   const { data: res } = await http.post(`/students/${userId}/documents/${slot}`, form)
   return ok(res.data)
 }
+
+/** Opens the document inline in a new tab (auth token can't ride a plain <a href>, so this fetches as a blob first). */
+export const previewDocument = async (userId, slot) => {
+  const response = await http.get(`/students/${userId}/documents/${slot}/file`, { params: { mode: 'preview' }, responseType: 'blob' })
+  const blobUrl = URL.createObjectURL(response.data)
+  window.open(blobUrl, '_blank', 'noopener')
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
+}
+
+/** Triggers a browser file-save for the document. */
+export const downloadDocument = async (userId, slot, filename) => {
+  const response = await http.get(`/students/${userId}/documents/${slot}/file`, { params: { mode: 'download' }, responseType: 'blob' })
+  const url = URL.createObjectURL(response.data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename || slot
+  a.click()
+  URL.revokeObjectURL(url)
+}
