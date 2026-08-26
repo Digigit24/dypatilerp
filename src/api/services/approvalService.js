@@ -56,6 +56,13 @@ export const reviewSubmission = async (approvalId, payload) => {
   return ok(res.data)
 }
 
+/** Admin-only undo of an approve decision — reverts the stage to pending. */
+export const unapproveSubmission = async (approvalId) => {
+  if (USE_MOCK) { await delay(); return ok({ id: approvalId, status: 'pending' }) }
+  const { data: res } = await http.post(`/approvals/${approvalId}/unapprove`)
+  return ok(res.data)
+}
+
 export const suggestTitleReframe = async (approvalId, suggested_title) =>
   reviewSubmission(approvalId, { action: 'request_revision', comments: `Suggested title: ${suggested_title}`, suggested_title })
 

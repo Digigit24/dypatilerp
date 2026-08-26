@@ -93,6 +93,17 @@ router.post('/:id/action', requirePermission('approvals', 'update'), asyncHandle
   ok(res, result, 'Action recorded');
 }));
 
+/**
+ * POST /approvals/:id/unapprove
+ * Admin-only undo of an approve decision — see approvals.service.js for the
+ * "most recently decided stage only" safety rule.
+ */
+router.post('/:id/unapprove', requirePermission('approvals', 'update'), asyncHandler(async (req, res) => {
+  if (!(req.user.roles || []).includes('admin')) return forbidden(res, 'Only an admin can unapprove a review.');
+  const result = await svc.unapprove(req.params.id, req.user.id);
+  ok(res, result, 'Approval reverted to pending');
+}));
+
 
 /**
  * PATCH /approvals/:id/feedback

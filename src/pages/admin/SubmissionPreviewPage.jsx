@@ -6,7 +6,7 @@
  */
 import {
   AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Download,
-  FileQuestion, Loader2, MessageSquarePlus, Paperclip, RotateCcw, Trash2, UploadCloud, XCircle,
+  FileQuestion, Loader2, MessageSquarePlus, Paperclip, RotateCcw, Trash2, Undo2, UploadCloud, XCircle,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -14,7 +14,7 @@ import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
 import {
-  getApprovalsBySubmission, reviewSubmission, submitApprovalFeedback, uploadFeedbackAttachment,
+  getApprovalsBySubmission, reviewSubmission, submitApprovalFeedback, unapproveSubmission, uploadFeedbackAttachment,
 } from '../../api/services/approvalService.js'
 import {
   getSubmissionById, removeSubmissionAttachment, uploadSubmissionAttachment,
@@ -73,6 +73,9 @@ export default function SubmissionPreviewPage() {
   // showing action buttons nobody's allowed to use.
   const canReview = usePermStore((s) =>
     s.hasRole('admin') || s.hasRole('coordinator') || s.hasRole('academic_guide') || s.hasRole('industry_mentor'))
+  // Unapprove is deliberately narrower than canReview — only an admin should
+  // be able to walk back a decision a guide/mentor/coordinator already made.
+  const isAdmin = usePermStore((s) => s.hasRole('admin'))
   // File management (delete/replace) mirrors the backend's own authorization
   // exactly — owner, or admin/coordinator — not the broader canReview set
   // (a guide/mentor can approve but was never allowed to edit files on
@@ -159,6 +162,13 @@ export default function SubmissionPreviewPage() {
   const hasChain = approvals.length > 0
   const orderedApprovals = approvals.slice().sort(byChainOrder)
   const currentStage = orderedApprovals.find((a) => a.status === 'pending' || a.status === 'under_review')
+  // The most recently decided stage — the only one safe to unapprove (undoing
+  // an earlier stage while a later one has already acted on top of it would
+  // leave the chain's order inconsistent; see approvals.service.js).
+  const approvedStages = orderedApprovals.filter((a) => a.status === 'approved')
+  const lastApprovedStage = approvedStages.length ? approvedStages[approvedStages.length - 1] : null
+  const canUnapprove = isAdmin && lastApprovedStage
+    && !orderedApprovals.some((a) => a.order_index > lastApprovedStage.order_index && a.status !== 'pending')
 
   const doApprove = async () => {
     if (!currentStage) return
@@ -173,6 +183,19 @@ export default function SubmissionPreviewPage() {
       load()
     } catch (err) {
       addToast({ type: 'error', title: 'Could not approve', message: err.response?.data?.message })
+    } finally { setActing(false) }
+  }
+
+  const doUnapprove = async (approval) => {
+    if (!approval) return
+    if (!confirm('Revert this approval back to pending? The scholar will see it as awaiting review again.')) return
+    setActing(true)
+    try {
+      await unapproveSubmission(approval.id)
+      addToast({ type: 'success', title: 'Approval reverted to pending' })
+      load()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Could not unapprove', message: err.response?.data?.message })
     } finally { setActing(false) }
   }
 
@@ -490,7 +513,20 @@ export default function SubmissionPreviewPage() {
                     <div key={a.id} className={`rounded-lg border p-3 ${a.id === currentStage?.id ? 'border-[color:var(--accent)] bg-[color:var(--accent-tint)]' : 'border-[color:var(--border)] bg-[color:var(--card)]'}`}>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-semibold capitalize text-[color:var(--text)]">{a.stage?.replaceAll('_', ' ')}</p>
-                        <StatusBadge status={a.status} />
+                        <div className="flex items-center gap-2">
+                          {canUnapprove && a.id === lastApprovedStage?.id && (
+                            <button
+                              type="button"
+                              onClick={() => doUnapprove(a)}
+                              disabled={acting}
+                              className="inline-flex items-center gap-1 rounded-full bg-[color:var(--surface)] px-2 py-0.5 text-[10px] font-semibold text-[color:var(--secondary)] hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                              title="Revert this approval back to pending"
+                            >
+                              <Undo2 size={11} /> Unapprove
+                            </button>
+                          )}
+                          <StatusBadge status={a.status} />
+                        </div>
                       </div>
                       {/* Revision-request comment — the "revision feedback" thread; each
                           round that got sent back keeps its own row here, oldest first. */}

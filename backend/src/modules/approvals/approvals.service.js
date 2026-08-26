@@ -98,6 +98,49 @@ export const takeAction = async (approvalId, action, reviewerId, comments, actor
   return approval;
 };
 
+/**
+ * Revert an approved stage back to pending — an admin-only undo for a
+ * mis-click. Restricted to the most recently decided stage in the chain
+ * (no stage past it may have been actioned yet) so the chain's sequential
+ * order is never left inconsistent — e.g. stage 2 approved while stage 3
+ * still shows pending is fine to unwind, but stage 1 can't be pulled back
+ * once stage 2 has already moved on top of it.
+ */
+export const unapprove = async (approvalId, actorUserId) => {
+  const { rows: [approval] } = await query('SELECT * FROM approvals WHERE id=$1', [approvalId]);
+  if (!approval) throw Object.assign(new Error('Approval not found'), { status: 404 });
+  if (approval.status !== 'approved') {
+    throw Object.assign(new Error('Only an approved stage can be unapproved.'), { status: 400 });
+  }
+
+  const { rows: laterActioned } = await query(
+    `SELECT id FROM approvals WHERE submission_id=$1 AND order_index > $2 AND status <> 'pending'`,
+    [approval.submission_id, approval.order_index]
+  );
+  if (laterActioned.length > 0) {
+    throw Object.assign(new Error('A later stage has already been actioned — undo that first.'), { status: 400 });
+  }
+
+  const { rows: [updated] } = await query(
+    `UPDATE approvals SET status='pending', action_at=NULL WHERE id=$1 RETURNING *`,
+    [approvalId]
+  );
+
+  // Mirrors takeAction's forward transitions in reverse: order_index 1 pending
+  // means no stage has ever been approved yet ('submitted'); any later stage
+  // pending again means earlier stages are still approved ('under_review').
+  const newSubmissionStatus = approval.order_index > 1 ? 'under_review' : 'submitted';
+  await query(`UPDATE submissions SET status=$1, updated_at=NOW() WHERE id=$2`, [newSubmissionStatus, approval.submission_id]);
+
+  writeAuditLog({
+    userId: actorUserId, action: 'APPROVAL_UNAPPROVE',
+    resourceType: 'approval', resourceId: approvalId,
+    changes: { submission_id: approval.submission_id, stage: approval.stage, previous_status: 'approved', new_status: 'pending' },
+  });
+
+  return updated;
+};
+
 /** Record one uploaded feedback document against an approval row. Multiple allowed — supporting documents, not a single slot. */
 export const addFeedbackAttachment = async ({ approval_id, title, object_key, file_size, mime_type }, uploadedBy) => {
   const { rows: [row] } = await query(
