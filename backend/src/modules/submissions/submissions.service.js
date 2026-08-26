@@ -287,18 +287,42 @@ export const replaceFileDescriptorForSlot = async (submissionId, slot, descripto
   return u;
 };
 
-/** Drop one file descriptor by media id (used before a submission is sent). */
+/**
+ * Drop one file descriptor by media id.
+ *
+ * If this removal leaves the submission below what it needs to count as
+ * submitted — both progress-report slots, or any file at all for an
+ * assignment/target — AND it had already been sent for review, downgrade it
+ * back to 'draft' so it stops showing as Submitted everywhere (tab badges,
+ * status pills, the Scholars list) and the scholar regains the ability to
+ * attach files and resubmit. Without this, deleting the only attachment left
+ * the row permanently stuck at status='submitted' with nothing referencing
+ * it — a "submitted" report that doesn't exist. Pending approvals are
+ * cleared too, same as a real resubmission (see submitForReview) — they were
+ * reviewing content that no longer exists. Already-decided (approved/
+ * rejected) approvals are left alone; that stays a historical fact.
+ */
 export const removeFileDescriptor = async (submissionId, mediaId) => {
-  const { rows: [s] } = await query('SELECT file_urls FROM submissions WHERE id=$1', [submissionId]);
+  const { rows: [s] } = await query('SELECT * FROM submissions WHERE id=$1', [submissionId]);
   if (!s) return null;
   const current = Array.isArray(s.file_urls)
     ? s.file_urls
     : (typeof s.file_urls === 'string' ? JSON.parse(s.file_urls || '[]') : []);
   const next = current.filter((f) => f.media_id !== mediaId);
+
+  const isProgressReport = s.submission_type === 'progress_report' && !s.assignment_id && !s.target_id;
+  const stillComplete = isProgressReport ? checkSlots(next).ok : next.length > 0;
+  const revert = !stillComplete && ['submitted', 'under_review'].includes(s.status);
+
   const { rows: [u] } = await query(
-    'UPDATE submissions SET file_urls=$1, updated_at=NOW() WHERE id=$2 RETURNING *',
+    revert
+      ? `UPDATE submissions SET file_urls=$1, status='draft', submitted_at=NULL, updated_at=NOW() WHERE id=$2 RETURNING *`
+      : `UPDATE submissions SET file_urls=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
     [JSON.stringify(next), submissionId]
   );
+  if (revert) {
+    await query(`DELETE FROM approvals WHERE submission_id=$1 AND status='pending'`, [submissionId]);
+  }
   return u;
 };
 

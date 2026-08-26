@@ -11,6 +11,7 @@
   needs_revision: 'bg-orange-50 text-orange-700 border-orange-200',
   awaiting_review: 'bg-amber-50 text-amber-700 border-amber-200',
   not_started: 'bg-stone-100 text-stone-600 border-stone-200',
+  not_submitted: 'bg-stone-100 text-stone-600 border-stone-200',
   rejected: 'bg-red-50 text-red-700 border-red-200',
   overdue: 'bg-red-50 text-red-700 border-red-200',
   draft: 'bg-stone-100 text-stone-600 border-stone-200',

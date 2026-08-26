@@ -637,8 +637,11 @@ export const uploadSubmissionAttachment = asyncHandler(async (req, res) => {
 
 /**
  * DELETE /submissions/:submissionId/attachment/:mediaId
- * Removes a file before the submission is sent for review: the descriptor, the
- * media row and the stored object all go together.
+ * Removes a file — allowed up to a final approval decision, not just before
+ * submit (see the status gate below). The descriptor, the media row and the
+ * stored object all go together. If this drops an already-submitted
+ * submission below what it needs to count as submitted, removeFileDescriptor
+ * downgrades it back to 'draft' — see its own comment for why.
  */
 export const removeSubmissionAttachment = asyncHandler(async (req, res) => {
   const { submissionId, mediaId } = req.params;
