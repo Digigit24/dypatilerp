@@ -21,7 +21,9 @@
     "db:merge-reports": "node src/db/merge-progress-reports.js",
     "db:merge-reports:apply": "node src/db/merge-progress-reports.js --apply",
     "db:backfill-doc-folders": "node src/db/backfill-document-folders.js",
-    "db:backfill-doc-folders:apply": "node src/db/backfill-document-folders.js --apply"
+    "db:backfill-doc-folders:apply": "node src/db/backfill-document-folders.js --apply",
+    "db:repair-orphaned": "node src/db/repair-orphaned-submissions.js",
+    "db:repair-orphaned:apply": "node src/db/repair-orphaned-submissions.js --apply"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1062.0",
