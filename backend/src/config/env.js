@@ -26,6 +26,13 @@ export const env = {
   JWT_REFRESH_SECRET: required('JWT_REFRESH_SECRET'),
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   FRONTEND_URL: resolvedFrontendUrl,
+  // Extra CORS origins for local-only testing (e.g. a tailnet hostname at
+  // whatever port `vite` happens to pick). Comma-separated, read from the
+  // gitignored backend/.env only — never set this in a deployed environment;
+  // the committed allowlist in app.js already covers every real production
+  // origin, and this exists precisely so a local/tailnet value never needs to
+  // go anywhere near that committed list.
+  EXTRA_CORS_ORIGINS: (process.env.EXTRA_CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10),
   RATE_LIMIT_MAX: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
   // Brevo SMTP

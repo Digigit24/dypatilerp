@@ -20,6 +20,7 @@ import {
   getSubmissionById, removeSubmissionAttachment, uploadSubmissionAttachment,
 } from '../../api/services/submissionService.js'
 import { getSubmissionFileUrl } from '../../api/services/videoService.js'
+import SubmissionsSidebar from '../../components/admin/SubmissionsSidebar.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
 import SubmissionRemarks from '../../components/shared/SubmissionRemarks.jsx'
@@ -63,7 +64,7 @@ const byChainOrder = (a, b) => {
   return new Date(a.created_at || 0) - new Date(b.created_at || 0)
 }
 
-export default function SubmissionPreviewPage() {
+export default function SubmissionPreviewPage({ isAdminView = false }) {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -281,15 +282,28 @@ export default function SubmissionPreviewPage() {
     }
   }
 
+  // The sidebar is rendered identically (same position, same conditional) in
+  // every branch below — notFound / loading / loaded — specifically so React
+  // never remounts it while switching between submissions: same element type
+  // at the same tree position across renders means it keeps its own state
+  // (search text, which scholar is expanded, the fetched submissions cache)
+  // instead of flickering back to a blank collapsed rail on every click.
+  const sidebar = isAdminView
+    ? <SubmissionsSidebar activeSubmissionId={id} activeScholarId={submission?.student_user_id || null} />
+    : null
+
   if (notFound) {
     return (
-      <div className="fixed inset-0 z-40 grid place-items-center bg-[color:var(--bg)] p-6">
-        <div className="card max-w-sm p-10 text-center">
-          <FileQuestion className="mx-auto text-[color:var(--muted)]" size={32} />
-          <p className="mt-3 font-semibold text-[color:var(--text)]">Submission not found</p>
-          <button onClick={() => navigate(-1)} className="btn-primary mt-5 inline-flex items-center gap-2 px-4 py-2 text-sm">
-            <ArrowLeft size={15} /> Back
-          </button>
+      <div className="fixed inset-0 z-40 flex bg-[color:var(--bg)]">
+        {sidebar}
+        <div className="flex min-w-0 flex-1 items-center justify-center p-6">
+          <div className="card max-w-sm p-10 text-center">
+            <FileQuestion className="mx-auto text-[color:var(--muted)]" size={32} />
+            <p className="mt-3 font-semibold text-[color:var(--text)]">Submission not found</p>
+            <button onClick={() => navigate(-1)} className="btn-primary mt-5 inline-flex items-center gap-2 px-4 py-2 text-sm">
+              <ArrowLeft size={15} /> Back
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -297,8 +311,11 @@ export default function SubmissionPreviewPage() {
 
   if (!submission) {
     return (
-      <div className="fixed inset-0 z-40 overflow-auto bg-[color:var(--bg)] p-6">
-        <SkeletonCard rows={10} />
+      <div className="fixed inset-0 z-40 flex bg-[color:var(--bg)]">
+        {sidebar}
+        <div className="flex-1 overflow-auto p-6">
+          <SkeletonCard rows={10} />
+        </div>
       </div>
     )
   }
@@ -322,7 +339,9 @@ export default function SubmissionPreviewPage() {
   )
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-[color:var(--bg)]">
+    <div className="fixed inset-0 z-40 flex bg-[color:var(--bg)]">
+      {sidebar}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       {/* ── Top bar ── */}
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--border)] bg-[color:var(--card)] px-4 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
@@ -679,6 +698,7 @@ export default function SubmissionPreviewPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

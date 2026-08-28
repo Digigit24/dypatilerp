@@ -61,6 +61,7 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://digitech.tail7572d2.ts.net:5173',
   'https://digitech.tail7572d2.ts.net',
+  ...env.EXTRA_CORS_ORIGINS,
 ].filter(Boolean)
 
 app.use(cors({

@@ -151,7 +151,10 @@ export default function App() {
           {/* Approvals merged into Submissions — old links/bookmarks keep working. */}
           <Route path="approvals" element={<Navigate to="/admin/submissions" replace />} />
           <Route path="submissions" element={<AdminSubmissionsPage />} />
-          <Route path="submissions/:id/preview" element={<SubmissionPreviewPage />} />
+          {/* isAdminView adds the persistent scholars sidebar (browse/switch
+              scholar without leaving the preview) — admin-only; the student
+              route below stays exactly as it was. */}
+          <Route path="submissions/:id/preview" element={<SubmissionPreviewPage isAdminView />} />
           <Route path="fees" element={<FeesPage />} />
           <Route path="test-builder" element={<TestBuilderPage />} />
           <Route path="applicants/:applicantId/test-results" element={<ApplicantTestResultsPage />} />
