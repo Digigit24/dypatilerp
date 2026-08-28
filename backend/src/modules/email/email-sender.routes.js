@@ -188,6 +188,7 @@ router.post('/send', asyncHandler(async (req, res) => {
         subject: rendered.subject,
         html: rendered.html,
         sender,
+        kind: 'bulk_campaign',
       });
       if (result.success) {
         sent++;

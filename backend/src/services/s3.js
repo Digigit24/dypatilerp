@@ -81,6 +81,28 @@ export const streamObject = async (objectKey, res, { contentType, cacheControl }
 };
 
 /**
+ * Get a raw readable stream for an object's body — for server-side
+ * consumption (e.g. piping into a zip archive) rather than writing straight
+ * into an Express response like streamObject does.
+ */
+export const getObjectStream = async (objectKey) => {
+  const command = new GetObjectCommand({ Bucket: BUCKET, Key: objectKey });
+  const response = await client().send(command);
+  return response.Body;
+};
+
+/**
+ * Generate a presigned GET URL so a link can be emailed/shared without
+ * proxying the bytes through our own server. Default is 6 days, not 7 —
+ * SigV4's hard cap is exactly 604800s (7 days) and some S3-compatible
+ * providers reject requests AT that boundary, not just above it.
+ */
+export const getPresignedDownloadUrl = async (objectKey, expiresIn = 6 * 24 * 3600) => {
+  const command = new GetObjectCommand({ Bucket: BUCKET, Key: objectKey });
+  return getSignedUrl(client(), command, { expiresIn });
+};
+
+/**
  * Get object metadata (size, content-type) without downloading the body.
  */
 export const headObject = async (objectKey) => {

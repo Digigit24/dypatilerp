@@ -45,9 +45,10 @@ export const assignGuide = async (studentId, guideData) => {
 
 /**
  * Export all students (with optional filters) as a CSV file download.
- * Triggers a browser file-save dialogue.
+ * Triggers a browser file-save dialogue. `columns` (array of column keys,
+ * see getExportColumns) narrows which fields are included — omit for all.
  */
-export const exportStudents = async (filters = {}) => {
+export const exportStudents = async (filters = {}, columns = null) => {
   if (USE_MOCK) {
     // Build a minimal CSV from mock data in mock mode
     const students = (await getStudents(filters)).data
@@ -69,6 +70,7 @@ export const exportStudents = async (filters = {}) => {
   // Real: GET /students/export — backend streams CSV
   const params = new URLSearchParams()
   Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v) })
+  if (columns?.length) params.set('columns', columns.join(','))
 
   const response = await http.get(`/students/export?${params}`, { responseType: 'blob' })
   const url      = URL.createObjectURL(new Blob([response.data], { type: 'text/csv' }))
@@ -78,6 +80,31 @@ export const exportStudents = async (filters = {}) => {
   a.click()
   URL.revokeObjectURL(url)
   return ok({ downloaded: true })
+}
+
+/** Column catalogue for the export drawer — key + display label, profile fields only. */
+export const getExportColumns = async () => {
+  if (USE_MOCK) {
+    return ok([
+      { key: 'first_name', label: 'First Name' }, { key: 'last_name', label: 'Last Name' },
+      { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
+      { key: 'enrollment_number', label: 'Enrollment Number' }, { key: 'batch_name', label: 'Batch Name' },
+      { key: 'status', label: 'Status' },
+    ])
+  }
+  const { data: res } = await http.get('/students/export/columns')
+  return ok(res.data)
+}
+
+/**
+ * Kick off a background ZIP export of onboarding documents for the scholars
+ * matching `filters`. The backend emails `email` a download link when ready —
+ * this call only confirms the job was queued.
+ */
+export const requestDocumentsZipExport = async (filters = {}, email) => {
+  if (USE_MOCK) return ok({ job_id: 'mock-job', scholar_count: 0 })
+  const { data: res } = await http.post('/students/export/documents-zip', { ...filters, email })
+  return ok(res.data, { message: res.message })
 }
 
 /**

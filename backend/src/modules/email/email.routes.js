@@ -22,6 +22,7 @@ router.post('/test', authenticate, requirePermission('settings', 'update'), asyn
 
   const result = await sendEmail({
     to,
+    kind: 'config_test',
     subject: '✅ Brevo SMTP Test — DY Patil ERP',
     html: `
       <div style="font-family:sans-serif;max-width:500px;margin:40px auto;padding:32px;border:1px solid #e5e7eb;border-radius:12px">

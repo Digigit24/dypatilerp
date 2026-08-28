@@ -229,6 +229,15 @@ export const getFolderById = async (id) => {
   return rows[0] || null;
 };
 
+/** Direct-child files of one folder (not recursive — subfolders are skipped, same scope as the ZIP download). */
+export const listFolderFiles = async (folderId) => {
+  const { rows } = await query(
+    `SELECT id, title, object_key, mime_type FROM videos WHERE folder_id=$1 AND object_key IS NOT NULL`,
+    [folderId]
+  );
+  return rows;
+};
+
 export const createFolder = async ({ course_id, parent_id, name }, createdBy) => {
   const { rows } = await query(
     `INSERT INTO media_folders (course_id, parent_id, name, created_by)

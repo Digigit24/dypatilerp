@@ -766,6 +766,70 @@ const run = async () => {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_login_otps_user ON login_otps(user_id)`);
     console.log('✓  login_otps table created (or already exists)');
 
+    // 36. SCHOLAR DOCUMENT ZIP EXPORTS — the admin "export scholar documents"
+    //     drawer runs as a fire-and-forget background task (no job queue in
+    //     this codebase; volumes confirmed small enough — see CLAUDE.md-era
+    //     audit — that in-process async work finishes in seconds). This row
+    //     exists purely so a page refresh isn't confusing and so a failure has
+    //     somewhere to record itself; nothing polls it and nothing retries it.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS export_jobs (
+        id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        requested_by   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        email          VARCHAR(255) NOT NULL,
+        kind           VARCHAR(40) NOT NULL DEFAULT 'scholar_documents_zip',
+        status         VARCHAR(20) NOT NULL DEFAULT 'pending',
+        scholar_count  INT,
+        scope          JSONB,
+        file_key       TEXT,
+        error          TEXT,
+        created_at     TIMESTAMP DEFAULT NOW(),
+        completed_at   TIMESTAMP
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_export_jobs_requested_by ON export_jobs(requested_by)`);
+    console.log('✓  export_jobs table created (or already exists)');
+
+    // 37. EMAIL LOGS — every outbound email funnels through the single
+    //     sendEmail() choke point in email.service.js, which now inserts one
+    //     row here per attempt (success, failure, or mock/no-config), wrapped
+    //     in try/catch so a logging failure can never block a real send.
+    //     `to_email`/`cc` are plain text — same exposure level as the `users`
+    //     table itself, nothing new. Admin-only, same as audit_logs.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS email_logs (
+        id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        to_email            TEXT NOT NULL,
+        cc                  TEXT,
+        subject             TEXT,
+        kind                VARCHAR(60),
+        status              VARCHAR(20) NOT NULL,
+        via                 VARCHAR(10),
+        provider_message_id TEXT,
+        error               TEXT,
+        created_at          TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_email_logs_created_at ON email_logs(created_at DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_email_logs_kind ON email_logs(kind)`);
+    console.log('✓  email_logs table created (or already exists)');
+
+    // 37b. Permission module for the new Email Logs tab — admin-only, same
+    //      shape as the 'storage' module grant in block 25g.
+    await client.query(`
+      INSERT INTO permissions (module, action)
+      SELECT 'email_logs', a.action::permission_action
+      FROM (VALUES ('create'),('read'),('update'),('delete')) AS a(action)
+      ON CONFLICT (module, action) DO NOTHING
+    `);
+    await client.query(`
+      INSERT INTO role_permissions (role_id, permission_id, scope)
+      SELECT r.id, p.id, 'all' FROM roles r CROSS JOIN permissions p
+      WHERE r.name = 'admin' AND p.module = 'email_logs'
+      ON CONFLICT (role_id, permission_id) DO NOTHING
+    `);
+    console.log('✓  email_logs permission module seeded and granted to admin');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

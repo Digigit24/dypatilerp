@@ -66,6 +66,19 @@ export const deleteFolder = async (id) => {
   return ok(null)
 }
 
+/** Downloads every direct-child file of a folder as a single ZIP (not recursive into subfolders). */
+export const downloadFolderZip = async (id, folderName) => {
+  if (USE_MOCK) return ok({ downloaded: true })
+  const response = await http.get(`/videos/folders/${id}/download-zip`, { responseType: 'blob' })
+  const url = URL.createObjectURL(response.data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${folderName || 'folder'}.zip`
+  a.click()
+  URL.revokeObjectURL(url)
+  return ok({ downloaded: true })
+}
+
 /** Returns the download URL for any media file (requires a session token) */
 export const buildDownloadUrl = (mediaId, sessionToken) =>
   `${BASE_URL}/videos/${mediaId}/download?sessionToken=${sessionToken}`

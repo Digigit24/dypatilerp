@@ -38,6 +38,7 @@ import settingsRoutes from './modules/settings/settings.routes.js';
 import emailRoutes from './modules/email/email.routes.js';
 import emailTemplateRoutes from './modules/email/email-templates.routes.js';
 import emailSenderRoutes from './modules/email/email-sender.routes.js';
+import emailLogsRoutes from './modules/email/email-logs.routes.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -142,6 +143,7 @@ app.use('/api/settings',   settingsRoutes);
 app.use('/api/email',      emailRoutes);
 app.use('/api/email-templates', emailTemplateRoutes);
 app.use('/api/email-sender', emailSenderRoutes);
+app.use('/api/email-logs', emailLogsRoutes);
 
 // 404 + global error handler
 app.use(notFoundHandler);

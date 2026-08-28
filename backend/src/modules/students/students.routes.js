@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { validate } from '../../middleware/validate.js';
 import * as profileCtrl from './student-profile.controller.js';
 import { ALL_SLOTS as ONBOARDING_DOC_SLOTS } from './student-profile.service.js';
+import * as exportSvc from './students-export.service.js';
 
 const router = Router();
 router.use(authenticate);
@@ -38,46 +39,92 @@ const buildWhere = (q) => {
   return { params, where: conds.length ? `WHERE ${conds.join(' AND ')}` : '' };
 };
 
-// ─── GET /students/export ─────────────────────────────────────────────────────
+// Own/batch scoping shared by GET /export and POST /export/documents-zip —
+// kept in one place so a future scoping fix can't land on only one of them
+// and silently reopen the over-broad-export bug fixed below.
+const applyStudentsScope = (req, { where, params }) => {
+  let scopedWhere = where;
+  if (isOwnScope(req)) {
+    params.push(req.user.id);
+    scopedWhere = scopedWhere ? `${scopedWhere} AND be.user_id=$${params.length}` : `WHERE be.user_id=$${params.length}`;
+  }
+  const scopeFrag = scopeBatchSQL(req, 'be.batch_id');
+  if (scopeFrag) scopedWhere = scopedWhere ? `${scopedWhere} ${scopeFrag}` : `WHERE TRUE ${scopeFrag}`;
+  return scopedWhere;
+};
+
+// ─── GET /students/export/columns — column catalogue for the export drawer ───
+router.get('/export/columns', requirePermission('students', 'read'), asyncHandler(async (req, res) => {
+  ok(res, exportSvc.EXPORT_COLUMNS);
+}));
+
+// ─── GET /students/export — profile-only CSV, optional `?columns=` subset ────
+// Scoped identically to GET /students (own/batch grants apply) — the export
+// previously skipped this and let any "students:read" grant, regardless of
+// scope, export every scholar.
 router.get('/export', requirePermission('students', 'read'), asyncHandler(async (req, res) => {
   const course_id = req.courseId || req.query.course_id;
   const batch_id = req.batchId || req.query.batch_id;
   const { params, where } = buildWhere({ ...req.query, course_id, batch_id });
+  const scopedWhere = applyStudentsScope(req, { where, params });
 
-  const { rows } = await query(
-    `SELECT u.first_name, u.last_name, u.email, u.phone,
-            be.user_id,
-            be.enrollment_number, be.status, be.current_semester, be.enrolled_at,
-            b.name  AS batch_name,  b.code AS batch_code,
-            c.name  AS course_name
-     FROM batch_enrollments be
-     JOIN users u   ON u.id  = be.user_id
-     JOIN batches b ON b.id  = be.batch_id
-     JOIN courses c ON c.id  = b.course_id
-     ${where}
-     ORDER BY be.enrolled_at DESC`,
-    params
-  );
-
-  const HEADERS = [
-    'First Name', 'Last Name', 'Email', 'Phone',
-    'Enrollment Number', 'Batch Name', 'Batch Code', 'Course',
-    'Status', 'Semester', 'Enrolled Date',
-  ];
-
-  const dataRows = rows.map((r) => [
-    r.first_name, r.last_name, r.email, r.phone || '',
-    r.enrollment_number || '', r.batch_name, r.batch_code, r.course_name,
-    r.status, r.current_semester || 1,
-    r.enrolled_at ? new Date(r.enrolled_at).toISOString().split('T')[0] : '',
-  ]);
-
-  const csv = toCSV([HEADERS, ...dataRows]);
+  const rows = await exportSvc.fetchExportRows(scopedWhere, params);
+  const columns = exportSvc.resolveColumns(req.query.columns);
+  const csv = toCSV(exportSvc.rowsToCSVArrays(rows, columns));
   const filename = `students-${new Date().toISOString().slice(0, 10)}.csv`;
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.send('﻿' + csv);
+}));
+
+// ─── POST /students/export/documents-zip — background ZIP of onboarding docs ──
+// Responds immediately with a job id; the actual archive is built after the
+// response is sent (see setImmediate below) and the requester is emailed a
+// download link — see students-export.service.js#runDocumentsZipJob.
+//
+// `email` is caller-supplied (by explicit product decision — the requester
+// may want the link on a different inbox/shared address than their login
+// email). Every send is still tied to `requestedBy` in export_jobs, so who
+// asked for it and where it went stays traceable even though the address
+// itself isn't locked to the requester's own account.
+const exportZipSchema = z.object({
+  email: z.string().email(),
+  course_id: z.string().uuid().optional(),
+  batch_id: z.string().uuid().optional(),
+  status: z.string().optional(),
+  search: z.string().optional(),
+});
+router.post('/export/documents-zip', requirePermission('students', 'read'), validate(exportZipSchema), asyncHandler(async (req, res) => {
+  const course_id = req.courseId || req.body.course_id;
+  const batch_id = req.batchId || req.body.batch_id;
+  const { params, where } = buildWhere({ ...req.body, course_id, batch_id });
+  const scopedWhere = applyStudentsScope(req, { where, params });
+
+  const { rows: scholars } = await query(
+    `SELECT be.user_id FROM batch_enrollments be
+     JOIN users u ON u.id=be.user_id JOIN batches b ON b.id=be.batch_id JOIN courses c ON c.id=b.course_id
+     ${scopedWhere}`,
+    params
+  );
+  const userIds = scholars.map((s) => s.user_id);
+  if (!userIds.length) {
+    return res.status(400).json({ success: false, message: 'No scholars match the current filters.' });
+  }
+
+  const jobId = await exportSvc.createExportJob({
+    requestedBy: req.user.id,
+    email: req.body.email,
+    scope: { user_ids: userIds },
+    scholarCount: userIds.length,
+  });
+
+  ok(res, { job_id: jobId, scholar_count: userIds.length },
+    `Preparing the documents ZIP for ${userIds.length} scholar(s) — you'll get an email at ${req.body.email} when it's ready.`);
+
+  setImmediate(() => {
+    exportSvc.runDocumentsZipJob(jobId).catch((err) => console.error('[export-zip] Unhandled:', err));
+  });
 }));
 
 // ─── POST /students/import ────────────────────────────────────────────────────

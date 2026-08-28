@@ -1,12 +1,12 @@
 import {
-  BarChart2, CheckCircle2, ChevronRight, Eye, File, FileText, Film,
+  BarChart2, CheckCircle2, ChevronRight, Download, Eye, File, FileText, Film,
   Folder, FolderPlus, Grid as GridIcon, Home, Image as ImageIcon, LayoutList,
   Loader, MoreVertical, Music, PenLine, Search, Trash2, Upload, UploadCloud, X, XCircle,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  buildThumbnailUrl, createFolder, createVideo, deleteFolder, deleteVideo,
+  buildThumbnailUrl, createFolder, createVideo, deleteFolder, deleteVideo, downloadFolderZip,
   getFolderPath, getFolders, getVideoAnalytics, getVideos, updateFolder, updateVideo,
 } from '../../api/services/videoService.js'
 import { getBatches } from '../../api/services/batchService.js'
@@ -88,6 +88,7 @@ export default function MediaManagerPage() {
   const [folderModal, setFolderModal]   = useState(null)     // {mode:'create'|'rename', folder?}
   const [menuFor, setMenuFor]       = useState(null)
   const [dragging, setDragging]     = useState(false)
+  const [zipDownloadingId, setZipDownloadingId] = useState(null)
 
   useScrollLock(uploadOpen || !!editItem || !!analyticsFor || !!folderModal)
 
@@ -138,6 +139,17 @@ export default function MediaManagerPage() {
       load()
     } catch (err) {
       addToast({ type: 'error', title: 'Delete failed', message: err.response?.data?.message })
+    }
+  }
+
+  const handleDownloadFolderZip = async (f) => {
+    setZipDownloadingId(f.id)
+    try {
+      await downloadFolderZip(f.id, f.name)
+    } catch (err) {
+      addToast({ type: 'error', title: 'Download failed', message: err.response?.data?.message })
+    } finally {
+      setZipDownloadingId(null)
     }
   }
 
@@ -319,6 +331,13 @@ export default function MediaManagerPage() {
                       <button onClick={() => { setMenuFor(null); setFolderModal({ mode: 'rename', folder: f }) }}
                         className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-[color:var(--text)] hover:bg-[color:var(--surface)]">
                         <PenLine size={12} /> Rename
+                      </button>
+                      <button onClick={() => { setMenuFor(null); handleDownloadFolderZip(f) }}
+                        disabled={zipDownloadingId === f.id}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-[color:var(--text)] hover:bg-[color:var(--surface)] disabled:opacity-60">
+                        {zipDownloadingId === f.id
+                          ? <Loader size={12} className="animate-spin" />
+                          : <Download size={12} />} Download ZIP
                       </button>
                       <button onClick={() => { setMenuFor(null); handleDeleteFolder(f) }}
                         className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-50">

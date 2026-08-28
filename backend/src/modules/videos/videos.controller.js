@@ -1,6 +1,7 @@
 import * as svc from './videos.service.js';
 import * as subSvc from '../submissions/submissions.service.js';
 import * as s3 from '../../services/s3.js';
+import archiver from 'archiver';
 import * as local from '../../services/localVideo.js';
 import { ok, created, notFound, noContent, forbidden, badRequest } from '../../utils/response.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
@@ -74,6 +75,54 @@ export const removeFolder = asyncHandler(async (req, res) => {
   const folder = await svc.deleteFolder(req.params.id);
   if (!folder) return notFound(res, 'Folder not found');
   noContent(res);
+});
+
+/**
+ * Stream every direct-child file of a folder as a ZIP — synchronous, no
+ * background job. Confirmed production folder sizes top out around 75MB, so
+ * streaming straight into the response is fast enough; this deliberately
+ * does NOT recurse into subfolders (the folder tree has no existing
+ * recursive-subtree query to build on — kept simple until that's asked for).
+ */
+export const downloadFolderZip = asyncHandler(async (req, res) => {
+  const folder = await svc.getFolderById(req.params.id);
+  if (!folder) return notFound(res, 'Folder not found');
+  const files = await svc.listFolderFiles(folder.id);
+
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  const safeName = (folder.name || 'folder').replace(/[^a-zA-Z0-9._ -]/g, '_').slice(0, 120);
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}.zip"`);
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  archive.on('error', (err) => { console.error('[folder-zip] Archive error:', err); res.destroy(err); });
+  archive.pipe(res);
+
+  // Two uploads can share a title (e.g. both saved as "scan.pdf") — dedupe so
+  // neither entry silently overwrites the other inside the zip.
+  const usedNames = new Set();
+  const uniqueName = (name) => {
+    if (!usedNames.has(name)) { usedNames.add(name); return name; }
+    const dot = name.lastIndexOf('.');
+    const base = dot > 0 ? name.slice(0, dot) : name;
+    const ext = dot > 0 ? name.slice(dot) : '';
+    let i = 2;
+    while (usedNames.has(`${base} (${i})${ext}`)) i += 1;
+    const candidate = `${base} (${i})${ext}`;
+    usedNames.add(candidate);
+    return candidate;
+  };
+
+  for (const file of files) {
+    try {
+      const stream = await s3.getObjectStream(file.object_key);
+      const ext = file.object_key.split('.').pop();
+      archive.append(stream, { name: uniqueName(file.title || `${file.id}.${ext}`) });
+    } catch (err) {
+      console.error(`[folder-zip] Skipping ${file.id}:`, err.message);
+    }
+  }
+  await archive.finalize();
 });
 
 export const getOne = asyncHandler(async (req, res) => {

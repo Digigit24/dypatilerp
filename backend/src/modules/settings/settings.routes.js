@@ -163,6 +163,7 @@ router.post('/test-email', requireRole('admin'), validate(testEmailSchema), asyn
 
   const result = await sendEmail({
     to,
+    kind: 'config_test',
     subject: 'DY Patil ERP — Email Configuration Test',
     html: `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"/>

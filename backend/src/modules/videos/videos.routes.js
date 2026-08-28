@@ -41,6 +41,11 @@ router.post('/folders', authenticate, requireRole(...MEDIA_MANAGERS), ctrl.creat
  *     summary: Delete a folder (contents move up to its parent)
  */
 router.get('/folders/:id/path', authenticate, requirePermission('dashboard', 'read'), ctrl.getFolderPath);
+// Bulk content download is a bigger exposure than viewing one item at a time
+// (and getFolderById/listFolderFiles don't filter by course), so this uses
+// the same trusted-role gate as folder management, not the broad read-only
+// dashboard:read permission every staff role tends to carry.
+router.get('/folders/:id/download-zip', authenticate, requireRole(...MEDIA_MANAGERS), ctrl.downloadFolderZip);
 router.put('/folders/:id', authenticate, requireRole(...MEDIA_MANAGERS), ctrl.updateFolder);
 router.delete('/folders/:id', authenticate, requireRole('admin', 'coordinator'), ctrl.removeFolder);
 

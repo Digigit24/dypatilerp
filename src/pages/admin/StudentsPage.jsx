@@ -5,8 +5,9 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getProgressReportsByStudent, getSubmissionsByStudent } from '../../api/services/submissionService.js'
-import { archiveStudent, bulkStudentAction, exportStudents, getStudents } from '../../api/services/studentService.js'
+import { archiveStudent, bulkStudentAction, getStudents } from '../../api/services/studentService.js'
 import { bulkSendCredentials, getUsers, sendCredentials } from '../../api/services/userService.js'
+import ExportDrawer from '../../components/admin/ExportDrawer.jsx'
 import ImportDrawer from '../../components/admin/ImportDrawer.jsx'
 import OfficialLettersDrawer from '../../components/admin/OfficialLettersDrawer.jsx'
 import ConfirmDialog from '../../components/shared/ConfirmDialog.jsx'
@@ -102,7 +103,7 @@ export default function StudentsPage() {
   const [milestoneStatus,      setMilestoneStatus]      = useState('')
   const [selectedIds,    setSelectedIds]    = useState(new Set())   // bulk selection (user_id)
   const [bulkLoading,    setBulkLoading]    = useState(false)
-  const [exportLoading,  setExportLoading]  = useState(false)
+  const [showExport,     setShowExport]     = useState(false)
   const [showImport,     setShowImport]     = useState(false)
   const [sendingCredId,  setSendingCredId]  = useState(null)      // per-row credential send in flight (user_id)
   const [confirmDialog,  setConfirmDialog]  = useState(null)      // { title, message, confirmLabel, tone, onConfirm }
@@ -124,7 +125,7 @@ export default function StudentsPage() {
   // getUsers requires users:read (guide/mentor lack it). Gate it so it never 403s.
   const canReadUsers     = usePermStore((s) => s.can('users', 'read'))
 
-  useScrollLock(Boolean(selected) || showImport)
+  useScrollLock(Boolean(selected) || showImport || showExport)
 
   // Status filter is applied server-side so paging + counts stay correct.
   const statusParam = () => ({
@@ -382,19 +383,6 @@ export default function StudentsPage() {
     }
   }
 
-  // ── Export ─────────────────────────────────────────────────────────────────
-  const handleExport = async () => {
-    setExportLoading(true)
-    try {
-      await exportStudents(statusFilter === 'all' ? {} : { status: statusFilter })
-      addToast({ type: 'success', title: 'Students exported as CSV.' })
-    } catch {
-      addToast({ type: 'error', title: 'Export failed. Please try again.' })
-    } finally {
-      setExportLoading(false)
-    }
-  }
-
   if (!items) return <SkeletonCard rows={8} />
 
   return (
@@ -411,11 +399,10 @@ export default function StudentsPage() {
               <Upload size={15} /> Import
             </button>
             <button
-              onClick={handleExport}
-              disabled={exportLoading}
-              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--surface)] transition disabled:opacity-60"
+              onClick={() => setShowExport(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:bg-[color:var(--surface)] transition"
             >
-              {exportLoading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Export
+              <Download size={15} /> Export
             </button>
           </div>
         }
@@ -869,6 +856,12 @@ export default function StudentsPage() {
           onImported={() => { setShowImport(false); loadStudents() }}
         />
       )}
+
+      <ExportDrawer
+        open={showExport}
+        onClose={() => setShowExport(false)}
+        filters={statusFilter === 'all' ? {} : { status: TAB_TO_STATUS[statusFilter] }}
+      />
 
       {/* ── Confirm dialog (replaces window.confirm) ── */}
       <ConfirmDialog

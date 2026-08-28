@@ -69,7 +69,24 @@ const sendViaBrevoApi = async ({ apiKey, sender, recipients, cc, subject, html, 
   }
 };
 
-export const sendEmail = async ({ to, cc, subject, html, text, sender, apiKey } = {}) => {
+// ─── Email history log ─────────────────────────────────────────────────────
+// One row per send attempt, written from the single sendEmail() choke point
+// below so every outbound email in the system — regardless of which wrapper
+// triggered it — ends up here automatically. Never allowed to throw: a
+// logging failure must not affect whether the real email went out.
+const logEmailAttempt = async ({ to, cc, subject, kind, status, via, messageId, error }) => {
+  try {
+    await query(
+      `INSERT INTO email_logs (to_email, cc, subject, kind, status, via, provider_message_id, error)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [to || null, cc || null, subject || null, kind || null, status, via || null, messageId || null, error || null]
+    );
+  } catch (err) {
+    console.error('[email] Failed to write email_logs row:', err.message);
+  }
+};
+
+export const sendEmail = async ({ to, cc, subject, html, text, sender, apiKey, kind } = {}) => {
   // Saved settings (app_settings.brevo in the database) are the source of truth.
   // Resolution order: explicit param → database → .env (legacy fallback).
   const db = await getBrevoConfig();
@@ -83,6 +100,9 @@ export const sendEmail = async ({ to, cc, subject, html, text, sender, apiKey } 
   const ccList = (cc ? (Array.isArray(cc) ? cc : [cc]) : []).filter(Boolean);
   const toAddr = (r) =>
     typeof r === 'string' ? { email: r } : { email: r.email, ...(r.name ? { name: r.name } : {}) };
+  const emailsOf = (arr) => arr.map((r) => (typeof r === 'string' ? r : r?.email)).filter(Boolean).join(', ');
+  const toLog = emailsOf(list);
+  const ccLog = ccList.length ? emailsOf(ccList) : null;
 
   // ── 1. Prefer the Brevo HTTPS API (port 443) when an API key is available ──
   //    SMTP (587) is often intercepted/blocked by cPanel "SMTP Restrictions".
@@ -96,6 +116,7 @@ export const sendEmail = async ({ to, cc, subject, html, text, sender, apiKey } 
     });
     if (result.success) {
       console.log('[email] Sent via Brevo API →', result.messageId, '→', apiRecipients.map((r) => r.email));
+      await logEmailAttempt({ to: toLog, cc: ccLog, subject, kind, status: 'sent', via: 'api', messageId: result.messageId });
       return result;
     }
     apiError = result.error;
@@ -106,9 +127,13 @@ export const sendEmail = async ({ to, cc, subject, html, text, sender, apiKey } 
   const transport = getTransporter();
 
   if (!transport) {
-    if (apiError) return { success: false, error: apiError };
+    if (apiError) {
+      await logEmailAttempt({ to: toLog, cc: ccLog, subject, kind, status: 'failed', via: 'api', error: apiError });
+      return { success: false, error: apiError };
+    }
     console.log('[email] SMTP not configured — mock send');
     console.log(`[email] MOCK → To: ${JSON.stringify(to)}${ccList.length ? ` | Cc: ${JSON.stringify(ccList)}` : ''} | Subject: ${subject}`);
+    await logEmailAttempt({ to: toLog, cc: ccLog, subject, kind, status: 'mock', via: 'mock' });
     return { success: true, mock: true };
   }
 
@@ -127,16 +152,16 @@ export const sendEmail = async ({ to, cc, subject, html, text, sender, apiKey } 
       ...(text && { text }),
     });
     console.log('[email] Sent →', info.messageId, '→', recipients, ...(ccRecipients.length ? ['cc:', ccRecipients] : []));
+    await logEmailAttempt({ to: toLog, cc: ccLog, subject, kind, status: 'sent', via: 'smtp', messageId: info.messageId });
     return { success: true, messageId: info.messageId, via: 'smtp' };
   } catch (err) {
     console.error('[email] SMTP error:', err.message);
     // Surface BOTH failures — the API error is usually the actionable one
-    return {
-      success: false,
-      error: apiError
-        ? `Brevo API failed: ${apiError} || SMTP fallback also failed: ${err.message}`
-        : err.message,
-    };
+    const combinedError = apiError
+      ? `Brevo API failed: ${apiError} || SMTP fallback also failed: ${err.message}`
+      : err.message;
+    await logEmailAttempt({ to: toLog, cc: ccLog, subject, kind, status: 'failed', via: 'smtp', error: combinedError });
+    return { success: false, error: combinedError };
   }
 };
 
@@ -596,7 +621,7 @@ export const sendLoginCredentials = async ({ user, password, courseId = null, po
 
   return sendEmail({
     to: { email: user.email, name: `${user.first_name} ${user.last_name || ''}`.trim() },
-    subject, html, text, sender,
+    subject, html, text, sender, kind: 'login_credentials',
   });
 };
 
@@ -633,7 +658,7 @@ export const sendPasswordResetEmail = async ({ user, resetUrl }) => {
 
   return sendEmail({
     to: { email: user.email, name: `${user.first_name} ${user.last_name || ''}`.trim() },
-    subject, html, text, sender,
+    subject, html, text, sender, kind: 'password_reset',
   });
 };
 
@@ -667,8 +692,57 @@ export const sendLoginOtpEmail = async ({ user, code }) => {
 
   return sendEmail({
     to: { email: user.email, name: `${user.first_name} ${user.last_name || ''}`.trim() },
-    subject, html, text, sender,
+    subject, html, text, sender, kind: 'login_otp',
   });
+};
+
+/**
+ * Notify an admin that their requested scholar-documents ZIP export is ready.
+ * Not course-scoped — triggered from the Scholars list, which spans courses.
+ */
+export const sendScholarExportReadyEmail = async ({ to, scholarCount, downloadUrl }) => {
+  const sender = await getCourseSender(null);
+  const { subject, html } = await renderTemplate(
+    'scholar_export_ready',
+    { scholarCount, downloadUrl },
+    () => ({
+      subject: 'Your scholar documents export is ready',
+      html: base(`
+    <h2>Your export is ready</h2>
+    <p>The documents ZIP you requested for ${scholarCount} scholar${scholarCount === 1 ? '' : 's'} has finished generating.</p>
+    <a href="${downloadUrl}" class="cta">Download ZIP →</a>
+    <p style="word-break:break-all;font-size:12px;color:#6b7280">${downloadUrl}</p>
+    <p>This link expires in 6 days.</p>
+    <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
+  `),
+    })
+  );
+  const text = [
+    'Your scholar documents export is ready',
+    '',
+    `Download link (valid 6 days): ${downloadUrl}`,
+  ].join('\n');
+
+  return sendEmail({ to: { email: to }, subject, html, text, sender, kind: 'scholar_export_ready' });
+};
+
+/** Notify an admin that their requested scholar-documents ZIP export failed. */
+export const sendScholarExportFailedEmail = async ({ to, error }) => {
+  const sender = await getCourseSender(null);
+  const { subject, html } = await renderTemplate(
+    'scholar_export_failed',
+    { error },
+    () => ({
+      subject: 'Your scholar documents export failed',
+      html: base(`
+    <h2>Export failed</h2>
+    <p>The documents ZIP you requested could not be generated. Please try again, and contact support if this keeps happening.</p>
+    <p style="font-size:12px;color:#6b7280">${error || ''}</p>
+    <p>Best regards,<br/><strong>DY Patil Academic Team</strong></p>
+  `),
+    })
+  );
+  return sendEmail({ to: { email: to }, subject, html, sender, kind: 'scholar_export_failed' });
 };
 
 /**
@@ -734,6 +808,7 @@ export const sendTestCredentials = async ({
     html,
     text,
     sender,
+    kind: 'test_credentials',
   });
 };
 
@@ -803,6 +878,7 @@ export const sendTestReminder = async ({
     html,
     text,
     sender,
+    kind: 'test_reminder',
   });
 };
 
@@ -892,6 +968,7 @@ export const sendApplicantShortlisted = async ({ applicant, courseId = null, cc 
     html,
     text,
     sender,
+    kind: 'applicant_shortlisted',
   });
 
   // Surface delivery metadata (provider message id, the CC that was applied) so
@@ -968,6 +1045,7 @@ export const sendApplicantShortlistPaymentReminder = async ({ applicant, courseI
     html,
     text,
     sender,
+    kind: 'applicant_shortlist_payment_reminder',
   });
 
   // Log the send result (success and failure) so an admin can audit delivery.
@@ -1030,6 +1108,7 @@ export const sendNotificationEmail = async (eventKey, recipient, data = {}, cour
       subject,
       html,
       ...(senderOverride && { sender: senderOverride }),
+      kind: templateKey,
     });
   } catch (err) {
     console.error('[email] sendNotificationEmail error:', err.message);
