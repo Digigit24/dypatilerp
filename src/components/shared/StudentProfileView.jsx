@@ -11,7 +11,7 @@
 import {
   Award, BookOpen, Camera, Clock,
   ExternalLink, FileText, Globe, GraduationCap, IndianRupee,
-  Link2, Loader2, Pencil, Plus, Save, Shield, UploadCloud, User, X,
+  Link2, Loader2, Pencil, Plus, Save, Shield, Trash2, UploadCloud, User, X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -28,7 +28,7 @@ import Select from './Select.jsx'
 import StudentOnboardingPanel from './StudentOnboardingPanel.jsx'
 import { getFeesByStudent } from '../../api/services/feeService.js'
 import {
-  createSubmission, getSubmissionRemarks, getSubmissions,
+  createSubmission, getSubmissionRemarks, getSubmissions, removeSubmissionAttachment,
   submitForReview, uploadSubmissionAttachment,
 } from '../../api/services/submissionService.js'
 import { getMyCycle } from '../../api/services/progressCycleService.js'
@@ -1568,12 +1568,33 @@ function ProgressCycleCard({ cycle, isAdminView, canUpload, onChange, onUploadOn
   const navigate = useNavigate()
   const [busySlot,   setBusySlot]   = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [deleting,   setDeleting]   = useState(false)
   const [feedback,   setFeedback]   = useState(null)
   const [feedbackLoading, setFeedbackLoading] = useState(Boolean(cycle.submission_id))
   // Admin never edits inline here — they use the "Upload on behalf" drawer,
   // same as Assignments/Milestones, so the same upload path is always used
   // regardless of who's filing the report.
+  // Gates the "Submit for Review" button — only a draft/needs_revision row is
+  // actually re-submittable server-side (see submitForReview's status guard).
   const editable = !isAdminView && (!cycle.submission_status || ['draft', 'needs_revision'].includes(cycle.submission_status))
+  // Gates per-slot Upload/Replace and the Delete button — deliberately wider
+  // than `editable`. The backend allows attaching/removing files any time up
+  // to a final approval decision (see the comment above the upload-URL gate
+  // in videos.controller.js), so a scholar can fix a wrong file while it's
+  // sitting in the review queue, not only before they hit Submit. Also true
+  // before any submission exists yet (submission_status is null) — that's
+  // the very first upload, which is what creates the submission row.
+  const filesEditable = !isAdminView && (
+    !cycle.submission_status
+    || ['draft', 'needs_revision', 'submitted', 'under_review'].includes(cycle.submission_status)
+  )
+  const hasAnyFile = cycle.slots.some((s) => s.file)
+  // A submission row that's back to 'draft' with nothing attached (every file
+  // deleted) reads as "not submitted", not "Draft" — it isn't mid-edit, it
+  // simply doesn't exist as far as the scholar's work is concerned.
+  const displayStatus = (!cycle.submission_status || (cycle.submission_status === 'draft' && !hasAnyFile))
+    ? 'not_submitted'
+    : cycle.submission_status
   const isCurrent = cycle.semester === cycle.current_semester
 
   useEffect(() => {
@@ -1628,6 +1649,28 @@ function ProgressCycleCard({ cycle, isAdminView, canUpload, onChange, onUploadOn
     }
   }
 
+  // Removes every attached file — the backend drops the submission back to
+  // 'draft' the moment it no longer has both required slots (see
+  // removeFileDescriptor), so this is what actually makes the report read as
+  // "not submitted" again and reopens Upload/Submit.
+  const handleDeleteAll = async () => {
+    const filesToRemove = cycle.slots.map((s) => s.file).filter(Boolean)
+    if (!cycle.submission_id || filesToRemove.length === 0) return
+    if (!confirm('Delete this progress report? Both files will be removed and you can upload and submit again afterwards.')) return
+    setDeleting(true)
+    try {
+      for (const f of filesToRemove) {
+        await removeSubmissionAttachment(cycle.submission_id, f.media_id)
+      }
+      addToast({ type: 'success', title: 'Progress report deleted.' })
+      onChange()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Delete failed', message: err.response?.data?.message })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="card border-2 border-[color:var(--accent)] p-5">
       <div className="safe-row items-start">
@@ -1639,7 +1682,7 @@ function ProgressCycleCard({ cycle, isAdminView, canUpload, onChange, onUploadOn
           {cycle.due_date && <p className="mt-1 text-xs text-[color:var(--secondary)]">Due {formatDate(cycle.due_date)}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <StatusBadge status={cycle.submission_status || 'not_started'} />
+          <StatusBadge status={displayStatus} />
           {isAdminView && canUpload && (
             <button
               type="button"
@@ -1647,6 +1690,16 @@ function ProgressCycleCard({ cycle, isAdminView, canUpload, onChange, onUploadOn
               className="btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
             >
               <UploadCloud size={13} /> {cycle.submission_id ? 'Replace' : 'Upload on behalf'}
+            </button>
+          )}
+          {filesEditable && hasAnyFile && (
+            <button
+              type="button"
+              onClick={handleDeleteAll}
+              disabled={deleting}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
+            >
+              {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Delete
             </button>
           )}
         </div>
@@ -1674,7 +1727,7 @@ function ProgressCycleCard({ cycle, isAdminView, canUpload, onChange, onUploadOn
             ) : (
               <p className="mt-2 text-xs text-[color:var(--muted)]">Not uploaded yet</p>
             )}
-            {editable && (
+            {filesEditable && (
               <label className={`mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--accent-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--accent)] ${busySlot === s.slot ? 'opacity-60' : 'cursor-pointer hover:bg-[color:var(--accent)] hover:text-white'}`}>
                 {busySlot === s.slot ? <Loader2 size={13} className="animate-spin" /> : <UploadCloud size={13} />}
                 {s.file ? 'Replace' : 'Upload'}
