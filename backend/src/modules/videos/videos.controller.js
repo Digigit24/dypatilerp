@@ -117,7 +117,7 @@ export const downloadFolderZip = asyncHandler(async (req, res) => {
     try {
       const stream = await s3.getObjectStream(file.object_key);
       const ext = file.object_key.split('.').pop();
-      archive.append(stream, { name: uniqueName(file.title || `${file.id}.${ext}`) });
+      archive.append(stream, { name: uniqueName(file.title ? `${file.title}.${ext}` : `${file.id}.${ext}`) });
     } catch (err) {
       console.error(`[folder-zip] Skipping ${file.id}:`, err.message);
     }

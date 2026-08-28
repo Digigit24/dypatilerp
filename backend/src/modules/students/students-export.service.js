@@ -161,7 +161,9 @@ export const runDocumentsZipJob = async (jobId) => {
           // Prefixed with slot (unique per scholar via uq_videos_owner_slot) so
           // two documents sharing an original filename — e.g. two ID scans
           // both saved as "scan.pdf" — never collide inside the scholar's folder.
-          const filename = doc.title ? `${doc.slot}_${doc.title}` : `${doc.slot}.${ext}`;
+          // Extension is always appended — without it Windows/macOS have no
+          // app to hand the file to, even though the bytes are fine.
+          const filename = doc.title ? `${doc.slot}_${doc.title}.${ext}` : `${doc.slot}.${ext}`;
           archive.append(stream, { name: `${folder}/${filename}` });
         } catch (err) {
           console.error(`[export-zip] Skipping ${scholar.user_id}/${doc.slot}:`, err.message);
