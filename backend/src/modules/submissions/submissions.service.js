@@ -31,7 +31,11 @@ export const listSubmissions = async ({ batch_id, assignment_id, student_user_id
   const { rows: data } = await query(
     `SELECT s.*, u.first_name, u.last_name, u.email, b.name as batch_name,
             a.title AS assignment_title, a.is_mandatory AS assignment_mandatory,
-            (SELECT COUNT(*) FROM submission_remarks sr WHERE sr.submission_id = s.id)::int AS remarks_count
+            (SELECT COUNT(*) FROM submission_remarks sr WHERE sr.submission_id = s.id)::int AS remarks_count,
+            EXISTS(
+              SELECT 1 FROM approvals ap
+              WHERE ap.submission_id = s.id AND ap.feedback_html IS NOT NULL AND ap.feedback_html <> ''
+            ) AS has_feedback
      FROM submissions s
      JOIN users u ON u.id=s.student_user_id
      JOIN batches b ON b.id=s.batch_id

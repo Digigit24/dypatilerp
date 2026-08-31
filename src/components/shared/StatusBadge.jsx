@@ -5,6 +5,8 @@
   shortlisted: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   pending: 'bg-amber-50 text-amber-700 border-amber-200',
   test_pending: 'bg-amber-50 text-amber-700 border-amber-200',
+  submitted: 'bg-blue-50 text-blue-700 border-blue-200',
+  under_review: 'bg-amber-50 text-amber-700 border-amber-200',
   shortlisted_test: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   in_progress: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   test_completed: 'bg-indigo-50 text-indigo-700 border-indigo-200',

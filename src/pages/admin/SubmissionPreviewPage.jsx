@@ -95,6 +95,8 @@ export default function SubmissionPreviewPage({ isAdminView = false }) {
   const [acting, setActing] = useState(false)
   const [reviseOpen, setReviseOpen] = useState(false)
   const [reviseComment, setReviseComment] = useState('')
+  const [rejectOpen, setRejectOpen] = useState(false)
+  const [rejectComment, setRejectComment] = useState('')
   const [approveOpen, setApproveOpen] = useState(false)
   const [approveComment, setApproveComment] = useState('')
   const [feedbackOpen, setFeedbackOpen] = useState(false)
@@ -216,6 +218,26 @@ export default function SubmissionPreviewPage({ isAdminView = false }) {
       load()
     } catch (err) {
       addToast({ type: 'error', title: 'Could not send revision', message: err.response?.data?.message })
+    } finally { setActing(false) }
+  }
+
+  // Unlike "Needs Revision" (which invites a resubmission), reject is
+  // terminal for this stage — the backend's takeAction sets the submission
+  // straight to 'rejected' and notifies the scholar. Requires a reason for
+  // the same reason a revision request does: the scholar has to know why.
+  const doReject = async () => {
+    if (!currentStage || !rejectComment.trim()) {
+      addToast({ type: 'warning', title: 'Add a reason for rejecting first' })
+      return
+    }
+    setActing(true)
+    try {
+      await reviewSubmission(currentStage.id, { action: 'reject', comments: rejectComment.trim() })
+      addToast({ type: 'success', title: 'Submission rejected' })
+      setRejectOpen(false); setRejectComment('')
+      load()
+    } catch (err) {
+      addToast({ type: 'error', title: 'Could not reject', message: err.response?.data?.message })
     } finally { setActing(false) }
   }
 
@@ -379,6 +401,13 @@ export default function SubmissionPreviewPage({ isAdminView = false }) {
     return next
   })
 
+  // Document-style feedback (`approvals.feedback_html`) is deliberately kept
+  // independent of submissions.status — a reviewer can leave it before
+  // deciding, or alongside any decision. That means it never shows up as a
+  // status anywhere; surface it as its own signal instead of folding it into
+  // the status badge.
+  const hasFeedback = approvals.some((a) => a.feedback_html?.trim())
+
   return (
     <div className="fixed inset-0 z-40 flex bg-[color:var(--bg)]">
       {sidebar}
@@ -410,6 +439,14 @@ export default function SubmissionPreviewPage({ isAdminView = false }) {
                 <ChevronRight size={16} />
               </button>
             </div>
+          )}
+          {hasFeedback && (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700"
+              title="A reviewer has left feedback on this submission"
+            >
+              <MessageSquarePlus size={11} /> Feedback given
+            </span>
           )}
           <StatusBadge status={submission.status} />
         </div>
@@ -637,7 +674,13 @@ export default function SubmissionPreviewPage({ isAdminView = false }) {
                           <p className="mt-1 text-xs leading-5 text-orange-900">{a.comments}</p>
                         </div>
                       )}
-                      {a.status !== 'needs_revision' && a.comments && (
+                      {a.status === 'rejected' && a.comments && (
+                        <div className="mt-2 rounded-md bg-red-50 p-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-red-700">Rejected</p>
+                          <p className="mt-1 text-xs leading-5 text-red-900">{a.comments}</p>
+                        </div>
+                      )}
+                      {!['needs_revision', 'rejected'].includes(a.status) && a.comments && (
                         <p className="mt-2 text-xs leading-5 text-[color:var(--secondary)]">{a.comments}</p>
                       )}
                       {a.suggested_title && <p className="mt-2 rounded-md bg-[color:var(--surface)] p-2 text-[11px] text-[color:var(--secondary)]"><b>Suggested title:</b> {a.suggested_title}</p>}
@@ -676,9 +719,12 @@ export default function SubmissionPreviewPage({ isAdminView = false }) {
 
                 {canReview && currentStage && (
                   <div className="mt-4 space-y-2">
+                    <button onClick={() => setApproveOpen(true)} className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+                      <CheckCircle2 size={14} /> Approve
+                    </button>
                     <div className="flex gap-2">
-                      <button onClick={() => setApproveOpen(true)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
-                        <CheckCircle2 size={14} /> Approve
+                      <button onClick={() => setRejectOpen(true)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-50 px-3 py-2.5 text-xs font-semibold text-red-700 hover:bg-red-100">
+                        <XCircle size={14} /> Reject
                       </button>
                       <button onClick={() => setReviseOpen(true)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-orange-50 px-3 py-2.5 text-xs font-semibold text-orange-700 hover:bg-orange-100">
                         <RotateCcw size={14} /> Needs Revision
@@ -749,6 +795,34 @@ export default function SubmissionPreviewPage({ isAdminView = false }) {
             <div className="safe-actions mt-5 justify-end">
               <button className="h-11 rounded-md bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setReviseOpen(false)}>Cancel</button>
               <button className="btn-primary disabled:opacity-50" onClick={doRevise} disabled={acting}>{acting ? 'Sending…' : 'Submit Revision'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Reject modal ── */}
+      {rejectOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm" onClick={() => setRejectOpen(false)}>
+          <div className="absolute bottom-0 left-0 right-0 rounded-t-[30px] bg-[color:var(--card)] p-5 shadow-hover md:left-1/2 md:right-auto md:w-[680px] md:-translate-x-1/2 md:p-7" onClick={(e) => e.stopPropagation()}>
+            <div className="safe-row items-start">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-600">Reject submission</p>
+                <h2 className="mt-2 line-clamp-2 text-xl font-semibold text-[color:var(--text)]">{submission.title}</h2>
+              </div>
+              <button className="grid h-10 w-10 place-items-center rounded-full bg-[color:var(--surface)]" onClick={() => setRejectOpen(false)}><XCircle size={18} /></button>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-[color:var(--secondary)]">
+              Unlike Needs Revision, rejecting closes this out — the scholar is notified and cannot resubmit against it. Use Needs Revision instead if they should get another attempt.
+            </p>
+            <label className="mt-4 block">
+              <span className="text-sm font-semibold text-[color:var(--text)]">Reason for rejecting</span>
+              <textarea className="textarea mt-2 h-32 w-full" value={rejectComment} onChange={(e) => setRejectComment(e.target.value)} placeholder="Explain why this is being rejected — the scholar will see this." />
+            </label>
+            <div className="safe-actions mt-5 justify-end">
+              <button className="h-11 rounded-md bg-[color:var(--surface)] px-4 font-semibold text-[color:var(--secondary)]" onClick={() => setRejectOpen(false)}>Cancel</button>
+              <button className="inline-flex h-11 items-center gap-2 rounded-md bg-red-600 px-4 font-semibold text-white hover:bg-red-700 disabled:opacity-50" onClick={doReject} disabled={acting}>
+                {acting ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />} {acting ? 'Rejecting…' : 'Reject'}
+              </button>
             </div>
           </div>
         </div>

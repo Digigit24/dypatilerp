@@ -10,7 +10,7 @@
  * same as every other screen that calls these endpoints. Nothing here
  * bypasses or duplicates that scoping.
  */
-import { ChevronDown, Loader2, PanelLeftClose, PanelLeftOpen, Search, Users } from 'lucide-react'
+import { ChevronDown, Loader2, MessageSquare, PanelLeftClose, PanelLeftOpen, Search, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getStudents } from '../../api/services/studentService.js'
@@ -245,13 +245,22 @@ function ScholarRow({ scholar: s, expanded, onToggle, subs, activeSubmissionId, 
                               {formatDate(sub.submitted_at || sub.created_at)}
                             </span>
                           </span>
-                          {sub.id === activeSubmissionId ? (
-                            <span className="shrink-0 rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold capitalize">
-                              {sub.status?.replaceAll('_', ' ')}
-                            </span>
-                          ) : (
-                            <span className="shrink-0"><StatusBadge status={sub.status} /></span>
-                          )}
+                          <span className="flex shrink-0 items-center gap-1">
+                            {sub.has_feedback && (
+                              <MessageSquare
+                                size={11}
+                                className={sub.id === activeSubmissionId ? 'text-white/80' : 'text-sky-500'}
+                                title="Feedback given"
+                              />
+                            )}
+                            {sub.id === activeSubmissionId ? (
+                              <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold capitalize">
+                                {sub.status?.replaceAll('_', ' ')}
+                              </span>
+                            ) : (
+                              <StatusBadge status={sub.status} />
+                            )}
+                          </span>
                         </button>
                       ))}
                     </div>
