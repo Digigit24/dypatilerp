@@ -159,8 +159,13 @@ const main = async () => {
         );
       }
 
+      // updated_at is deliberately left untouched — bumping it here would make
+      // the admin preview's "files changed after this was submitted, re-check
+      // before approving" warning fire on every merged row forever, even
+      // though nothing changed after the scholar actually submitted; this is
+      // a data-consolidation write, not a real post-submission edit.
       await client.query(
-        `UPDATE submissions SET file_urls=$1, workflow_kind='chain', updated_at=NOW() WHERE id=$2`,
+        `UPDATE submissions SET file_urls=$1, workflow_kind='chain' WHERE id=$2`,
         [JSON.stringify(files), p.survivor.id]
       );
       await client.query('COMMIT');

@@ -5,8 +5,8 @@
  * Replaces the old sidedrawer preview (ApprovalsPage's `selected` panel).
  */
 import {
-  AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Download,
-  FileQuestion, Loader2, MessageSquarePlus, Paperclip, RotateCcw, Trash2, Undo2, UploadCloud, XCircle,
+  AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Download,
+  FileQuestion, History, Loader2, MessageSquarePlus, Paperclip, RotateCcw, Trash2, Undo2, UploadCloud, XCircle,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -104,6 +104,9 @@ export default function SubmissionPreviewPage({ isAdminView = false }) {
   // Either a media_id (deleting that file) or a slot/'file' key (uploading) —
   // only one file operation may be in flight at a time on this page.
   const [fileBusy, setFileBusy] = useState(null)
+  // Slots currently showing their older merged-in duplicates — see
+  // `historyBySlot` below. Collapsed by default.
+  const [expandedSlots, setExpandedSlots] = useState(() => new Set())
 
   // Siblings for prev/next — passed via navigation state from whichever list
   // linked here. Opened directly (bookmark/refresh) → no state, no prev/next.
@@ -333,10 +336,48 @@ export default function SubmissionPreviewPage({ isAdminView = false }) {
   // submitted_at (both NOW() in one UPDATE), so they're equal immediately
   // after submit; any LATER file/content change makes updated_at strictly
   // newer. No extra column needed to detect "changed after submission".
+  // Only meaningful pre-decision — once a submission is already
+  // approved/rejected, "re-check before approving" no longer applies, and a
+  // merged legacy row's updated_at gets bumped by the merge itself (not a
+  // real post-submission edit), which would otherwise show this warning
+  // forever on an already-decided row.
   const filesChangedAfterSubmit = Boolean(
-    submission.submitted_at && submission.updated_at
+    ['submitted', 'under_review'].includes(submission.status)
+    && submission.submitted_at && submission.updated_at
     && new Date(submission.updated_at) > new Date(submission.submitted_at)
   )
+
+  // Legacy pre-V2 rows can carry more than one file in the same progress-report
+  // slot — merge-progress-reports.js re-parents every merged source's files
+  // onto the survivor rather than dropping any of them (CLAUDE.md §7). Collapse
+  // those down to one visible file per slot (last in the array — the most
+  // recently merged-in one), keeping the rest reachable as history instead of
+  // cluttering the tabs/file list with duplicates. Assignments/targets never
+  // use slots, so they're untouched — every file there is intentionally distinct.
+  const isProgressReportKind = kind === 'progress_report'
+  const filesWithIndex = files.map((f, i) => ({ f, i }))
+  const primaryBySlot = new Map()
+  const historyBySlot = new Map()
+  if (isProgressReportKind) {
+    for (const entry of filesWithIndex) {
+      if (entry.f.slot) primaryBySlot.set(entry.f.slot, entry) // last write wins
+      else primaryBySlot.set(`_unslotted_${entry.i}`, entry)   // never grouped
+    }
+    const primaries = new Set(primaryBySlot.values())
+    for (const entry of filesWithIndex) {
+      if (!entry.f.slot || primaries.has(entry)) continue
+      if (!historyBySlot.has(entry.f.slot)) historyBySlot.set(entry.f.slot, [])
+      historyBySlot.get(entry.f.slot).push(entry)
+    }
+  }
+  const visibleFiles = isProgressReportKind
+    ? [...primaryBySlot.values()].sort((a, b) => a.i - b.i)
+    : filesWithIndex
+  const toggleSlotHistory = (slot) => setExpandedSlots((prev) => {
+    const next = new Set(prev)
+    next.has(slot) ? next.delete(slot) : next.add(slot)
+    return next
+  })
 
   return (
     <div className="fixed inset-0 z-40 flex bg-[color:var(--bg)]">
@@ -388,9 +429,9 @@ export default function SubmissionPreviewPage({ isAdminView = false }) {
               ))}
             </div>
           )}
-          {files.length > 1 && (
+          {visibleFiles.length > 1 && (
             <div className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-[color:var(--border)] bg-[color:var(--card)] px-4 py-2">
-              {files.map((f, i) => (
+              {visibleFiles.map(({ f, i }) => (
                 <button key={f.media_id || f.url || i} onClick={() => setFileIndex(i)}
                   className={`shrink-0 truncate rounded-full px-3 py-1.5 text-xs font-semibold max-w-[220px] ${i === fileIndex ? 'bg-[color:var(--accent)] text-white' : 'bg-[color:var(--surface)] text-[color:var(--secondary)]'}`}>
                   {f.name || `File ${i + 1}`}
@@ -457,29 +498,70 @@ export default function SubmissionPreviewPage({ isAdminView = false }) {
                 {files.length === 0 && (
                   <p className="text-xs text-[color:var(--secondary)]">No files uploaded yet.</p>
                 )}
-                {files.map((f, i) => (
-                  <div key={f.media_id || f.url || i} className="flex items-center justify-between gap-2 rounded-lg bg-[color:var(--card)] px-3 py-2 text-xs">
-                    <span className="min-w-0 truncate text-[color:var(--text)]">
-                      {kind === 'progress_report' && f.slot && (
-                        <span className="mr-1.5 font-semibold text-[color:var(--accent)]">
-                          {f.slot === 'report' ? 'Report:' : 'Presentation:'}
+                {visibleFiles.map(({ f, i }) => {
+                  const history = f.slot ? (historyBySlot.get(f.slot) || []) : []
+                  const expanded = f.slot && expandedSlots.has(f.slot)
+                  return (
+                    <div key={f.media_id || f.url || i}>
+                      <div className="flex items-center justify-between gap-2 rounded-lg bg-[color:var(--card)] px-3 py-2 text-xs">
+                        <span className="min-w-0 truncate text-[color:var(--text)]">
+                          {kind === 'progress_report' && f.slot && (
+                            <span className="mr-1.5 font-semibold text-[color:var(--accent)]">
+                              {f.slot === 'report' ? 'Report:' : 'Presentation:'}
+                            </span>
+                          )}
+                          {f.name || `File ${i + 1}`}
                         </span>
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          {history.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => toggleSlotHistory(f.slot)}
+                              className="flex items-center gap-0.5 rounded-full bg-[color:var(--surface)] px-1.5 py-0.5 text-[10px] font-semibold text-[color:var(--secondary)] hover:text-[color:var(--accent)]"
+                              title="Older duplicates from before submissions were merged"
+                            >
+                              <History size={11} /> {history.length}
+                              <ChevronDown size={11} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                            </button>
+                          )}
+                          {canEditFiles && f.media_id && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteFile(f.media_id)}
+                              disabled={fileBusy === f.media_id}
+                              className="text-[color:var(--muted)] hover:text-red-500 disabled:opacity-50"
+                              title="Remove this file"
+                            >
+                              {fileBusy === f.media_id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                      {expanded && (
+                        <div className="ml-3 mt-1 space-y-1 border-l border-[color:var(--border)] pl-2">
+                          {history.map(({ f: hf, i: hi }) => (
+                            <div key={hf.media_id || hf.url || hi} className="flex items-center justify-between gap-2 rounded-lg bg-[color:var(--surface)] px-3 py-1.5 text-[11px]">
+                              <button type="button" onClick={() => setFileIndex(hi)} className="min-w-0 truncate text-left text-[color:var(--secondary)] hover:text-[color:var(--accent)]">
+                                {hf.name || `File ${hi + 1}`}
+                              </button>
+                              {canEditFiles && hf.media_id && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteFile(hf.media_id)}
+                                  disabled={fileBusy === hf.media_id}
+                                  className="shrink-0 text-[color:var(--muted)] hover:text-red-500 disabled:opacity-50"
+                                  title="Remove this file"
+                                >
+                                  {fileBusy === hf.media_id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       )}
-                      {f.name || `File ${i + 1}`}
-                    </span>
-                    {canEditFiles && f.media_id && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteFile(f.media_id)}
-                        disabled={fileBusy === f.media_id}
-                        className="shrink-0 text-[color:var(--muted)] hover:text-red-500 disabled:opacity-50"
-                        title="Remove this file"
-                      >
-                        {fileBusy === f.media_id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                      </button>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  )
+                })}
               </div>
 
               {canEditFiles && (
