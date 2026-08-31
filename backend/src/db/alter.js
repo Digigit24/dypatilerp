@@ -830,6 +830,20 @@ const run = async () => {
     `);
     console.log('✓  email_logs permission module seeded and granted to admin');
 
+    // 38. Current employment fields — designation, organisation name, and
+    // organisation address. Nullable, same pattern as `title` (block 32):
+    // deliberately kept OUT of PROFILE_DETAIL_FIELDS/INFO_FIELDS in
+    // student-profile.service.js, so the backend never treats them as
+    // required — enforcement that they're filled in lives entirely in the
+    // onboarding form's client-side validation, not a DB constraint.
+    await client.query(`
+      ALTER TABLE student_profile_details
+        ADD COLUMN IF NOT EXISTS current_designation TEXT,
+        ADD COLUMN IF NOT EXISTS current_organisation TEXT,
+        ADD COLUMN IF NOT EXISTS current_organisation_address TEXT
+    `);
+    console.log('✓  student_profile_details current-employment columns added (or already exist)');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

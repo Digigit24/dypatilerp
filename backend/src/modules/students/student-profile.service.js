@@ -62,6 +62,11 @@ export const getProfileDetails = async (userId) => {
     // course — deliberately NOT in PROFILE_DETAIL_FIELDS/INFO_FIELDS, so it
     // never gates onboarding completeness like the fields above do.
     title: details?.title ?? null,
+    // Current employment — same deliberate exclusion as `title` above:
+    // required on the onboarding form (client-side only), optional here.
+    current_designation: details?.current_designation ?? null,
+    current_organisation: details?.current_organisation ?? null,
+    current_organisation_address: details?.current_organisation_address ?? null,
     onboarding_completed_at: details?.onboarding_completed_at ?? null,
     onboarding_skip: details?.onboarding_skip ?? false,
   };
@@ -94,7 +99,10 @@ export const updateBasicUserFields = async (userId, { first_name, middle_name, l
 // onboarding form sends every field together (unaffected), but a narrower
 // caller — e.g. the Title card, which saves only { title } — must not blank
 // out father_name/mother_name/etc. by omission.
-const PROFILE_DETAIL_COLUMNS = ['father_name', 'mother_name', 'date_of_birth', 'postal_address', 'blood_group', 'title'];
+const PROFILE_DETAIL_COLUMNS = [
+  'father_name', 'mother_name', 'date_of_birth', 'postal_address', 'blood_group', 'title',
+  'current_designation', 'current_organisation', 'current_organisation_address',
+];
 
 export const upsertProfileDetails = async (userId, body = {}) => {
   const present = PROFILE_DETAIL_COLUMNS.filter((c) => body[c] !== undefined);

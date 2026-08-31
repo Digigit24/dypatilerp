@@ -448,6 +448,11 @@ const profileDetailsSchema = z.object({
   date_of_birth: z.string().optional(), // ISO date string, e.g. "1998-04-12"
   postal_address: z.string().optional(),
   blood_group: z.string().max(8).optional(),
+  // Current employment — optional on the backend by design; the onboarding
+  // form enforces these client-side only (see student-profile.service.js).
+  current_designation: z.string().max(255).optional(),
+  current_organisation: z.string().max(255).optional(),
+  current_organisation_address: z.string().max(2000).optional(),
   // Working title of the scholar's research/thesis. 200-word cap enforced
   // both here (defense in depth) and client-side (live counter/block).
   title: z.string().max(3000).optional().nullable()

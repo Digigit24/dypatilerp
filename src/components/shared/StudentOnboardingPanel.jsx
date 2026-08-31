@@ -27,6 +27,9 @@ const INFO_FIELDS = [
   { key: 'date_of_birth',  label: 'Date of Birth',   required: true, type: 'date' },
   { key: 'blood_group',    label: 'Blood Group',     required: true, placeholder: 'e.g. O+' },
   { key: 'postal_address', label: 'Postal Address',  required: true, type: 'textarea', wide: true },
+  { key: 'current_designation',           label: 'Current Designation',              required: true },
+  { key: 'current_organisation',          label: 'Current Institute/Organisation Name', required: true },
+  { key: 'current_organisation_address',  label: 'Current Organisation Address',     required: true, type: 'textarea', wide: true },
 ]
 
 const SLOT_LABELS = {
@@ -91,7 +94,16 @@ export default function StudentOnboardingPanel({ userId, editable = true, onStat
     }
   }
 
+  // INFO_FIELDS' `required` flag previously only drew the red asterisk — it
+  // was never actually enforced, so a field marked required could still be
+  // saved blank. Blocking here is frontend-only by design: the backend
+  // schema (profileDetailsSchema) keeps every one of these optional.
   const saveDetails = async () => {
+    const missing = INFO_FIELDS.filter((f) => f.required && !String(draft[f.key] || '').trim())
+    if (missing.length) {
+      addToast({ type: 'error', title: `Please fill in: ${missing.map((f) => f.label).join(', ')}` })
+      return
+    }
     setSaving(true)
     try {
       const res = await saveProfileDetails(userId, draft)
