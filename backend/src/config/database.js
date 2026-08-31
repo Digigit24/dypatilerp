@@ -17,12 +17,24 @@ dns.setDefaultResultOrder('ipv4first');
 let pool;
 let driver = 'pg';
 
+// DATE columns (date_of_birth, batch/fee due dates, ...) carry no time-of-day
+// or timezone — but the driver's default type parser for OID 1082 builds a
+// JS Date via LOCAL-timezone constructors, and this process runs in IST
+// (UTC+5:30). Serializing that Date to JSON always goes through
+// toISOString() (UTC), so every DATE value silently lands on the PREVIOUS
+// calendar day (e.g. 1993-12-14 round-tripped as 1993-12-13T18:30:00.000Z).
+// There's no time component to preserve, so skip Date entirely — return the
+// raw 'YYYY-MM-DD' string Postgres already sends.
+const DATE_OID = 1082;
+const keepDateAsString = (val) => val;
+
 if (process.env.DB_DRIVER !== 'pg') {
   try {
     const neon = await import('@neondatabase/serverless');
     const { default: ws } = await import('ws');
     neon.neonConfig.webSocketConstructor = ws;
     neon.neonConfig.poolQueryViaFetch = true; // single queries via HTTPS fetch — fastest + most reliable
+    neon.types.setTypeParser(DATE_OID, keepDateAsString);
     pool = new neon.Pool({
       connectionString: env.DATABASE_URL,
       max: 5,
@@ -37,6 +49,7 @@ if (process.env.DB_DRIVER !== 'pg') {
 
 if (!pool) {
   const pg = await import('pg');
+  pg.default.types.setTypeParser(DATE_OID, keepDateAsString);
   pool = new pg.default.Pool({
     connectionString: env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
