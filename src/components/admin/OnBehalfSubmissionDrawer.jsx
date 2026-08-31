@@ -16,11 +16,12 @@ import {
 import { getStudentById, getStudents } from '../../api/services/studentService.js'
 import { getAssignments } from '../../api/services/assignmentService.js'
 import { getTargets } from '../../api/services/targetService.js'
+import { scholarName } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 const MAX_BYTES = 25 * 1024 * 1024
 
-const fullName = (s) => `${s?.first_name || ''} ${s?.last_name || ''}`.trim()
+const fullName = (s) => scholarName(s) || `${s?.first_name || ''} ${s?.last_name || ''}`.trim()
 
 const KIND_META = {
   assignment: { label: 'Assignment', idField: 'assignment_id', nameField: 'title' },

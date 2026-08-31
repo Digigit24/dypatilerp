@@ -25,7 +25,7 @@ import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
 import SubmissionRemarks from '../../components/shared/SubmissionRemarks.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
-import { formatDate } from '../../lib/formatters.js'
+import { formatDate, scholarName as formatScholarName } from '../../lib/formatters.js'
 import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { usePermStore } from '../../store/permStore.js'
@@ -345,7 +345,7 @@ export default function SubmissionPreviewPage({ isAdminView = false }) {
     )
   }
 
-  const scholarName = `${submission.first_name || ''} ${submission.last_name || ''}`.trim() || '—'
+  const scholarName = formatScholarName(submission) || `${submission.first_name || ''} ${submission.last_name || ''}`.trim() || '—'
 
   // Same kind detection the backend uses (videos.controller.js) — a target_id
   // marks a milestone submission; submission_type itself has no enum value

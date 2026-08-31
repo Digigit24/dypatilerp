@@ -19,6 +19,7 @@ import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import { useUiStore } from '../../store/uiStore.js'
 import { useCourseStore } from '../../store/courseStore.js'
+import { withDrPrefix } from '../../lib/formatters.js'
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 const OPTS = ['A', 'B', 'C', 'D']
@@ -76,7 +77,7 @@ function AssignedRow({
       <div className="flex flex-wrap items-start gap-2">
         <div className="flex-1 min-w-0">
           <p className="truncate text-sm font-semibold text-[color:var(--text)]">
-            {row.first_name} {row.last_name}
+            {withDrPrefix(`${row.first_name || ''} ${row.last_name || ''}`.trim())}
           </p>
           <p className="truncate text-xs text-[color:var(--secondary)]">{row.email}</p>
         </div>
@@ -316,7 +317,7 @@ function AssignModal({ test, courseId: testCourseId, onClose, addToast }) {
                   )}
                   {filteredApplicants.map((a) => {
                     const id = a.id
-                    const name = `${a.first_name ?? a.personal?.first_name ?? ''} ${a.last_name ?? a.personal?.last_name ?? ''}`.trim() || a.personal?.full_name || '—'
+                    const name = withDrPrefix(`${a.first_name ?? a.personal?.first_name ?? ''} ${a.last_name ?? a.personal?.last_name ?? ''}`.trim() || a.personal?.full_name) || '—'
                     const email = a.email ?? a.personal?.email ?? ''
                     const checked = selectedIds.has(id)
                     return (

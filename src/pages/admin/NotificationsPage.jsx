@@ -7,6 +7,7 @@ import { getUsers } from '../../api/services/userService.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import { useCourseStore } from '../../store/courseStore.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { scholarName } from '../../lib/formatters.js'
 
 // ─── Static metadata ──────────────────────────────────────────────────────────
 
@@ -90,7 +91,7 @@ export default function AdminNotificationsPage() {
                 <option value="">Search or choose student</option>
                 {students.map((s) => {
                   const u = userMap[s.user_id]
-                  return <option key={s.id} value={s.user_id}>{u ? `${u.first_name} ${u.last_name}` : s.id} · {s.permanent_id}</option>
+                  return <option key={s.id} value={s.user_id}>{u ? (scholarName(u) || `${u.first_name} ${u.last_name}`) : s.id} · {s.permanent_id}</option>
                 })}
               </select>
             )}

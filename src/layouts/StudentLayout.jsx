@@ -9,6 +9,7 @@ import { useAuthStore } from '../store/authStore.js'
 import { useLabelStore, useLabels } from '../store/labelStore.js'
 import { logout } from '../api/services/userService.js'
 import { isVideoEnabled } from '../lib/features.js'
+import { scholarName } from '../lib/formatters.js'
 
 export default function StudentLayout() {
   const currentUser = useAuthStore((s) => s.currentUser)
@@ -28,7 +29,7 @@ export default function StudentLayout() {
   }
 
   const displayName = currentUser
-    ? [currentUser.first_name, currentUser.middle_name, currentUser.last_name].filter(Boolean).join(' ')
+    ? (scholarName(currentUser) || [currentUser.first_name, currentUser.middle_name, currentUser.last_name].filter(Boolean).join(' '))
     : labels.student
 
   const enrollmentNumber = currentUser?.enrollment_number ?? ''

@@ -37,7 +37,7 @@ import { getProgressSummary, getTargets, targetState } from '../../api/services/
 import UploadProgressReportDrawer from '../admin/UploadProgressReportDrawer.jsx'
 import OnBehalfSubmissionDrawer from '../admin/OnBehalfSubmissionDrawer.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
-import { formatDate } from '../../lib/formatters.js'
+import { formatDate, scholarName } from '../../lib/formatters.js'
 import { latestFeedbackEvent } from '../../lib/feedbackEvent.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { usePermStore } from '../../store/permStore.js'
@@ -343,7 +343,10 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
   if (!student || !user) return <SkeletonCard rows={8} />
 
   const name     = [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(' ')
+  // Initials stay off the raw name, not the "Dr."-prefixed one — an avatar
+  // reading "D?" would be confusing.
   const initials = name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
+  const displayName = scholarName(user) || name
 
   // Normalise progress values. Prefer the targets-derived roll-up (authoritative) over
   // anything embedded in the student response, which may still be the legacy average.
@@ -592,7 +595,7 @@ export default function StudentProfileView({ studentId, isAdminView = false, def
           </div>
 
           <div className="mt-4">
-            <h1 className="text-2xl font-semibold text-[color:var(--text)]">{name}</h1>
+            <h1 className="text-2xl font-semibold text-[color:var(--text)]">{displayName}</h1>
             <p className="mt-1 text-sm text-[color:var(--secondary)]">
               {student.enrollment_number || student.permanent_id} · {student.batch_name || student.batch_code || student.batch_id}
             </p>

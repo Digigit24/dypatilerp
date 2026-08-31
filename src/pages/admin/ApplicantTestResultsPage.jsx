@@ -5,6 +5,7 @@ import { getApplicantTestResults, getTests } from '../../api/services/testServic
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
+import { withDrPrefix } from '../../lib/formatters.js'
 
 function fmtDuration(secs) {
   if (!secs) return '—'
@@ -117,7 +118,7 @@ export default function ApplicantTestResultsPage() {
                   {results.test?.title || 'Entrance Test'}
                 </h2>
                 <p className="text-sm text-[color:var(--secondary)]">
-                  {attempt.first_name} {attempt.last_name} · {attempt.email}
+                  {withDrPrefix(`${attempt.first_name || ''} ${attempt.last_name || ''}`.trim())} · {attempt.email}
                 </p>
               </div>
               <StatusBadge status={attempt.status} />

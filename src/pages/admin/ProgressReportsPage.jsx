@@ -21,7 +21,7 @@ import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
 import SubmissionRemarks from '../../components/shared/SubmissionRemarks.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
-import { formatDate } from '../../lib/formatters.js'
+import { formatDate, scholarName } from '../../lib/formatters.js'
 import { useCourseStore } from '../../store/courseStore.js'
 import { usePermStore } from '../../store/permStore.js'
 
@@ -34,7 +34,7 @@ const STATUS_FILTERS = [
   { key: 'draft', label: 'Draft' },
 ]
 
-const nameOf = (r) => `${r.first_name || ''} ${r.last_name || ''}`.trim() || r.email || '—'
+const nameOf = (r) => scholarName(r) || `${r.first_name || ''} ${r.last_name || ''}`.trim() || r.email || '—'
 
 export default function AdminProgressReportsPage() {
   const [reports, setReports] = useState(null)

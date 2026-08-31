@@ -5,6 +5,7 @@ import StudentOnboardingPanel from '../../components/shared/StudentOnboardingPan
 import { logout } from '../../api/services/userService.js'
 import { useAuthStore } from '../../store/authStore.js'
 import { useOnboardingStore } from '../../store/onboardingStore.js'
+import { scholarName } from '../../lib/formatters.js'
 
 // Field/document counts come from the API (status.total_info_fields /
 // total_documents) — never hardcode them here. A hardcoded count silently
@@ -74,7 +75,7 @@ export default function OnboardingPage() {
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
         <div className="card p-6">
           <h1 className="text-2xl font-semibold text-[color:var(--text)]">
-            Welcome{currentUser?.first_name ? `, ${currentUser.first_name}` : ''} — let's finish setting up your profile
+            Welcome{currentUser?.first_name ? `, ${scholarName({ first_name: currentUser.first_name })}` : ''} — let's finish setting up your profile
           </h1>
           <p className="mt-2 text-sm text-[color:var(--secondary)]">
             Your dashboard unlocks once your personal details and required documents are complete.

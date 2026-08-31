@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getStudents } from '../../api/services/studentService.js'
 import { getSubmissions } from '../../api/services/submissionService.js'
-import { formatDate } from '../../lib/formatters.js'
+import { formatDate, scholarName } from '../../lib/formatters.js'
 import StatusBadge from '../shared/StatusBadge.jsx'
 
 const COLLAPSE_KEY = 'dyperf_submission_sidebar_collapsed'
@@ -27,7 +27,10 @@ const CATEGORIES = [
 ]
 
 const fullName = (s) => `${s?.first_name || ''} ${s?.last_name || ''}`.trim() || '—'
+// Initials stay off the raw name — the "Dr."-prefixed display name would
+// give a confusing "D?" avatar.
 const initials = (s) => fullName(s).split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
+const displayName = (s) => scholarName(s) || fullName(s)
 
 // A quick "does anything here need a look" signal, computed once a scholar's
 // submissions are actually loaded (not from the aggregate counts, which only
@@ -120,7 +123,7 @@ export default function SubmissionsSidebar({ activeSubmissionId, activeScholarId
               key={s.user_id}
               type="button"
               onClick={() => { toggleCollapsed(); toggleScholar(s.user_id) }}
-              title={fullName(s)}
+              title={displayName(s)}
               className={`grid h-9 w-9 place-items-center rounded-full text-[11px] font-bold transition ${
                 s.user_id === activeScholarId
                   ? 'bg-[color:var(--accent)] text-white'
@@ -203,7 +206,7 @@ function ScholarRow({ scholar: s, expanded, onToggle, subs, activeSubmissionId, 
           {initials(s)}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-xs font-semibold text-[color:var(--text)]">{fullName(s)}</span>
+          <span className="block truncate text-xs font-semibold text-[color:var(--text)]">{displayName(s)}</span>
           <span className="block truncate text-[11px] text-[color:var(--secondary)]">{s.batch_name || s.batch_code || '—'}</span>
         </span>
         {Array.isArray(subs) && needsAttention(subs) && (

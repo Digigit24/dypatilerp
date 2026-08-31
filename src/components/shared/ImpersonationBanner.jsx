@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { endImpersonation as endImpersonationApi } from '../../api/services/userService.js'
+import { scholarName } from '../../lib/formatters.js'
 
 /**
  * Persistent, impossible-to-miss strip shown for the entire duration of an
@@ -33,7 +34,7 @@ export default function ImpersonationBanner() {
   if (!impersonation) return null
 
   const targetName = currentUser
-    ? [currentUser.first_name, currentUser.last_name].filter(Boolean).join(' ')
+    ? (scholarName(currentUser) || [currentUser.first_name, currentUser.last_name].filter(Boolean).join(' '))
     : 'this user'
 
   const handleReturn = async () => {

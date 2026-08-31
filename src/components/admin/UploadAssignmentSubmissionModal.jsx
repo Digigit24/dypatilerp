@@ -18,6 +18,7 @@ import { getAssignmentSubmissions } from '../../api/services/assignmentService.j
 import {
   createSubmissionOnBehalf, submitForReviewOnBehalf, updateSubmission, uploadSubmissionAttachment,
 } from '../../api/services/submissionService.js'
+import { scholarName } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 export default function UploadAssignmentSubmissionModal({ assignment, onClose, onUploaded }) {
@@ -85,7 +86,7 @@ export default function UploadAssignmentSubmissionModal({ assignment, onClose, o
       //    self-submit would trigger.
       await submitForReviewOnBehalf(submissionId)
 
-      const name = selectedStudent ? `${selectedStudent.first_name || ''} ${selectedStudent.last_name || ''}`.trim() : 'the scholar'
+      const name = selectedStudent ? (scholarName(selectedStudent) || `${selectedStudent.first_name || ''} ${selectedStudent.last_name || ''}`.trim()) : 'the scholar'
       addToast({ type: 'success', title: `Submission uploaded and sent for review for ${name}.` })
       onUploaded?.()
       onClose()
@@ -128,7 +129,7 @@ export default function UploadAssignmentSubmissionModal({ assignment, onClose, o
             ) : selectedStudent ? (
               <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[color:var(--text)]">{selectedStudent.first_name} {selectedStudent.last_name}</p>
+                  <p className="truncate text-sm font-semibold text-[color:var(--text)]">{scholarName(selectedStudent) || `${selectedStudent.first_name} ${selectedStudent.last_name}`}</p>
                   <p className="truncate text-xs text-[color:var(--secondary)]">{selectedStudent.email}</p>
                 </div>
                 <button type="button" className="shrink-0 rounded-full bg-[color:var(--accent-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--accent)]" onClick={() => setStudentId('')}>
@@ -159,7 +160,7 @@ export default function UploadAssignmentSubmissionModal({ assignment, onClose, o
                         onClick={() => { setStudentId(s.user_id); setSearch('') }}
                       >
                         <span className="min-w-0">
-                          <span className="block truncate font-semibold text-[color:var(--text)]">{s.first_name} {s.last_name}</span>
+                          <span className="block truncate font-semibold text-[color:var(--text)]">{scholarName(s) || `${s.first_name} ${s.last_name}`}</span>
                           <span className="block truncate text-xs text-[color:var(--secondary)]">{s.email}</span>
                         </span>
                       </button>

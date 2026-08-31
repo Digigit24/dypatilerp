@@ -16,7 +16,7 @@ import ResetPasswordModal from '../../components/shared/ResetPasswordModal.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
-import { formatDate } from '../../lib/formatters.js'
+import { formatDate, scholarName } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useCourseStore } from '../../store/courseStore.js'
 import { useLabels } from '../../store/labelStore.js'
@@ -205,7 +205,10 @@ export default function StudentsPage() {
     return u ? `${u.first_name} ${u.last_name}` : '—'
   }
   const emailOf = (s) => s.email || userMap[s.user_id]?.email || '—'
+  // Initials come from the raw name (nameOf), not the "Dr."-prefixed display
+  // name — an avatar reading "DS" instead of "SM" would be confusing.
   const initials = (s) => nameOf(s).split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
+  const displayNameOf = (s) => scholarName(s.first_name || s.last_name ? s : userMap[s.user_id]) || nameOf(s)
 
   // Status filtering now happens server-side, so the loaded page is already scoped.
   const filtered = items || []
@@ -505,7 +508,7 @@ export default function StudentsPage() {
                           {initials(s)}
                         </div>
                         <div>
-                          <p className="font-semibold text-[color:var(--text)]">{nameOf(s)}</p>
+                          <p className="font-semibold text-[color:var(--text)]">{displayNameOf(s)}</p>
                           <p className="text-xs text-[color:var(--secondary)]">{emailOf(s)}</p>
                         </div>
                       </div>
@@ -737,7 +740,7 @@ export default function StudentsPage() {
             <div className="shrink-0 flex items-start justify-between border-b border-[color:var(--border)] p-6">
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">Student Details</p>
-                <h2 className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{nameOf(selected)}</h2>
+                <h2 className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{displayNameOf(selected)}</h2>
                 <p className="mt-1 text-sm text-[color:var(--secondary)]">{selected.permanent_id} · {emailOf(selected)}</p>
                 {drawerMode !== 'full' && (
                   <span className="mt-2 inline-flex items-center rounded-full bg-[color:var(--accent-tint)] px-3 py-1 text-xs font-semibold text-[color:var(--accent)]">

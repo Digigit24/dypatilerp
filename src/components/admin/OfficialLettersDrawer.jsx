@@ -3,14 +3,14 @@ import { useEffect, useState } from 'react'
 import {
   downloadOfficialLetter, getOfficialLetters, previewOfficialLetter, uploadOfficialLetter,
 } from '../../api/services/studentService.js'
-import { formatDate } from '../../lib/formatters.js'
+import { formatDate, scholarName } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { usePermStore } from '../../store/permStore.js'
 
 const ACCEPT = '.pdf,.doc,.docx,.png,.jpg,.jpeg,.webp'
 const MAX_BYTES = 15 * 1024 * 1024
 
-const fullName = (s) => `${s?.first_name || ''} ${s?.last_name || ''}`.trim()
+const fullName = (s) => scholarName(s) || `${s?.first_name || ''} ${s?.last_name || ''}`.trim()
 const fmtBytes = (b) => !b ? '—' : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${(Math.round(b / 1e3))} KB`
 
 export default function OfficialLettersDrawer({ student, onClose }) {

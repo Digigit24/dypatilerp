@@ -7,7 +7,7 @@ import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
-import { formatDate } from '../../lib/formatters.js'
+import { formatDate, scholarName } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useCourseStore } from '../../store/courseStore.js'
 
@@ -60,7 +60,7 @@ export default function FeesPage() {
   const studentName = (studentId) => {
     const student = studentMap[studentId]
     const user = student ? userMap[student.user_id] : null
-    return user ? `${user.first_name} ${user.last_name}` : studentId
+    return user ? (scholarName(user) || `${user.first_name} ${user.last_name}`) : studentId
   }
 
   if (!fees) return <SkeletonCard rows={8} />
@@ -191,7 +191,7 @@ export default function FeesPage() {
                     <option value="">Select student</option>
                     {students.map((s) => {
                       const u = userMap[s.user_id]
-                      return <option key={s.id} value={s.id}>{u ? `${u.first_name} ${u.last_name}` : s.id} · {s.permanent_id}</option>
+                      return <option key={s.id} value={s.id}>{u ? (scholarName(u) || `${u.first_name} ${u.last_name}`) : s.id} · {s.permanent_id}</option>
                     })}
                   </select>
                 </PF>

@@ -15,7 +15,7 @@ import { assignTest, getTests, resetTestAttempt } from '../../api/services/testS
 import { convertToStudent, remindPayment, remindTest, updateApplicantStatus } from '../../api/services/applicantService.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useLabels } from '../../store/labelStore.js'
-import { formatDate } from '../../lib/formatters.js'
+import { formatDate, withDrPrefix } from '../../lib/formatters.js'
 import { rejectedFromLabel } from '../../lib/rejectedStage.js'
 import RejectModal from './RejectModal.jsx'
 
@@ -107,7 +107,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
     const a = rejectTarget
     if (!a) return
     const prevStatus = a.status
-    const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+    const name = withDrPrefix(a.personal?.full_name || `${a.first_name} ${a.last_name}`)
     setRejecting(true)
     onOptimisticUpdate(a.id, { status: 'rejected', rejection_remark: remark || null }) // move card instantly
     try {
@@ -123,7 +123,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
 
   const remind = async (a) => {
     if (busyId) return // guard against double-fire
-    const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+    const name = withDrPrefix(a.personal?.full_name || `${a.first_name} ${a.last_name}`)
     const optimisticTs = new Date().toISOString()
     setRemindedMap((m) => ({ ...m, [a.id]: optimisticTs })) // optimistic timestamp
     setBusyId(a.id)
@@ -161,7 +161,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
   // Send a registration-fee payment reminder to one shortlisted candidate.
   const remindPay = async (a) => {
     if (busyId) return // guard against double-fire
-    const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+    const name = withDrPrefix(a.personal?.full_name || `${a.first_name} ${a.last_name}`)
     const optimisticTs = new Date().toISOString()
     setPayRemindedMap((m) => ({ ...m, [a.id]: optimisticTs })) // optimistic timestamp
     setBusyId(a.id)
@@ -216,7 +216,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
     const failed = []
     const stamps = {}
     for (const a of toSend) {
-      const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+      const name = withDrPrefix(a.personal?.full_name || `${a.first_name} ${a.last_name}`)
       try {
         const r = await remindPayment(a.id)
         stamps[a.id] = r.data?.last_payment_reminded_at || new Date().toISOString()
@@ -245,7 +245,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
   // the Registration Fee Paid column (and out of the reminder scope). No email.
   const markPaid = async (a) => {
     if (busyId) return
-    const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+    const name = withDrPrefix(a.personal?.full_name || `${a.first_name} ${a.last_name}`)
     const prevStatus = a.status
     onOptimisticUpdate(a.id, { status: 'payment_received' })
     setBusyId(a.id)
@@ -278,7 +278,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
     let done = 0
     const failed = []
     for (const a of targets) {
-      const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+      const name = withDrPrefix(a.personal?.full_name || `${a.first_name} ${a.last_name}`)
       onOptimisticUpdate(a.id, { status: 'payment_received' })
       try { await updateApplicantStatus(a.id, 'payment_received'); done++ }
       catch { failed.push(name); onOptimisticUpdate(a.id, { status: 'shortlisted' }) } // rollback this one
@@ -423,8 +423,8 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
             addToast({
               type: 'success',
               title: r.data?.credentials_emailed
-                ? `${modal.applicant.personal?.full_name} converted — login credentials emailed.`
-                : `${modal.applicant.personal?.full_name} converted to ${labels.student.toLowerCase()}.`,
+                ? `${withDrPrefix(modal.applicant.personal?.full_name)} converted — login credentials emailed.`
+                : `${withDrPrefix(modal.applicant.personal?.full_name)} converted to ${labels.student.toLowerCase()}.`,
             })
             setModal(null)
             onChanged()
@@ -435,7 +435,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
       {/* Reject confirmation (remark) */}
       <RejectModal
         open={Boolean(rejectTarget)}
-        applicantName={rejectTarget?.personal?.full_name || (rejectTarget ? `${rejectTarget.first_name} ${rejectTarget.last_name}` : '')}
+        applicantName={rejectTarget ? withDrPrefix(rejectTarget.personal?.full_name || `${rejectTarget.first_name} ${rejectTarget.last_name}`) : ''}
         busy={rejecting}
         onClose={() => { if (!rejecting) setRejectTarget(null) }}
         onConfirm={confirmReject}
@@ -447,7 +447,7 @@ export default function ApplicantsKanban({ items, courseId, batches, statusCount
 // ─── Compact card ───────────────────────────────────────────────────────────────
 function KanbanCard({ a, col, busy, labels, onOpen, onAct, onRemind, remindedAt, onRemindPay, payRemindedAt, onMarkPaid, selectedPaid, onToggleSelect, onSendTest, onReset, onConvert }) {
   const p = passInfo(a)
-  const name = a.personal?.full_name || `${a.first_name} ${a.last_name}`
+  const name = withDrPrefix(a.personal?.full_name || `${a.first_name} ${a.last_name}`)
 
   return (
     <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-2.5 transition hover:border-[color:var(--accent)] hover:shadow-sm">
@@ -657,7 +657,7 @@ function TestPickerModal({ title, cta, icon: Icon, note, applicant, courseId, on
           <div>
             <h2 className="text-lg font-semibold text-[color:var(--text)]">{title}</h2>
             <p className="mt-0.5 text-xs text-[color:var(--secondary)]">
-              {applicant.personal?.full_name} · {applicant.personal?.email || applicant.email}
+              {withDrPrefix(applicant.personal?.full_name)} · {applicant.personal?.email || applicant.email}
             </p>
           </div>
           <button className="grid h-9 w-9 place-items-center rounded-full bg-[color:var(--surface)]" onClick={onClose}><XCircle size={16} /></button>
@@ -711,7 +711,7 @@ export function ConvertModal({ applicant, batches, labels, sendCredentials = fal
       <div className="w-full max-w-md rounded-xl bg-[color:var(--card)] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-[color:var(--text)]">Convert to {labels.student}</h2>
         <p className="mt-0.5 text-xs text-[color:var(--secondary)]">
-          {applicant.personal?.full_name} will be enrolled and get a {labels.student.toLowerCase()} account.
+          {withDrPrefix(applicant.personal?.full_name)} will be enrolled and get a {labels.student.toLowerCase()} account.
         </p>
         {sendCredentials ? (
           <p className="mt-3 rounded-xl border border-[color:var(--accent)] bg-[color:var(--accent-tint)] px-3 py-2.5 text-xs font-semibold text-[color:var(--accent)]">

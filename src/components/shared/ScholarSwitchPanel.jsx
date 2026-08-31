@@ -13,6 +13,7 @@
 import { Search, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getStudents } from '../../api/services/studentService.js'
+import { scholarName } from '../../lib/formatters.js'
 import { useLabels } from '../../store/labelStore.js'
 import SkeletonCard from './SkeletonCard.jsx'
 import StatusBadge from './StatusBadge.jsx'
@@ -25,7 +26,9 @@ const STATUS_TABS = [
 ]
 
 const fullName = (s) => `${s.first_name || ''} ${s.last_name || ''}`.trim() || '—'
+// Initials stay off the "Dr."-prefixed display name — a "D?" avatar would be confusing.
 const initialsOf = (s) => fullName(s).split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
+const displayName = (s) => scholarName(s) || fullName(s)
 
 export default function ScholarSwitchPanel({ currentUserId, onClose, onSelect }) {
   const labels = useLabels()
@@ -123,7 +126,7 @@ export default function ScholarSwitchPanel({ currentUserId, onClose, onSelect })
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-[color:var(--text)]">
-                      {fullName(s)} {isCurrent && <span className="text-xs font-normal text-[color:var(--accent)]">(current)</span>}
+                      {displayName(s)} {isCurrent && <span className="text-xs font-normal text-[color:var(--accent)]">(current)</span>}
                     </p>
                     <p className="truncate text-xs text-[color:var(--secondary)]">{s.enrollment_number || s.email}{s.batch_name ? ` · ${s.batch_name}` : ''}</p>
                   </div>

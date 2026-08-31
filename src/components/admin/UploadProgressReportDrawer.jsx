@@ -19,6 +19,7 @@ import {
   addSubmissionRemark, createSubmissionOnBehalf, submitForReviewOnBehalf, uploadSubmissionAttachment,
 } from '../../api/services/submissionService.js'
 import { getStudentById, getStudents } from '../../api/services/studentService.js'
+import { scholarName } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 const MAX_BYTES = 25 * 1024 * 1024
@@ -28,7 +29,7 @@ const SLOTS = [
   { slot: 'presentation', label: 'Presentation' },
 ]
 
-const fullName = (s) => `${s?.first_name || ''} ${s?.last_name || ''}`.trim()
+const fullName = (s) => scholarName(s) || `${s?.first_name || ''} ${s?.last_name || ''}`.trim()
 
 export default function UploadProgressReportDrawer({ studentUserId = null, semester, onClose, onUploaded }) {
   const addToast = useUiStore((s) => s.addToast)

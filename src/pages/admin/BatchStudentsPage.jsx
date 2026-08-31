@@ -10,7 +10,7 @@ import PageHeader from '../../components/shared/PageHeader.jsx'
 import Select from '../../components/shared/Select.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
-import { formatDate } from '../../lib/formatters.js'
+import { formatDate, scholarName } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { usePermStore } from '../../store/permStore.js'
 
@@ -60,9 +60,9 @@ export default function BatchStudentsPage() {
 
   // Names come from the students data everyone here can read; never a raw UUID.
   const studentName = (student) => {
-    if (student.first_name || student.last_name) return `${student.first_name || ''} ${student.last_name || ''}`.trim()
+    if (student.first_name || student.last_name) return scholarName(student) || `${student.first_name || ''} ${student.last_name || ''}`.trim()
     const user = userMap[student.user_id]
-    return user ? `${user.first_name} ${user.last_name}` : '—'
+    return user ? (scholarName(user) || `${user.first_name} ${user.last_name}`) : '—'
   }
 
   const save = async () => {

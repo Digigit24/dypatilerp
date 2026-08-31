@@ -12,6 +12,7 @@ import { exportApplicants } from '../../api/services/applicantService.js'
 import { getStudents } from '../../api/services/studentService.js'
 import { listTemplates } from '../../api/services/emailTemplateService.js'
 import { previewSenderEmail, sendTemplatedEmail } from '../../api/services/emailSenderService.js'
+import { scholarName } from '../../lib/formatters.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 // Warn (and require an extra beat) before emailing a batch this large or larger.
@@ -60,7 +61,7 @@ export default function EmailSender() {
       const rows = [
         ...applicants.map((a) => ({
           id: `app_${a.id}`,
-          name: a.personal?.full_name || `${a.first_name || ''} ${a.last_name || ''}`.trim(),
+          name: scholarName(a) || a.personal?.full_name || `${a.first_name || ''} ${a.last_name || ''}`.trim(),
           email: (a.personal?.email || a.email || '').trim(),
           source: 'applicant',
           status: a.status || '',
@@ -68,7 +69,7 @@ export default function EmailSender() {
         })),
         ...students.map((s) => ({
           id: `stu_${s.id}`,
-          name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+          name: scholarName(s) || `${s.first_name || ''} ${s.last_name || ''}`.trim(),
           email: (s.email || '').trim(),
           source: 'scholar',
           status: s.status || '',

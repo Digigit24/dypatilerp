@@ -29,6 +29,7 @@ import TeamAssignmentsPage from './TeamAssignmentsPage.jsx'
 import CoursesPage from './CoursesPage.jsx'
 import { useLabels } from '../../store/labelStore.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { scholarName } from '../../lib/formatters.js'
 
 const TABS = [
   { key: 'org',           label: 'Org Chart',     icon: Network },
@@ -1018,7 +1019,7 @@ function CredentialsTab({ course }) {
       const r = await getStudents({ ...params, limit: 100 })
       return (r.data || []).map((s) => ({
         user_id: s.user_id,
-        name: `${s.first_name} ${s.last_name || ''}`.trim(),
+        name: scholarName(s) || `${s.first_name} ${s.last_name || ''}`.trim(),
         email: s.email,
         sub: s.batch_name || s.batch_code || '',
       }))

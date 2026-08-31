@@ -24,7 +24,7 @@ import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import SubmissionFileLink from '../../components/shared/SubmissionFileLink.jsx'
-import { formatDateTime } from '../../lib/formatters.js'
+import { formatDateTime, scholarName } from '../../lib/formatters.js'
 import { useCourseStore } from '../../store/courseStore.js'
 
 // Assignments have no approval chain — only draft/submitted are meaningful
@@ -270,7 +270,7 @@ export default function SubmissionsPage() {
                     <tr key={g.key} className="cursor-pointer border-b border-[color:var(--border)] last:border-0 hover:bg-[color:var(--surface)]" onClick={() => openPreview(g)}>
                       <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
                         <Link to={`/admin/students/${s.student_user_id}`} className="font-semibold text-[color:var(--text)] hover:text-[color:var(--accent)]">
-                          {s.first_name} {s.last_name}
+                          {scholarName(s) || `${s.first_name} ${s.last_name}`}
                         </Link>
                         <p className="text-xs text-[color:var(--secondary)]">{s.email}</p>
                       </td>
@@ -366,7 +366,7 @@ function ScholarSelect({ scholars, value, onChange }) {
       >
         <User size={15} className="shrink-0 text-[color:var(--accent)]" />
         <span className="min-w-0 flex-1 truncate text-left">
-          {selected ? fullName(selected) : 'All scholars'}
+          {selected ? (scholarName(selected) || fullName(selected)) : 'All scholars'}
         </span>
         {selected ? (
           <span
@@ -415,7 +415,7 @@ function ScholarSelect({ scholars, value, onChange }) {
                   className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm hover:bg-[color:var(--surface)] ${value === s.user_id ? 'bg-[color:var(--accent-tint)]' : ''}`}
                 >
                   <span className="min-w-0">
-                    <span className="block truncate font-semibold text-[color:var(--text)]">{fullName(s)}</span>
+                    <span className="block truncate font-semibold text-[color:var(--text)]">{scholarName(s) || fullName(s)}</span>
                     <span className="block truncate text-xs text-[color:var(--secondary)]">
                       {s.email}{s.batch_name ? ` · ${s.batch_name}` : ''}
                     </span>

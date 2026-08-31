@@ -8,6 +8,7 @@ import StatusBadge from '../../components/shared/StatusBadge.jsx'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { useCourseStore } from '../../store/courseStore.js'
 import { useLabels } from '../../store/labelStore.js'
+import { scholarName } from '../../lib/formatters.js'
 
 const PAGE_SIZE = 100
 
@@ -78,7 +79,9 @@ export default function OfficialLettersPage() {
   }, [items?.length, total]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const nameOf = (s) => `${s.first_name || ''} ${s.last_name || ''}`.trim() || '—'
+  // Initials stay off the "Dr."-prefixed display name — a "D?" avatar would be confusing.
   const initials = (s) => nameOf(s).split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
+  const displayNameOf = (s) => scholarName(s) || nameOf(s)
 
   const q = search.trim().toLowerCase()
   const filtered = (items || []).filter((s) => !q
@@ -138,7 +141,7 @@ export default function OfficialLettersPage() {
                         {initials(s)}
                       </div>
                       <div>
-                        <p className="font-semibold text-[color:var(--text)]">{nameOf(s)}</p>
+                        <p className="font-semibold text-[color:var(--text)]">{displayNameOf(s)}</p>
                         <p className="text-xs text-[color:var(--secondary)]">{s.email}</p>
                       </div>
                     </div>

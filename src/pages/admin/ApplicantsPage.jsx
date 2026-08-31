@@ -19,7 +19,7 @@ import { useCourseStore } from '../../store/courseStore.js'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import SkeletonCard from '../../components/shared/SkeletonCard.jsx'
 import StatusBadge from '../../components/shared/StatusBadge.jsx'
-import { formatDate } from '../../lib/formatters.js'
+import { formatDate, withDrPrefix } from '../../lib/formatters.js'
 import { rejectedFromLabel, REJECTED_FROM_ORDER } from '../../lib/rejectedStage.js'
 import useScrollLock from '../../hooks/useScrollLock.js'
 import { useUiStore } from '../../store/uiStore.js'
@@ -477,7 +477,7 @@ export default function ApplicantsPage() {
       // On the Rejected tab, optionally narrow to a specific from-stage.
       const matchesRejectedFrom = !(status === 'rejected' && rejectedFrom !== 'all')
         || item.rejected_from_status === rejectedFrom
-      const haystack = `${item.personal.full_name} ${item.personal.email} ${item.temp_id}`.toLowerCase()
+      const haystack = `${withDrPrefix(item.personal.full_name)} ${item.personal.email} ${item.temp_id}`.toLowerCase()
       return matchesStatus && matchesRejectedFrom && haystack.includes(query.toLowerCase())
     })
   }, [items, query, status, rejectedFrom])
@@ -516,10 +516,10 @@ export default function ApplicantsPage() {
       }
 
       const labels = {
-        test_pending:     `Test invite sent to ${item.personal.full_name}.`,
-        test_completed:   `${item.personal.full_name} marked as test completed.`,
-        submitted:        `${item.personal.full_name} moved back to submitted.`,
-        payment_received: `${item.personal.full_name} marked as Registration Fee Paid.`,
+        test_pending:     `Test invite sent to ${withDrPrefix(item.personal.full_name)}.`,
+        test_completed:   `${withDrPrefix(item.personal.full_name)} marked as test completed.`,
+        submitted:        `${withDrPrefix(item.personal.full_name)} moved back to submitted.`,
+        payment_received: `${withDrPrefix(item.personal.full_name)} marked as Registration Fee Paid.`,
       }
       addToast({
         type:  'success',
@@ -538,7 +538,7 @@ export default function ApplicantsPage() {
       const ts = r.data?.last_payment_reminded_at || new Date().toISOString()
       setItems((xs) => xs?.map((x) => (x.id === item.id ? { ...x, last_payment_reminded_at: ts } : x)) ?? xs)
       setSelected((s) => (s && s.id === item.id ? { ...s, last_payment_reminded_at: ts } : s))
-      addToast({ type: 'success', title: `Payment reminder emailed to ${item.personal.full_name}.` })
+      addToast({ type: 'success', title: `Payment reminder emailed to ${withDrPrefix(item.personal.full_name)}.` })
     } catch (err) {
       addToast({ type: 'error', title: 'Payment reminder failed', message: err.response?.data?.message })
     } finally {
@@ -567,7 +567,7 @@ export default function ApplicantsPage() {
       setItems((xs) => xs?.map((x) => (x.id === item.id ? res.data : x)) ?? xs)
       setSelected((s) => (s && s.id === item.id ? res.data : s))
       refreshStats()
-      addToast({ type: 'warning', title: `${item.personal.full_name}'s application rejected.` })
+      addToast({ type: 'warning', title: `${withDrPrefix(item.personal.full_name)}'s application rejected.` })
       setRejectTarget(null)
     } catch (err) {
       // Roll the UI back to the previous status.
@@ -858,7 +858,7 @@ export default function ApplicantsPage() {
                         {a.personal.full_name.split(' ').map((p) => p[0]).join('').slice(0, 2)}
                       </div>
                       <div>
-                        <p className="font-semibold text-[color:var(--text)]">{a.personal.full_name}</p>
+                        <p className="font-semibold text-[color:var(--text)]">{withDrPrefix(a.personal.full_name)}</p>
                         <p className="text-xs text-[color:var(--secondary)]">{a.temp_id} · {a.personal.email}</p>
                       </div>
                     </div>
@@ -923,7 +923,7 @@ export default function ApplicantsPage() {
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--muted)]">
                   {editing ? 'Edit Profile' : 'Applicant Profile'}
                 </p>
-                <h2 className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{selected.personal.full_name}</h2>
+                <h2 className="mt-2 text-2xl font-semibold text-[color:var(--text)]">{withDrPrefix(selected.personal.full_name)}</h2>
                 <p className="mt-1 text-sm text-[color:var(--secondary)]"><StatusBadge status={selected.status} /></p>
                 {/* Stage strip — where this applicant sits in the pipeline */}
                 {selected.status !== 'rejected' && (
@@ -1168,7 +1168,7 @@ export default function ApplicantsPage() {
       {/* ── Reject confirmation (remark) ── */}
       <RejectModal
         open={Boolean(rejectTarget)}
-        applicantName={rejectTarget?.personal?.full_name || ''}
+        applicantName={rejectTarget ? withDrPrefix(rejectTarget.personal?.full_name) : ''}
         busy={rejecting}
         onClose={() => { if (!rejecting) setRejectTarget(null) }}
         onConfirm={confirmReject}
@@ -1190,8 +1190,8 @@ export default function ApplicantsPage() {
             addToast({
               type: 'success',
               title: r.data?.credentials_emailed
-                ? `${convertTarget.personal.full_name} converted — login credentials emailed.`
-                : `${convertTarget.personal.full_name} converted to ${labels.student.toLowerCase()}.`,
+                ? `${withDrPrefix(convertTarget.personal.full_name)} converted — login credentials emailed.`
+                : `${withDrPrefix(convertTarget.personal.full_name)} converted to ${labels.student.toLowerCase()}.`,
             })
             setConvertTarget(null)
           }}
