@@ -29,6 +29,9 @@ export const EXPORT_COLUMNS = [
   { key: 'postal_address',       label: 'Postal Address' },
   { key: 'blood_group',          label: 'Blood Group' },
   { key: 'title',                label: 'Research Title' },
+  { key: 'current_designation',              label: 'Current Designation' },
+  { key: 'current_organisation',             label: 'Current Institute/Organisation Name' },
+  { key: 'current_organisation_address',     label: 'Current Organisation Address' },
   { key: 'onboarding_completed', label: 'Onboarding Completed' },
 ];
 const EXPORT_COLUMN_KEYS = new Set(EXPORT_COLUMNS.map((c) => c.key));
@@ -48,6 +51,7 @@ export const fetchExportRows = async (where, params) => {
             c.name AS course_name,
             spd.father_name, spd.mother_name, spd.date_of_birth, spd.postal_address,
             spd.blood_group, spd.title,
+            spd.current_designation, spd.current_organisation, spd.current_organisation_address,
             (spd.onboarding_completed_at IS NOT NULL) AS onboarding_completed
      FROM batch_enrollments be
      JOIN users u ON u.id = be.user_id
