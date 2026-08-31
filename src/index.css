@@ -184,6 +184,7 @@ table { border-collapse: collapse; }
 }
 
 .input:focus,
+.input:focus-within,
 .textarea:focus {
   border-color: color-mix(in srgb, var(--accent) 50%, transparent);
   box-shadow: 0 0 0 3px var(--accent-tint);
