@@ -6,7 +6,14 @@ import { checkSlots, ensureCycle } from '../progress-reports/cycles.service.js';
 
 export const listSubmissions = async ({ batch_id, assignment_id, student_user_id, status, submission_type, search, allowed_batch_ids, limit, offset }) => {
   const params = [];
-  const conditions = [];
+  // Legacy pre-V2 scholars had their report + slides filed as separate
+  // submissions, sometimes duplicated; merge-progress-reports.js consolidates
+  // them but never deletes the source rows — it only flags them with
+  // merged_into_id so their approvals/audit history stays queryable directly.
+  // Every other reader of `submissions` for current-state views (cycles,
+  // targets) already excludes those source rows; this list endpoint hadn't,
+  // so merged-away duplicates kept showing up here as if still live.
+  const conditions = [`s.merged_into_id IS NULL`];
   if (batch_id) { params.push(batch_id); conditions.push(`s.batch_id=$${params.length}`); }
   if (allowed_batch_ids) {
     params.push(allowed_batch_ids);
