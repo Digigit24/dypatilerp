@@ -153,6 +153,15 @@ export const createCourseFolder = async (courseCode) => {
 };
 
 /**
+ * Upload an in-memory buffer directly to Zata — for server-generated content
+ * (e.g. a rendered PDF) that never touches local disk.
+ */
+export const uploadBuffer = async (objectKey, buffer, contentType = 'application/octet-stream') => {
+  const command = new PutObjectCommand({ Bucket: BUCKET, Key: objectKey, Body: buffer, ContentType: contentType, ContentLength: buffer.length });
+  return client().send(command);
+};
+
+/**
  * Upload a file from local disk path directly to Zata (server-side).
  * Used by the proxy upload endpoint so the browser never talks to Zata directly.
  * @param {string} objectKey   - Destination key in the bucket

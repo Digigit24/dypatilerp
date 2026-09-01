@@ -4,9 +4,10 @@ import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ok, notFound } from '../../utils/response.js';
 import { ensureCycle } from '../progress-reports/cycles.service.js';
 import { authenticate } from '../../middleware/auth.js';
-import { requirePermission } from '../../middleware/rbac.js';
+import { requirePermission, requireRole } from '../../middleware/rbac.js';
 import { validate } from '../../middleware/validate.js';
 import * as ctrl from './batches.controller.js';
+import * as letterCtrl from '../students/admission-letters.controller.js';
 import { createBatchSchema, updateBatchSchema } from './batches.schema.js';
 
 const router = Router();
@@ -217,5 +218,23 @@ router.post('/:id/advance-semester', requirePermission('batches', 'update'), asy
     warnings: warnings.filter((w) => w.open_targets > 0 || w.unpaid_fees > 0),
   }, `Advanced ${advanced.length} scholar(s).`);
 }));
+
+// ─── Admission Letters (batch-scoped) ──────────────────────────────────────────
+// Generated letters are saved via the exact same official-letter slot/folder
+// mechanism as a manual upload (see admission-letter.service.js), so preview
+// and download reuse the EXISTING GET /students/:userId/official-letters/
+// admission_confirmation/file endpoint — no new preview route needed here.
+// Gated with requireRole to match that existing upload endpoint's gate
+// exactly, rather than the batches:* permission module.
+router.get('/:id/admission-letters', requirePermission('students', 'read'), letterCtrl.getRoster);
+router.post('/:id/admission-letters/generate-all', requireRole('admin', 'coordinator'), letterCtrl.generateAll);
+router.get('/:id/admission-letters/generate-all/status', requirePermission('students', 'read'), letterCtrl.getGenerateAllStatus);
+router.post('/:id/admission-letters/email-all', requireRole('admin', 'coordinator'), letterCtrl.emailAll);
+router.get('/:id/admission-letters/email-all/status', requirePermission('students', 'read'), letterCtrl.getEmailAllStatus);
+router.post('/:id/admission-letters/scholars/:userId/generate', requireRole('admin', 'coordinator'), letterCtrl.generateOne);
+router.post('/:id/admission-letters/scholars/:userId/send-email', requireRole('admin', 'coordinator'), letterCtrl.emailOne);
+router.post('/:id/admission-letters/publish-all', requireRole('admin', 'coordinator'), letterCtrl.publishAll);
+router.post('/:id/admission-letters/publish', requireRole('admin', 'coordinator'), letterCtrl.publishSelected);
+router.post('/:id/admission-letters/delete-drafts', requireRole('admin', 'coordinator'), letterCtrl.deleteAllDrafts);
 
 export default router;

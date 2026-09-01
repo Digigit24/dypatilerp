@@ -45,7 +45,7 @@ const getTransporter = () => {
  * @returns {Promise<{success:boolean, messageId?:string, error?:string}>}
  */
 // ─── Brevo HTTP API sender (port 443 — immune to SMTP interception/blocks) ───
-const sendViaBrevoApi = async ({ apiKey, sender, recipients, cc, subject, html, text }) => {
+const sendViaBrevoApi = async ({ apiKey, sender, recipients, cc, subject, html, text, attachments }) => {
   try {
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
@@ -57,6 +57,9 @@ const sendViaBrevoApi = async ({ apiKey, sender, recipients, cc, subject, html, 
         subject,
         htmlContent: html,
         ...(text && { textContent: text }),
+        ...(attachments?.length && {
+          attachment: attachments.map((a) => ({ name: a.filename, content: a.content.toString('base64') })),
+        }),
       }),
     });
     const body = await res.json().catch(() => ({}));
@@ -86,7 +89,7 @@ const logEmailAttempt = async ({ to, cc, subject, kind, status, via, messageId, 
   }
 };
 
-export const sendEmail = async ({ to, cc, subject, html, text, sender, apiKey, kind } = {}) => {
+export const sendEmail = async ({ to, cc, subject, html, text, sender, apiKey, kind, attachments } = {}) => {
   // Saved settings (app_settings.brevo in the database) are the source of truth.
   // Resolution order: explicit param → database → .env (legacy fallback).
   const db = await getBrevoConfig();
@@ -112,7 +115,7 @@ export const sendEmail = async ({ to, cc, subject, html, text, sender, apiKey, k
     const apiRecipients = list.map(toAddr);
     const apiCc = ccList.map(toAddr);
     const result = await sendViaBrevoApi({
-      apiKey: key, sender: effectiveSender, recipients: apiRecipients, cc: apiCc, subject, html, text,
+      apiKey: key, sender: effectiveSender, recipients: apiRecipients, cc: apiCc, subject, html, text, attachments,
     });
     if (result.success) {
       console.log('[email] Sent via Brevo API →', result.messageId, '→', apiRecipients.map((r) => r.email));
@@ -150,6 +153,7 @@ export const sendEmail = async ({ to, cc, subject, html, text, sender, apiKey, k
       subject,
       html,
       ...(text && { text }),
+      ...(attachments?.length && { attachments: attachments.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType })) }),
     });
     console.log('[email] Sent →', info.messageId, '→', recipients, ...(ccRecipients.length ? ['cc:', ccRecipients] : []));
     await logEmailAttempt({ to: toLog, cc: ccLog, subject, kind, status: 'sent', via: 'smtp', messageId: info.messageId });

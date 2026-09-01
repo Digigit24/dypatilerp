@@ -97,12 +97,13 @@ export const upsertOwnerSlotVideo = async (payload, uploadedBy) => {
   const { rows } = await query(
     `INSERT INTO videos (course_id, folder_id, batch_id, title, description, object_key, file_size, mime_type, media_type, uploaded_by, is_published, visibility, upload_status, owner_user_id, slot, verified_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'document',$9,false,'private','ready',$10,$11,NOW())
-     ON CONFLICT (owner_user_id, slot) WHERE owner_user_id IS NOT NULL AND slot IS NOT NULL
+     ON CONFLICT (owner_user_id, slot) WHERE owner_user_id IS NOT NULL AND slot IS NOT NULL AND slot <> 'admission_confirmation'
      DO UPDATE SET
        title=EXCLUDED.title, description=EXCLUDED.description, object_key=EXCLUDED.object_key,
        file_size=EXCLUDED.file_size, mime_type=EXCLUDED.mime_type, uploaded_by=EXCLUDED.uploaded_by,
        course_id=EXCLUDED.course_id, folder_id=EXCLUDED.folder_id, batch_id=EXCLUDED.batch_id,
-       upload_status='ready', verified_at=NOW(), updated_at=NOW()
+       upload_status='ready', verified_at=NOW(), updated_at=NOW(),
+       is_published=false, published_at=NULL
      RETURNING *`,
     [
       payload.course_id || null, payload.folder_id || null, payload.batch_id || null,
@@ -184,22 +185,32 @@ export const getOrCreateSubmissionFolder = async (courseId, batchCode, semester,
  * admin-issued, per-scholar document) show up in the Media Manager's normal
  * folder tree instead of being invisible owner-slot rows.
  */
-export const getOrCreateStudentDocFolder = async (courseId, batchCode, studentLabel, createdBy) => {
+// `cache` is an optional Map shared across a whole batch run (bulk admission-
+// letter generation, say) — the first two path segments (batch code,
+// "Students") are IDENTICAL for every scholar in that batch, so without it a
+// 46-scholar run redoes the same two lookups 46 times over for no reason.
+export const getOrCreateStudentDocFolder = async (courseId, batchCode, studentLabel, createdBy, cache = null) => {
   const path = [batchCode || 'Unassigned batch', 'Students', studentLabel || 'Unnamed scholar'];
   let parentId = null;
   for (const name of path) {
+    const cacheKey = `${courseId}|${parentId}|${name}`;
+    if (cache?.has(cacheKey)) { parentId = cache.get(cacheKey); continue; }
     const { rows: [found] } = await query(
       `SELECT id FROM media_folders WHERE course_id=$1 AND name=$2
          AND parent_id IS NOT DISTINCT FROM $3 LIMIT 1`,
       [courseId, name, parentId]
     );
-    if (found) { parentId = found.id; continue; }
-    const { rows: [made] } = await query(
-      `INSERT INTO media_folders (course_id, parent_id, name, created_by, is_system, kind)
-       VALUES ($1,$2,$3,$4,TRUE,'student_documents') RETURNING id`,
-      [courseId, parentId, name, createdBy]
-    );
-    parentId = made.id;
+    if (found) {
+      parentId = found.id;
+    } else {
+      const { rows: [made] } = await query(
+        `INSERT INTO media_folders (course_id, parent_id, name, created_by, is_system, kind)
+         VALUES ($1,$2,$3,$4,TRUE,'student_documents') RETURNING id`,
+        [courseId, parentId, name, createdBy]
+      );
+      parentId = made.id;
+    }
+    cache?.set(cacheKey, parentId);
   }
   return parentId;
 };

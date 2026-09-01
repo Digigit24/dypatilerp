@@ -49,7 +49,7 @@ export const createBatch = async (payload, createdBy) => {
 export const updateBatch = async (id, payload) => {
   const fields = [];
   const params = [];
-  const allowed = ['name','code','status','start_date','end_date','max_students','description'];
+  const allowed = ['name','code','status','start_date','end_date','max_students','description','letter_ref_prefix'];
   for (const key of allowed) {
     if (payload[key] !== undefined) { params.push(payload[key]); fields.push(`${key}=$${params.length}`); }
   }

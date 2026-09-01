@@ -844,6 +844,60 @@ const run = async () => {
     `);
     console.log('✓  student_profile_details current-employment columns added (or already exist)');
 
+    // 39. Admission letters — batch-level Ref No. prefix (admin types it once
+    //     per batch, e.g. "POSTDOC26/J07") and a per-scholar serial number
+    //     that's assigned the first time that scholar's letter is generated
+    //     and never changes again afterwards, even on regenerate. The unique
+    //     index is a safety net against a race assigning the same serial
+    //     twice within one batch — it does not enforce serials being gapless.
+    //     Letterhead assets (logos/signature/stamp/director name) live in
+    //     app_settings under key 'admission_letterhead' — no schema needed,
+    //     same generic mechanism 'branding' already uses.
+    await client.query(`
+      ALTER TABLE batches
+        ADD COLUMN IF NOT EXISTS letter_ref_prefix TEXT
+    `);
+    await client.query(`
+      ALTER TABLE batch_enrollments
+        ADD COLUMN IF NOT EXISTS admission_letter_serial INTEGER
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_batch_enrollments_letter_serial
+        ON batch_enrollments (batch_id, admission_letter_serial)
+        WHERE admission_letter_serial IS NOT NULL
+    `);
+    console.log('✓  admission letters: batches.letter_ref_prefix + batch_enrollments.admission_letter_serial added');
+
+    // 40. Draft/publish for generated admission letters — reuses the existing
+    //     videos.is_published column (already false-by-default for every
+    //     official letter; never actually gated scholar visibility before
+    //     now — see student-profile.service.js#listOfficialLetters for the
+    //     new admission_confirmation-only gate). published_at is new, purely
+    //     for the "Published on <date>" UI badge.
+    await client.query(`
+      ALTER TABLE videos
+        ADD COLUMN IF NOT EXISTS published_at TIMESTAMP
+    `);
+    console.log('✓  videos.published_at column added (or already exists)');
+
+    // 41. Version history for admission letters. Every other owner+slot
+    //     document (onboarding docs, guide_approval, title_approval) keeps
+    //     the "one current file, re-upload replaces it" rule enforced by
+    //     uq_videos_owner_slot — that is UNCHANGED for all of them. Only
+    //     admission_confirmation now allows multiple rows per scholar: each
+    //     Generate/Regenerate INSERTs a new row instead of overwriting, so a
+    //     published letter is never silently replaced — it stays as a
+    //     permanent version, and only unpublished drafts can be deleted (see
+    //     admission-letter.service.js#deleteDraftVersion/deleteAllDraftsInBatch).
+    //     This is an index change only — no data is touched or removed.
+    await client.query(`DROP INDEX IF EXISTS uq_videos_owner_slot`);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_videos_owner_slot
+        ON videos (owner_user_id, slot)
+        WHERE owner_user_id IS NOT NULL AND slot IS NOT NULL AND slot <> 'admission_confirmation'
+    `);
+    console.log('✓  uq_videos_owner_slot relaxed — admission_confirmation now allows version history');
+
     console.log('Migrations complete.');
   } catch (err) {
     console.error('Migration error:', err.message);

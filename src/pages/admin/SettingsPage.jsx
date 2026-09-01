@@ -1,11 +1,13 @@
 import {
-  Check, CheckCircle2, Eye, EyeOff, ImageIcon, Loader2, Mail, Moon,
+  Check, CheckCircle2, Eye, EyeOff, FileText, ImageIcon, Loader2, Mail, Moon,
   Palette, RotateCcw, Save, Send, Sun, Trash2, Upload,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../components/shared/PageHeader.jsx'
 import { deriveThemeTokens } from '../../api/services/themeService.js'
-import { getEffectiveEmailConfig, getSettings, saveSettings, sendTestEmail } from '../../api/services/settingsService.js'
+import {
+  getEffectiveEmailConfig, getSettings, previewAdmissionLetterhead, saveSettings, sendTestEmail,
+} from '../../api/services/settingsService.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useBrandingStore } from '../../store/brandingStore.js'
 
@@ -157,6 +159,36 @@ export default function SettingsPage() {
     } catch (err) {
       addToast({ type: 'error', title: 'Failed to save logo', message: err.response?.data?.message })
     } finally { setBrandingSaving(false) }
+  }
+
+  // ── Admission Letterhead (logos, signature, stamp, director name) ────────
+  const [letterhead, setLetterhead] = useState({
+    logo1: '', logo2: '', logo3: '', signature: '', stamp: '', directorName: '',
+  })
+  const [letterheadSaving, setLetterheadSaving] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
+
+  useEffect(() => {
+    getSettings('admission_letterhead')
+      .then((r) => setLetterhead((v) => ({ ...v, ...(r.data || {}) })))
+      .catch(() => {})
+  }, [])
+
+  const saveLetterhead = async () => {
+    setLetterheadSaving(true)
+    try {
+      await saveSettings('admission_letterhead', letterhead)
+      addToast({ type: 'success', title: 'Admission letterhead saved.' })
+    } catch (err) {
+      addToast({ type: 'error', title: 'Failed to save letterhead', message: err.response?.data?.message })
+    } finally { setLetterheadSaving(false) }
+  }
+
+  const previewLetterhead = async () => {
+    setPreviewLoading(true)
+    try { await previewAdmissionLetterhead() }
+    catch (err) { addToast({ type: 'error', title: 'Preview failed', message: err.response?.data?.message }) }
+    finally { setPreviewLoading(false) }
   }
 
   // ── Brevo config ─────────────────────────────────────────────────────────
@@ -369,6 +401,49 @@ export default function SettingsPage() {
             <button className="btn-primary inline-flex items-center gap-2" onClick={saveBranding} disabled={brandingSaving}>
               {brandingSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
               {brandingSaving ? 'Saving…' : 'Save Logo'}
+            </button>
+          </div>
+        </Section>
+
+        {/* ── Admission Letterhead ── */}
+        <Section
+          title="Admission Letterhead"
+          subtitle="Logos, signature, stamp, and Director name used on every generated Admission Confirmation Letter. Layout and wording are fixed — only these assets are configurable."
+          icon={FileText}
+        >
+          <div className="grid gap-4 sm:grid-cols-3">
+            <LogoSlot label="Logo 1" hint="Left logo in the header row" value={letterhead.logo1} onChange={(v) => setLetterhead((l) => ({ ...l, logo1: v }))} previewBg="bg-white" />
+            <LogoSlot label="Logo 2" hint="Center logo in the header row" value={letterhead.logo2} onChange={(v) => setLetterhead((l) => ({ ...l, logo2: v }))} previewBg="bg-white" />
+            <LogoSlot label="Logo 3" hint="Right logo in the header row" value={letterhead.logo3} onChange={(v) => setLetterhead((l) => ({ ...l, logo3: v }))} previewBg="bg-white" />
+            <LogoSlot label="Signature" hint="Director's signature image" value={letterhead.signature} onChange={(v) => setLetterhead((l) => ({ ...l, signature: v }))} previewBg="bg-white" />
+            <LogoSlot label="Stamp" hint="Official round stamp" value={letterhead.stamp} onChange={(v) => setLetterhead((l) => ({ ...l, stamp: v }))} previewBg="bg-white" />
+            <label className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+              <span className="text-sm font-semibold text-[color:var(--text)]">Director Name</span>
+              <p className="text-xs text-[color:var(--secondary)]">Printed under the signature</p>
+              <input
+                className="input mt-3 w-full"
+                value={letterhead.directorName}
+                onChange={(e) => setLetterhead((l) => ({ ...l, directorName: e.target.value }))}
+                placeholder="Dr. J. G. Patil"
+              />
+            </label>
+          </div>
+          <p className="mt-3 text-xs text-[color:var(--muted)]">
+            PNG with transparent background works best. Images are auto-compressed to max 800px wide.
+            A blank slot renders as a dashed placeholder box on the letter until uploaded.
+          </p>
+          <div className="mt-4 flex flex-wrap justify-end gap-3">
+            <button
+              className="inline-flex items-center gap-2 rounded-md border border-[color:var(--border)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] disabled:opacity-60"
+              onClick={previewLetterhead}
+              disabled={previewLoading}
+            >
+              {previewLoading ? <Loader2 size={15} className="animate-spin" /> : <Eye size={15} />}
+              {previewLoading ? 'Rendering…' : 'Preview Letterhead'}
+            </button>
+            <button className="btn-primary inline-flex items-center gap-2" onClick={saveLetterhead} disabled={letterheadSaving}>
+              {letterheadSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+              {letterheadSaving ? 'Saving…' : 'Save Letterhead'}
             </button>
           </div>
         </Section>
