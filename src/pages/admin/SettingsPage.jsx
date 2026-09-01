@@ -180,14 +180,14 @@ export default function SettingsPage() {
       await saveSettings('admission_letterhead', letterhead)
       addToast({ type: 'success', title: 'Admission letterhead saved.' })
     } catch (err) {
-      addToast({ type: 'error', title: 'Failed to save letterhead', message: err.response?.data?.message })
+      addToast({ type: 'error', title: 'Failed to save letterhead', message: err.response?.data?.message || err.message || 'Something went wrong — please try again.' })
     } finally { setLetterheadSaving(false) }
   }
 
   const previewLetterhead = async () => {
     setPreviewLoading(true)
     try { await previewAdmissionLetterhead() }
-    catch (err) { addToast({ type: 'error', title: 'Preview failed', message: err.response?.data?.message }) }
+    catch (err) { addToast({ type: 'error', title: 'Preview failed', message: err.response?.data?.message || err.message || 'Something went wrong — please try again.' }) }
     finally { setPreviewLoading(false) }
   }
 
