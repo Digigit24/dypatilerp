@@ -35,6 +35,15 @@ export const sendTestEmail = async ({ to, apiKey, senderName, senderEmail }) => 
   return { data: res.data }
 }
 
+/** Opens a live-generated preview of the admission-letter template with placeholder scholar text, using the currently saved letterhead assets. */
+export const previewAdmissionLetterhead = async () => {
+  if (USE_MOCK) return
+  const response = await http.get('/settings/admission-letterhead/preview', { responseType: 'blob' })
+  const blobUrl = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+  window.open(blobUrl, '_blank', 'noopener')
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
+}
+
 /** Get the effective email config the server will actually use (env + DB merged) */
 export const getEffectiveEmailConfig = async () => {
   if (USE_MOCK) return { data: { mode: 'mock', smtp: { configured: false }, sender: {}, settings: {}, env_defaults: {} } }

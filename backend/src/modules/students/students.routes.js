@@ -522,6 +522,11 @@ router.post('/:userId/official-letters/:slot', requireRole('admin', 'coordinator
  */
 router.get('/:userId/official-letters/:slot/file', requirePermission('students', 'read'), profileCtrl.streamOfficialLetter);
 
+// ─── Admission letter version history (draft/publish, see admission-letter.service.js) ──
+router.get('/:userId/admission-letter/history', requireRole('admin', 'coordinator'), profileCtrl.getAdmissionLetterHistory);
+router.get('/:userId/admission-letter/versions/:mediaId/file', requireRole('admin', 'coordinator'), profileCtrl.streamAdmissionLetterVersion);
+router.delete('/:userId/admission-letter/versions/:mediaId', requireRole('admin', 'coordinator'), profileCtrl.deleteAdmissionLetterVersion);
+
 /**
  * @swagger
  * /students/{userId}/onboarding-status:

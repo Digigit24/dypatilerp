@@ -4,6 +4,8 @@
  * Stores arbitrary key → JSONB pairs in `app_settings` table.
  * The primary keys used are:
  *   - 'brevo'   → { apiKey, senderName, senderEmail, enabled }
+ *   - 'branding' → { logoLight, logoDark }
+ *   - 'admission_letterhead' → { logo1, logo2, logo3, signature, stamp, directorName }
  *
  * Routes:
  *   GET  /settings          → list all settings (admin only)
@@ -22,6 +24,8 @@ import { sendEmail, bustBrevoCache } from '../email/email.service.js';
 import { env } from '../../config/env.js';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate.js';
+import { getLetterheadAssets } from '../students/admission-letter.service.js';
+import { renderAdmissionLetterPdf } from '../students/admission-letter.template.js';
 
 const router = Router();
 router.use(authenticate);
@@ -51,6 +55,30 @@ router.get('/ui-labels', asyncHandler(async (req, res) => {
 router.get('/branding', asyncHandler(async (req, res) => {
   const { rows: [row] } = await query(`SELECT value FROM app_settings WHERE key='branding'`);
   ok(res, { logoLight: '', logoDark: '', ...(row?.value || {}) });
+}));
+
+// ─── GET /settings/admission-letterhead/preview ───────────────────────────────
+// Renders the admission-letter template with placeholder scholar text but the
+// CURRENT letterhead assets/director name — so an admin can check the
+// letterhead looks right before it's ever attached to a real scholar. Nothing
+// is saved; the PDF is generated fresh on every call.
+// Deliberately admin+coordinator (unlike the rest of this file, which is
+// admin-only) — the Official Letters page surfaces this same preview button
+// to coordinators, who can generate/publish/email/delete letters there.
+router.get('/admission-letterhead/preview', requireRole('admin', 'coordinator'), asyncHandler(async (req, res) => {
+  const assets = await getLetterheadAssets();
+  const pdfBuffer = await renderAdmissionLetterPdf({
+    scholarName: 'Dr. [Scholar Name]',
+    designation: '[Designation]',
+    organisation: '[Organisation Name]',
+    organisationAddress: '[Organisation Address]',
+    refNo: '[REF-PREFIX]/00',
+    dateLabel: new Date().toLocaleDateString('en-GB'),
+    commencingLabel: '[Month Year]',
+  }, assets);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'inline; filename="letterhead-preview.pdf"');
+  res.send(pdfBuffer);
 }));
 
 // ─── GET /settings/email/effective ────────────────────────────────────────────
@@ -120,6 +148,24 @@ router.put('/:key', requireRole('admin'), asyncHandler(async (req, res) => {
       if (v.length > 700 * 1024) {
         return res.status(400).json({ success: false, message: `${k} is too large — keep logos under 500KB` });
       }
+    }
+  }
+
+  // Admission letterhead: 5 image slots (same inline data-URL convention as
+  // branding) + a plain-text director name.
+  if (key === 'admission_letterhead') {
+    for (const k of ['logo1', 'logo2', 'logo3', 'signature', 'stamp']) {
+      const v = value[k];
+      if (v === undefined || v === '' || v === null) continue;
+      if (typeof v !== 'string' || !v.startsWith('data:image/')) {
+        return res.status(400).json({ success: false, message: `${k} must be an uploaded image` });
+      }
+      if (v.length > 700 * 1024) {
+        return res.status(400).json({ success: false, message: `${k} is too large — keep it under 500KB` });
+      }
+    }
+    if (value.directorName !== undefined && typeof value.directorName !== 'string') {
+      return res.status(400).json({ success: false, message: 'directorName must be text' });
     }
   }
 

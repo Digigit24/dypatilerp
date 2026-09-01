@@ -179,3 +179,26 @@ export const downloadOfficialLetter = async (userId, slot, filename) => {
   a.click()
   URL.revokeObjectURL(url)
 }
+
+// ─── Admission letter version history ────────────────────────────────────────
+// Every generate/regenerate keeps the old version instead of overwriting it —
+// only unpublished drafts can be deleted, published ones are permanent.
+
+export const getAdmissionLetterHistory = async (userId) => {
+  const { data: res } = await http.get(`/students/${userId}/admission-letter/history`)
+  return ok(res.data)
+}
+
+/** Preview one specific historical version by id (unlike previewOfficialLetter, which always shows "the current one"). */
+export const previewAdmissionLetterVersion = async (userId, mediaId) => {
+  const response = await http.get(`/students/${userId}/admission-letter/versions/${mediaId}/file`, { responseType: 'blob' })
+  const blobUrl = URL.createObjectURL(response.data)
+  window.open(blobUrl, '_blank', 'noopener')
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000)
+}
+
+/** Deletes one draft version. Refuses (via a 400 from the backend) if that version is already published. */
+export const deleteAdmissionLetterVersion = async (userId, mediaId) => {
+  const { data: res } = await http.delete(`/students/${userId}/admission-letter/versions/${mediaId}`)
+  return ok(res.data, { message: res.message })
+}

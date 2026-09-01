@@ -9,6 +9,7 @@ export const createBatchSchema = z.object({
   end_date: z.preprocess((v) => (v === '' || v == null ? undefined : v), z.string().date().optional()),
   max_students: z.number().int().min(1).default(30),
   description: z.string().optional(),
+  letter_ref_prefix: z.string().optional(),
 });
 
 export const updateBatchSchema = createBatchSchema.partial().omit({ course_id: true });

@@ -144,15 +144,43 @@ export const listDocuments = async (userId) => {
   });
 };
 
-export const listOfficialLetters = async (userId) => {
+// Only 'admission_confirmation' has a draft/publish workflow (see
+// admission-letter.service.js#publishOne/publishMany) — guide_approval and
+// title_approval have no such concept and must stay visible to the scholar
+// exactly as they always have, the moment staff uploads them.
+export const PUBLISH_GATED_SLOTS = ['admission_confirmation'];
+
+/**
+ * @param {string} userId
+ * @param {boolean} [hideUnpublished] - true when the CALLER is the scholar
+ *   viewing their own record (own-scope) — an unpublished (draft) admission
+ *   letter is reported as `present:false` so it doesn't appear at all.
+ *   Staff (broader scope) always pass false and see drafts.
+ */
+export const listOfficialLetters = async (userId, hideUnpublished = false) => {
+  // admission_confirmation now allows version history (alter.js block 41),
+  // so more than one row per slot is possible — ordered newest-first so the
+  // first one seen per slot below is always "current".
   const { rows } = await query(
-    `SELECT id, slot, title, mime_type, file_size, created_at AS uploaded_at, verified_at
-     FROM videos WHERE owner_user_id=$1 AND slot = ANY($2::text[])`,
+    `SELECT id, slot, title, mime_type, file_size, created_at AS uploaded_at, verified_at, is_published, published_at
+     FROM videos WHERE owner_user_id=$1 AND slot = ANY($2::text[])
+     ORDER BY created_at DESC`,
     [userId, OFFICIAL_LETTER_SLOTS]
   );
-  const bySlot = new Map(rows.map((r) => [r.slot, r]));
+  const bySlot = new Map();
+  for (const r of rows) if (!bySlot.has(r.slot)) bySlot.set(r.slot, r);
+
+  // The scholar's own view of a publish-gated slot must resolve to the
+  // latest PUBLISHED row specifically — a newer unpublished draft sitting on
+  // top of it must never surface, not even as "not present yet".
+  const latestPublished = hideUnpublished
+    ? rows.find((r) => PUBLISH_GATED_SLOTS.includes(r.slot) && r.is_published) || null
+    : null;
+
   return OFFICIAL_LETTER_SLOTS.map((slot) => {
-    const row = bySlot.get(slot);
+    const gated = PUBLISH_GATED_SLOTS.includes(slot);
+    const latest = bySlot.get(slot);
+    const row = (gated && hideUnpublished) ? (latestPublished?.slot === slot ? latestPublished : null) : latest;
     return {
       slot,
       label: OFFICIAL_LETTER_LABELS[slot],
@@ -163,6 +191,7 @@ export const listOfficialLetters = async (userId) => {
       file_size: row?.file_size ?? null,
       uploaded_at: row?.uploaded_at ?? null,
       verified: !!row?.verified_at,
+      ...(gated && { published: !!latest?.is_published, published_at: latest?.published_at ?? null }),
     };
   });
 };

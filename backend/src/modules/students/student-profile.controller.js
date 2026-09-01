@@ -1,6 +1,7 @@
 import * as svc from './student-profile.service.js';
 import * as videoSvc from '../videos/videos.service.js';
 import * as s3 from '../../services/s3.js';
+import * as letterSvc from './admission-letter.service.js';
 import { ok, notFound, badRequest } from '../../utils/response.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { isOwnScope } from '../../middleware/rbac.js';
@@ -246,7 +247,7 @@ export const streamDocument = asyncHandler(async (req, res) => {
 
 export const listOfficialLetters = asyncHandler(async (req, res) => {
   if (!assertOwnerOrBroaderScope(req, res)) return;
-  ok(res, await svc.listOfficialLetters(req.params.userId));
+  ok(res, await svc.listOfficialLetters(req.params.userId, isOwnScope(req)));
 });
 
 const LETTER_MAX_BYTES = 15 * 1024 * 1024; // same ceiling as onboarding documents — scans/PDFs, not bundles
@@ -375,8 +376,15 @@ export const streamOfficialLetter = asyncHandler(async (req, res) => {
   const { userId, slot } = req.params;
   if (!svc.OFFICIAL_LETTER_SLOTS.includes(slot)) return notFound(res, 'Not found');
 
+  // admission_confirmation allows version history — resolve to the latest
+  // PUBLISHED row for the scholar's own view (a newer draft on top must never
+  // surface), or the latest row overall for staff. Every other slot still has
+  // at most one row (unchanged), so ORDER BY/LIMIT is a no-op for those.
+  const own = isOwnScope(req) && svc.PUBLISH_GATED_SLOTS.includes(slot);
   const { rows: [row] } = await query(
-    'SELECT object_key, mime_type, title FROM videos WHERE owner_user_id=$1 AND slot=$2', [userId, slot]
+    `SELECT object_key, mime_type, title FROM videos WHERE owner_user_id=$1 AND slot=$2 ${own ? 'AND is_published=true' : ''}
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId, slot]
   );
   if (!row) return notFound(res, 'Letter not uploaded yet');
 
@@ -389,6 +397,49 @@ export const streamOfficialLetter = asyncHandler(async (req, res) => {
   try {
     // Same non-cacheable requirement as streamDocument above — the URL is
     // keyed by (userId, slot) and stays identical across a re-upload.
+    await s3.streamObject(row.object_key, res, { contentType: row.mime_type, cacheControl: 'private, no-store, no-cache, must-revalidate' });
+  } catch {
+    if (!res.headersSent) res.status(404).json({ success: false, message: 'File not found in storage' });
+  }
+});
+
+/**
+ * GET /students/:userId/admission-letter/history — every version ever
+ * generated for this scholar, newest first. Staff-only in practice (route is
+ * gated to admin/coordinator), so no own-scope restriction needed here.
+ */
+export const getAdmissionLetterHistory = asyncHandler(async (req, res) => {
+  ok(res, await letterSvc.getLetterHistory(req.params.userId));
+});
+
+/**
+ * DELETE /students/:userId/admission-letter/versions/:mediaId — removes one
+ * draft version (Zata object + row). Published versions are permanent and
+ * this refuses to touch them.
+ */
+export const deleteAdmissionLetterVersion = asyncHandler(async (req, res) => {
+  const result = await letterSvc.deleteDraftVersion(req.params.userId, req.params.mediaId);
+  if (result.status !== 'deleted') return badRequest(res, result.reason);
+  ok(res, result, 'Draft deleted');
+});
+
+/**
+ * GET /students/:userId/admission-letter/versions/:mediaId/file — preview one
+ * SPECIFIC historical version by id, unlike streamOfficialLetter above which
+ * always resolves to "the current one". Staff-only (route gated).
+ */
+export const streamAdmissionLetterVersion = asyncHandler(async (req, res) => {
+  const { userId, mediaId } = req.params;
+  const { rows: [row] } = await query(
+    `SELECT object_key, mime_type, title FROM videos WHERE id=$1 AND owner_user_id=$2 AND slot=$3`,
+    [mediaId, userId, svc.PUBLISH_GATED_SLOTS[0]]
+  );
+  if (!row) return notFound(res, 'Version not found');
+  const safeName = (row.title || 'letter').replace(/[^a-zA-Z0-9 ._-]/g, '_');
+  const ext = row.object_key?.split('.').pop() || '';
+  res.setHeader('Content-Disposition', `inline; filename="${safeName}${ext ? `.${ext}` : ''}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  try {
     await s3.streamObject(row.object_key, res, { contentType: row.mime_type, cacheControl: 'private, no-store, no-cache, must-revalidate' });
   } catch {
     if (!res.headersSent) res.status(404).json({ success: false, message: 'File not found in storage' });
