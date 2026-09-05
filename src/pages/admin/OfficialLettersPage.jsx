@@ -29,6 +29,11 @@ const dedupeBy = (rows, key) => {
   return out
 }
 
+// A response without a JSON body (network failure, timeout, CORS) leaves
+// err.response undefined — without this fallback chain the toast shows a
+// blank message instead of the exact reason.
+const errMsg = (err, fallback) => err?.response?.data?.message || err?.message || fallback
+
 const BulkJobProgressBar = ({ label, progress }) => {
   const pct = Math.round((progress.processed / progress.total) * 100)
   return (
@@ -68,7 +73,7 @@ export default function OfficialLettersPage() {
   const handlePreviewSample = async () => {
     setSampleLoading(true)
     try { await previewAdmissionLetterhead() }
-    catch (err) { addToast({ type: 'error', title: 'Preview failed', message: err.response?.data?.message }) }
+    catch (err) { addToast({ type: 'error', title: 'Preview failed', message: errMsg(err, 'Something went wrong — please try again.') }) }
     finally { setSampleLoading(false) }
   }
 
@@ -139,12 +144,21 @@ export default function OfficialLettersPage() {
   const genPollRef = useRef(0) // bumped to invalidate any in-flight generate-all poll loop (batch switched away, unmount, etc.)
   const emailPollRef = useRef(0) // same, for the email-all poll loop
 
+  const MAX_POLL_FAILURES = 5 // ~7.5s of transient failures before giving up
+
   // Shared by both bulk jobs: poll until 'done', update live progress, and —
-  // unlike a naive "poll until done" loop — surface it honestly if the job
-  // ever disappears mid-run (status flips back to 'idle', e.g. the backend
-  // process restarted) instead of just quietly stopping with no feedback.
+  // unlike a naive "poll until done" loop — surface it honestly instead of
+  // spinning forever. Two distinct failure modes, both previously silent:
+  //   1. A definitive 4xx (401/403/404 — session expired, permission
+  //      revoked, batch deleted mid-run) is NOT transient and must stop
+  //      immediately with the real reason, not be retried.
+  //   2. A genuinely transient failure (network blip, 5xx) gets a bounded
+  //      number of retries, then gives up loudly rather than forever.
+  //   3. The job disappearing (status flips back to 'idle', e.g. the
+  //      backend process restarted) also needs its own honest message.
   const pollBulkJob = async ({ pollRef, myPoll, initialJob, getStatus, batchId, setProgress, setBusy, onDone, kind }) => {
     let job = initialJob
+    let consecutiveFailures = 0
     setProgress({ total: job.total, processed: job.processed })
     while (job.status === 'running' && pollRef.current === myPoll) {
       await new Promise((r) => setTimeout(r, 1500))
@@ -152,8 +166,25 @@ export default function OfficialLettersPage() {
       try {
         const polled = await getStatus(batchId)
         job = polled.data
-      } catch {
-        continue // transient network hiccup — keep polling rather than giving up
+        consecutiveFailures = 0
+      } catch (err) {
+        const status = err?.response?.status
+        const isPermanent = status >= 400 && status < 500
+        consecutiveFailures += 1
+        if (isPermanent || consecutiveFailures >= MAX_POLL_FAILURES) {
+          if (pollRef.current === myPoll) {
+            addToast({
+              type: 'error',
+              title: `Lost track of ${kind}`,
+              message: errMsg(err, `Could not check ${kind} progress. It may still be running in the background — reload the page to see the latest status.`),
+            })
+            loadLetterRoster(batchId)
+            setBusy(false)
+            setProgress(null)
+          }
+          return
+        }
+        continue // transient — worth another attempt before giving up
       }
       setProgress({ total: job.total, processed: job.processed })
     }
@@ -238,9 +269,9 @@ export default function OfficialLettersPage() {
     try {
       const res = await updateBatch(currentBatch.id, { letter_ref_prefix: refPrefixInput.trim() })
       setCurrentBatch(res.data)
-      addToast({ type: 'success', title: 'Ref No. prefix saved' })
+      addToast({ type: 'success', title: 'Ref No. prefix saved', message: 'This only updates the batch’s prefix — no letters were generated.' })
     } catch (err) {
-      addToast({ type: 'error', title: 'Failed to save prefix', message: err.response?.data?.message })
+      addToast({ type: 'error', title: 'Failed to save prefix', message: errMsg(err, 'Something went wrong — please try again.') })
     } finally { setSavingPrefix(false) }
   }
 
@@ -255,6 +286,12 @@ export default function OfficialLettersPage() {
     setGenProgress(null)
     try {
       const started = await generateAllAdmissionLetters(batchId, refPrefixInput.trim() || undefined)
+      if (started.data.total === 0) {
+        addToast({ type: 'info', title: 'No scholars to generate for', message: 'This batch has no active scholar enrollments.' })
+        setGeneratingAll(false)
+        setGenProgress(null)
+        return
+      }
       await pollBulkJob({
         pollRef: genPollRef, myPoll, initialJob: started.data, getStatus: getGenerateAllAdmissionLettersStatus,
         batchId, setProgress: setGenProgress, setBusy: setGeneratingAll, kind: 'Generate All',
@@ -262,7 +299,7 @@ export default function OfficialLettersPage() {
       })
     } catch (err) {
       if (genPollRef.current === myPoll) {
-        addToast({ type: 'error', title: 'Generate All failed', message: err.response?.data?.message })
+        addToast({ type: 'error', title: 'Generate All failed', message: errMsg(err, 'Something went wrong — please try again.') })
         setGeneratingAll(false)
         setGenProgress(null)
       }
@@ -276,6 +313,12 @@ export default function OfficialLettersPage() {
     setEmailProgress(null)
     try {
       const started = await emailAllAdmissionLetters(batchId)
+      if (started.data.total === 0) {
+        addToast({ type: 'info', title: 'No emails to send', message: 'Every published letter has already been emailed, or nothing has been published yet.' })
+        setEmailingAll(false)
+        setEmailProgress(null)
+        return
+      }
       await pollBulkJob({
         pollRef: emailPollRef, myPoll, initialJob: started.data, getStatus: getEmailAllAdmissionLettersStatus,
         batchId, setProgress: setEmailProgress, setBusy: setEmailingAll, kind: 'Email All',
@@ -283,7 +326,7 @@ export default function OfficialLettersPage() {
       })
     } catch (err) {
       if (emailPollRef.current === myPoll) {
-        addToast({ type: 'error', title: 'Email All failed', message: err.response?.data?.message })
+        addToast({ type: 'error', title: 'Email All failed', message: errMsg(err, 'Something went wrong — please try again.') })
         setEmailingAll(false)
         setEmailProgress(null)
       }
@@ -298,7 +341,7 @@ export default function OfficialLettersPage() {
       setSelectedIds(new Set())
       loadLetterRoster(currentBatch.id)
     } catch (err) {
-      addToast({ type: 'error', title: 'Publish All failed', message: err.response?.data?.message })
+      addToast({ type: 'error', title: 'Publish All failed', message: errMsg(err, 'Something went wrong — please try again.') })
     } finally { setPublishingAll(false) }
   }
 
@@ -310,7 +353,7 @@ export default function OfficialLettersPage() {
       setSelectedIds(new Set())
       loadLetterRoster(currentBatch.id)
     } catch (err) {
-      addToast({ type: 'error', title: 'Publish failed', message: err.response?.data?.message })
+      addToast({ type: 'error', title: 'Publish failed', message: errMsg(err, 'Something went wrong — please try again.') })
     } finally { setPublishingSelected(false) }
   }
 
@@ -323,7 +366,7 @@ export default function OfficialLettersPage() {
       setSelectedIds(new Set())
       loadLetterRoster(currentBatch.id)
     } catch (err) {
-      addToast({ type: 'error', title: 'Delete failed', message: err.response?.data?.message })
+      addToast({ type: 'error', title: 'Delete failed', message: errMsg(err, 'Something went wrong — please try again.') })
     } finally { setDeletingDrafts(false) }
   }
 
@@ -334,7 +377,7 @@ export default function OfficialLettersPage() {
       addToast({ type: 'success', title: `Published for ${displayNameOf(student)}` })
       if (student.batch_id === currentBatch?.id) loadLetterRoster(currentBatch.id)
     } catch (err) {
-      addToast({ type: 'error', title: 'Publish failed', message: err.response?.data?.message })
+      addToast({ type: 'error', title: 'Publish failed', message: errMsg(err, 'Something went wrong — please try again.') })
     } finally { setRowBusy(null) }
   }
 
@@ -346,7 +389,7 @@ export default function OfficialLettersPage() {
       addToast({ type: 'success', title: 'Letter generated' })
       if (student.batch_id === currentBatch?.id) loadLetterRoster(currentBatch.id)
     } catch (err) {
-      addToast({ type: 'error', title: 'Generate failed', message: err.response?.data?.message })
+      addToast({ type: 'error', title: 'Generate failed', message: errMsg(err, 'Something went wrong — please try again.') })
     } finally { setRowBusy(null) }
   }
 
@@ -357,14 +400,14 @@ export default function OfficialLettersPage() {
       addToast({ type: 'success', title: `Emailed to ${student.email}` })
       if (student.batch_id === currentBatch?.id) loadLetterRoster(currentBatch.id)
     } catch (err) {
-      addToast({ type: 'error', title: 'Send failed', message: err.response?.data?.message })
+      addToast({ type: 'error', title: 'Send failed', message: errMsg(err, 'Something went wrong — please try again.') })
     } finally { setRowBusy(null) }
   }
 
   const handlePreviewOne = async (userId) => {
     setRowBusy(`preview:${userId}`)
     try { await previewOfficialLetter(userId, 'admission_confirmation') }
-    catch (err) { addToast({ type: 'error', title: 'Preview failed', message: err.response?.data?.message }) }
+    catch (err) { addToast({ type: 'error', title: 'Preview failed', message: errMsg(err, 'Something went wrong — please try again.') }) }
     finally { setRowBusy(null) }
   }
 
@@ -420,75 +463,99 @@ export default function OfficialLettersPage() {
       )}
 
       {currentBatch && canManageLetters && (
-        <div className="mb-5 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <FileText size={16} className="text-[color:var(--accent)]" />
-          <span className="text-sm font-semibold text-[color:var(--text)]">Admission Letters — {currentBatch.name}</span>
-          <input
-            className="input ml-auto w-56 text-sm"
-            placeholder="Ref No. prefix e.g. POSTDOC26/J07"
-            value={refPrefixInput}
-            onChange={(e) => setRefPrefixInput(e.target.value)}
-          />
-          <button
-            className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-60"
-            onClick={handleSavePrefix}
-            disabled={savingPrefix || !refPrefixInput.trim() || refPrefixInput.trim() === currentBatch.letter_ref_prefix}
-            title="Save the Ref No. prefix without generating letters"
-          >
-            {savingPrefix ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Save
-          </button>
-          <button
-            className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm disabled:opacity-60"
-            onClick={handleGenerateAll}
-            disabled={generatingAll || !refPrefixInput.trim()}
-            title={!refPrefixInput.trim() ? 'Enter a Ref No. prefix first' : undefined}
-          >
-            {generatingAll ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
-            {generatingAll && genProgress?.total ? `Generating ${genProgress.processed}/${genProgress.total}…` : 'Generate All'}
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-60"
-            onClick={handlePublishAll}
-            disabled={publishingAll || publishableIds.length === 0}
-            title="Makes every generated-but-draft letter visible to those scholars on their own login"
-          >
-            {publishingAll ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} Publish All
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-60"
-            onClick={handlePublishSelected}
-            disabled={publishingSelected || selectedIds.size === 0}
-          >
-            {publishingSelected ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} Publish Selected{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-60"
-            onClick={handleEmailAll}
-            disabled={emailingAll || !letterMap || ![...letterMap.values()].some((r) => r.published && !r.sent)}
-            title="Only sends to scholars whose letter is already published"
-          >
-            {emailingAll ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />}
-            {emailingAll && emailProgress?.total ? `Emailing ${emailProgress.processed}/${emailProgress.total}…` : 'Email All'}
-          </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition disabled:opacity-60"
-            onClick={handleDeleteAllDrafts}
-            disabled={deletingDrafts || !letterMap || ![...letterMap.values()].some((r) => r.generated && !r.published)}
-            title="Permanently deletes every unpublished draft in this batch — published letters are never affected"
-          >
-            {deletingDrafts ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Delete All Drafts
-          </button>
-        </div>
-        {generatingAll && genProgress?.total > 0 && (
-          <BulkJobProgressBar label="Generating letters" progress={genProgress} />
-        )}
-        {emailingAll && emailProgress?.total > 0 && (
-          <BulkJobProgressBar label="Sending emails" progress={emailProgress} />
-        )}
-        <p className="mt-3 text-xs text-[color:var(--secondary)]">
-          Drafts can be deleted any time. Published letters are kept permanently as version history and cannot be deleted from here.
-        </p>
+        <div className="mb-5 grid gap-4 lg:grid-cols-[300px_1fr]">
+          {/* ── Batch Setup — the Ref No. prefix, kept visually separate from
+              the bulk actions below so "Save" can't be mistaken for one of
+              them. Locked while Generate All is running: each scholar's Ref
+              No. is built from this value fresh at the moment it's their
+              turn, so changing it mid-run would split one batch's letters
+              across two different prefixes. */}
+          <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-4">
+            <p className="text-sm font-semibold text-[color:var(--text)]">Batch Setup</p>
+            <label htmlFor="letter-ref-prefix" className="mt-3 block text-xs font-semibold text-[color:var(--secondary)]">
+              Ref No. Prefix
+            </label>
+            <input
+              id="letter-ref-prefix"
+              className="input mt-1 w-full text-sm"
+              placeholder="e.g. POSTDOC26/J07"
+              value={refPrefixInput}
+              onChange={(e) => setRefPrefixInput(e.target.value)}
+              disabled={generatingAll}
+            />
+            <p className="mt-1.5 text-[11px] text-[color:var(--muted)]">
+              Builds each scholar's Ref No. — e.g. "{refPrefixInput.trim() || 'POSTDOC26/J07'}/01". Save only updates this batch's prefix; it doesn't generate or touch any letters.
+            </p>
+            <button
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[color:var(--border)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-60"
+              onClick={handleSavePrefix}
+              disabled={savingPrefix || generatingAll || !refPrefixInput.trim() || refPrefixInput.trim() === currentBatch.letter_ref_prefix}
+              title={generatingAll ? 'Wait for Generate All to finish before changing the prefix' : 'Save the Ref No. prefix without generating letters'}
+            >
+              {savingPrefix ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Save Prefix
+            </button>
+          </div>
+
+          {/* ── Bulk Actions — everything that actually touches scholars' letters. */}
+          <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] px-5 py-4">
+            <div className="flex items-center gap-2">
+              <FileText size={16} className="text-[color:var(--accent)]" />
+              <span className="text-sm font-semibold text-[color:var(--text)]">Bulk Actions — {currentBatch.name}</span>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm disabled:opacity-60"
+                onClick={handleGenerateAll}
+                disabled={generatingAll || !refPrefixInput.trim()}
+                title={!refPrefixInput.trim() ? 'Enter a Ref No. prefix first' : undefined}
+              >
+                {generatingAll ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+                {generatingAll && genProgress?.total ? `Generating ${genProgress.processed}/${genProgress.total}…` : 'Generate All'}
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-60"
+                onClick={handlePublishAll}
+                disabled={publishingAll || publishableIds.length === 0}
+                title="Publishes only each scholar's latest generated draft — already-published letters and older superseded versions are never touched"
+              >
+                {publishingAll ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} Publish All
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-60"
+                onClick={handlePublishSelected}
+                disabled={publishingSelected || selectedIds.size === 0}
+                title="Publishes only each selected scholar's latest generated draft"
+              >
+                {publishingSelected ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} Publish Selected{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-[color:var(--border)] px-4 py-2.5 text-sm font-semibold text-[color:var(--secondary)] hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition disabled:opacity-60"
+                onClick={handleEmailAll}
+                disabled={emailingAll || !letterMap || ![...letterMap.values()].some((r) => r.published && !r.sent)}
+                title="Only sends to scholars whose letter is already published"
+              >
+                {emailingAll ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />}
+                {emailingAll && emailProgress?.total ? `Emailing ${emailProgress.processed}/${emailProgress.total}…` : 'Email All'}
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition disabled:opacity-60"
+                onClick={handleDeleteAllDrafts}
+                disabled={deletingDrafts || !letterMap || ![...letterMap.values()].some((r) => r.generated && !r.published)}
+                title="Permanently deletes every unpublished draft in this batch — published letters are never affected"
+              >
+                {deletingDrafts ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />} Delete All Drafts
+              </button>
+            </div>
+            {generatingAll && genProgress?.total > 0 && (
+              <BulkJobProgressBar label="Generating letters" progress={genProgress} />
+            )}
+            {emailingAll && emailProgress?.total > 0 && (
+              <BulkJobProgressBar label="Sending emails" progress={emailProgress} />
+            )}
+            <p className="mt-3 text-xs text-[color:var(--secondary)]">
+              Publish actions only affect each scholar's latest generated draft. Drafts can be deleted any time — published letters are kept permanently as version history and cannot be deleted from here.
+            </p>
+          </div>
         </div>
       )}
 
